@@ -1,5 +1,5 @@
 import * as vscode from "vscode"
-import { spawn, exec } from "child_process"
+import { spawn, exec, ChildProcess } from "child_process"
 import * as os from "os"
 import * as path from "path"
 import {
@@ -151,17 +151,28 @@ export class VsCodeTerminal implements ITerminal {
 				detached: options?.detached || false,
 			}
 
-			const child = spawn(command, [], spawnOptions)
+			let child: ChildProcess
+
+			if (spawnOptions.shell) {
+				// When using shell mode, pass command as string to first argument
+				// This allows complex shell features like pipes, redirections, etc.
+				child = spawn(command, [], spawnOptions)
+			} else {
+				// When not using shell, properly parse command and arguments
+				// This is more secure and doesn't rely on shell parsing
+				const parsedCommand = this.parseCommand(command)
+				child = spawn(parsedCommand.executable, parsedCommand.args, spawnOptions)
+			}
 			let stdout = ""
 			let stderr = ""
 
-			child.stdout?.on("data", (data) => {
+			child.stdout?.on("data", (data: Buffer) => {
 				const output = data.toString()
 				stdout += output
 				onOutput?.(output, false)
 			})
 
-			child.stderr?.on("data", (data) => {
+			child.stderr?.on("data", (data: Buffer) => {
 				const output = data.toString()
 				stderr += output
 				onOutput?.(output, true)
@@ -172,7 +183,7 @@ export class VsCodeTerminal implements ITerminal {
 				child.stdin?.end()
 			}
 
-			child.on("close", (code, signal) => {
+			child.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
 				const executionTime = Date.now() - startTime
 
 				const result: CommandResult = {
@@ -191,7 +202,7 @@ export class VsCodeTerminal implements ITerminal {
 				resolve(result)
 			})
 
-			child.on("error", (error) => {
+			child.on("error", (error: Error) => {
 				const executionTime = Date.now() - startTime
 
 				const result: CommandResult = {
@@ -344,6 +355,47 @@ export class VsCodeTerminal implements ITerminal {
 			return processes
 		} catch {
 			return []
+		}
+	}
+
+	/**
+	 * Parse a command string into executable and arguments.
+	 * This is a simple implementation that handles basic cases.
+	 * For complex shell features, use shell mode instead.
+	 */
+	private parseCommand(command: string): { executable: string; args: string[] } {
+		// Simple parsing - split on spaces but respect quoted strings
+		const parts: string[] = []
+		let current = ""
+		let inQuotes = false
+		let quoteChar = ""
+
+		for (let i = 0; i < command.length; i++) {
+			const char = command[i]
+
+			if ((char === '"' || char === "'") && !inQuotes) {
+				inQuotes = true
+				quoteChar = char
+			} else if (char === quoteChar && inQuotes) {
+				inQuotes = false
+				quoteChar = ""
+			} else if (char === " " && !inQuotes) {
+				if (current.trim()) {
+					parts.push(current.trim())
+					current = ""
+				}
+			} else {
+				current += char
+			}
+		}
+
+		if (current.trim()) {
+			parts.push(current.trim())
+		}
+
+		return {
+			executable: parts[0] || command,
+			args: parts.slice(1),
 		}
 	}
 

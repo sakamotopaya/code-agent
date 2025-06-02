@@ -66,6 +66,7 @@ import { WebviewMessage } from "../../shared/WebviewMessage"
 import { EMBEDDING_MODEL_PROFILES } from "../../shared/embeddingModels"
 import { ProfileValidator } from "../../shared/ProfileValidator"
 import { createVsCodeAdapters } from "../adapters/vscode"
+import type { CoreInterfaces } from "../interfaces"
 
 /**
  * https://github.com/microsoft/vscode-webview-ui-toolkit-samples/blob/main/default/weather-webview/src/providers/WeatherViewProvider.ts
@@ -101,6 +102,7 @@ export class ClineProvider
 		return this._workspaceTracker
 	}
 	protected mcpHub?: McpHub // Change from private to protected
+	private adapters?: CoreInterfaces // Cached VS Code adapters
 
 	public isViewLaunched = false
 	public settingsImportedAt?: number
@@ -252,11 +254,25 @@ export class ClineProvider
 		await this.mcpHub?.unregisterClient()
 		this.mcpHub = undefined
 		this.customModesManager?.dispose()
+
+		// Clear cached adapters
+		this.adapters = undefined
+
 		this.log("Disposed all disposables")
 		ClineProvider.activeInstances.delete(this)
 
 		// Unregister from McpServerManager
 		McpServerManager.unregisterProvider(this)
+	}
+
+	/**
+	 * Get or create VS Code adapters, reusing existing instances to avoid redundant calls
+	 */
+	private async getOrCreateAdapters(): Promise<CoreInterfaces> {
+		if (!this.adapters) {
+			this.adapters = await createVsCodeAdapters()
+		}
+		return this.adapters
 	}
 
 	public static getVisibleInstance(): ClineProvider | undefined {
@@ -527,8 +543,8 @@ export class ClineProvider
 			throw new OrganizationAllowListViolationError(t("common:errors.violated_organization_allowlist"))
 		}
 
-		// Create VS Code adapters for the task
-		const adapters = await createVsCodeAdapters()
+		// Get or create VS Code adapters for the task
+		const adapters = await this.getOrCreateAdapters()
 
 		const cline = new Task({
 			provider: this,
@@ -572,8 +588,8 @@ export class ClineProvider
 			experiments,
 		} = await this.getState()
 
-		// Create VS Code adapters for the task
-		const adapters = await createVsCodeAdapters()
+		// Get or create VS Code adapters for the task
+		const adapters = await this.getOrCreateAdapters()
 
 		const cline = new Task({
 			provider: this,
