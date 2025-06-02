@@ -65,6 +65,7 @@ import { webviewMessageHandler } from "./webviewMessageHandler"
 import { WebviewMessage } from "../../shared/WebviewMessage"
 import { EMBEDDING_MODEL_PROFILES } from "../../shared/embeddingModels"
 import { ProfileValidator } from "../../shared/ProfileValidator"
+import { createVsCodeAdapters } from "../adapters/vscode"
 
 /**
  * https://github.com/microsoft/vscode-webview-ui-toolkit-samples/blob/main/default/weather-webview/src/providers/WeatherViewProvider.ts
@@ -526,6 +527,9 @@ export class ClineProvider
 			throw new OrganizationAllowListViolationError(t("common:errors.violated_organization_allowlist"))
 		}
 
+		// Create VS Code adapters for the task
+		const adapters = await createVsCodeAdapters()
+
 		const cline = new Task({
 			provider: this,
 			apiConfiguration,
@@ -539,6 +543,12 @@ export class ClineProvider
 			parentTask,
 			taskNumber: this.clineStack.length + 1,
 			onCreated: (cline) => this.emit("clineCreated", cline),
+			// Add VS Code adapters
+			fileSystem: adapters.fileSystem,
+			terminal: adapters.terminal,
+			browser: adapters.browser,
+			globalStoragePath: this.context.globalStorageUri.fsPath,
+			workspacePath: getWorkspacePath(),
 			...options,
 		})
 
@@ -562,6 +572,9 @@ export class ClineProvider
 			experiments,
 		} = await this.getState()
 
+		// Create VS Code adapters for the task
+		const adapters = await createVsCodeAdapters()
+
 		const cline = new Task({
 			provider: this,
 			apiConfiguration,
@@ -574,6 +587,12 @@ export class ClineProvider
 			parentTask: historyItem.parentTask,
 			taskNumber: historyItem.number,
 			onCreated: (cline) => this.emit("clineCreated", cline),
+			// Add VS Code adapters
+			fileSystem: adapters.fileSystem,
+			terminal: adapters.terminal,
+			browser: adapters.browser,
+			globalStoragePath: this.context.globalStorageUri.fsPath,
+			workspacePath: getWorkspacePath(),
 		})
 
 		await this.addClineToStack(cline)
