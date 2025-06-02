@@ -374,11 +374,11 @@ describe("VS Code Adapters", () => {
 			expect(adapters.browser).toBeInstanceOf(VsCodeBrowser)
 		})
 
-		it("should throw error if context not set", () => {
+		it("should throw error if context not set", async () => {
 			// Clear the context
 			setVsCodeContext(undefined as any)
 
-			expect(() => createVsCodeAdapters()).rejects.toThrow("VS Code extension context not set")
+			await expect(createVsCodeAdapters()).rejects.toThrow("VS Code extension context not set")
 		})
 	})
 })
