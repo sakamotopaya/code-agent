@@ -65,6 +65,8 @@ import { webviewMessageHandler } from "./webviewMessageHandler"
 import { WebviewMessage } from "../../shared/WebviewMessage"
 import { EMBEDDING_MODEL_PROFILES } from "../../shared/embeddingModels"
 import { ProfileValidator } from "../../shared/ProfileValidator"
+import { createVsCodeAdapters } from "../adapters/vscode"
+import type { CoreInterfaces } from "../interfaces"
 
 /**
  * https://github.com/microsoft/vscode-webview-ui-toolkit-samples/blob/main/default/weather-webview/src/providers/WeatherViewProvider.ts
@@ -100,6 +102,7 @@ export class ClineProvider
 		return this._workspaceTracker
 	}
 	protected mcpHub?: McpHub // Change from private to protected
+	private adapters?: CoreInterfaces // Cached VS Code adapters
 
 	public isViewLaunched = false
 	public settingsImportedAt?: number
@@ -251,11 +254,85 @@ export class ClineProvider
 		await this.mcpHub?.unregisterClient()
 		this.mcpHub = undefined
 		this.customModesManager?.dispose()
+
+		// Clear cached adapters
+		this.adapters = undefined
+
 		this.log("Disposed all disposables")
 		ClineProvider.activeInstances.delete(this)
 
 		// Unregister from McpServerManager
 		McpServerManager.unregisterProvider(this)
+	}
+
+	/**
+	 * Get or create VS Code adapters, reusing existing instances to avoid redundant calls
+	 */
+	private async getOrCreateAdapters(): Promise<CoreInterfaces> {
+		if (!this.adapters) {
+			this.adapters = await createVsCodeAdapters()
+		}
+		return this.adapters
+	}
+
+	/**
+	 * Create a new Task instance with common configuration and adapters
+	 */
+	private async createTaskInstance(taskConfig: {
+		task?: string
+		images?: string[]
+		historyItem?: HistoryItem
+		parentTask?: Task
+		rootTask?: Task
+		taskNumber?: number
+		options?: Partial<
+			Pick<
+				TaskOptions,
+				"enableDiff" | "enableCheckpoints" | "fuzzyMatchThreshold" | "consecutiveMistakeLimit" | "experiments"
+			>
+		>
+	}): Promise<Task> {
+		const {
+			apiConfiguration,
+			diffEnabled: enableDiff,
+			enableCheckpoints,
+			fuzzyMatchThreshold,
+			experiments,
+		} = await this.getState()
+
+		// Get or create VS Code adapters for the task
+		const adapters = await this.getOrCreateAdapters()
+
+		const cline = new Task({
+			provider: this,
+			apiConfiguration,
+			enableDiff: taskConfig.options?.enableDiff ?? enableDiff,
+			enableCheckpoints: taskConfig.options?.enableCheckpoints ?? enableCheckpoints,
+			fuzzyMatchThreshold: taskConfig.options?.fuzzyMatchThreshold ?? fuzzyMatchThreshold,
+			task: taskConfig.task,
+			images: taskConfig.images,
+			historyItem: taskConfig.historyItem,
+			experiments: taskConfig.options?.experiments ?? experiments,
+			rootTask: taskConfig.rootTask,
+			parentTask: taskConfig.parentTask,
+			taskNumber: taskConfig.taskNumber ?? this.clineStack.length + 1,
+			onCreated: (cline) => this.emit("clineCreated", cline),
+			// Add VS Code adapters
+			fileSystem: adapters.fileSystem,
+			terminal: adapters.terminal,
+			browser: adapters.browser,
+			globalStoragePath: this.context.globalStorageUri.fsPath,
+			workspacePath: getWorkspacePath(),
+			...taskConfig.options,
+		})
+
+		await this.addClineToStack(cline)
+
+		this.log(
+			`[subtasks] ${cline.parentTask ? "child" : "parent"} task ${cline.taskId}.${cline.instanceId} instantiated`,
+		)
+
+		return cline
 	}
 
 	public static getVisibleInstance(): ClineProvider | undefined {
@@ -513,74 +590,30 @@ export class ClineProvider
 			>
 		> = {},
 	) {
-		const {
-			apiConfiguration,
-			organizationAllowList,
-			diffEnabled: enableDiff,
-			enableCheckpoints,
-			fuzzyMatchThreshold,
-			experiments,
-		} = await this.getState()
+		const { apiConfiguration, organizationAllowList } = await this.getState()
 
 		if (!ProfileValidator.isProfileAllowed(apiConfiguration, organizationAllowList)) {
 			throw new OrganizationAllowListViolationError(t("common:errors.violated_organization_allowlist"))
 		}
 
-		const cline = new Task({
-			provider: this,
-			apiConfiguration,
-			enableDiff,
-			enableCheckpoints,
-			fuzzyMatchThreshold,
+		return this.createTaskInstance({
 			task,
 			images,
-			experiments,
-			rootTask: this.clineStack.length > 0 ? this.clineStack[0] : undefined,
 			parentTask,
-			taskNumber: this.clineStack.length + 1,
-			onCreated: (cline) => this.emit("clineCreated", cline),
-			...options,
+			rootTask: this.clineStack.length > 0 ? this.clineStack[0] : undefined,
+			options,
 		})
-
-		await this.addClineToStack(cline)
-
-		this.log(
-			`[subtasks] ${cline.parentTask ? "child" : "parent"} task ${cline.taskId}.${cline.instanceId} instantiated`,
-		)
-
-		return cline
 	}
 
 	public async initClineWithHistoryItem(historyItem: HistoryItem & { rootTask?: Task; parentTask?: Task }) {
 		await this.removeClineFromStack()
 
-		const {
-			apiConfiguration,
-			diffEnabled: enableDiff,
-			enableCheckpoints,
-			fuzzyMatchThreshold,
-			experiments,
-		} = await this.getState()
-
-		const cline = new Task({
-			provider: this,
-			apiConfiguration,
-			enableDiff,
-			enableCheckpoints,
-			fuzzyMatchThreshold,
+		return this.createTaskInstance({
 			historyItem,
-			experiments,
 			rootTask: historyItem.rootTask,
 			parentTask: historyItem.parentTask,
 			taskNumber: historyItem.number,
-			onCreated: (cline) => this.emit("clineCreated", cline),
 		})
-
-		await this.addClineToStack(cline)
-		this.log(
-			`[subtasks] ${cline.parentTask ? "child" : "parent"} task ${cline.taskId}.${cline.instanceId} instantiated`,
-		)
-		return cline
 	}
 
 	public async postMessageToWebview(message: ExtensionMessage) {

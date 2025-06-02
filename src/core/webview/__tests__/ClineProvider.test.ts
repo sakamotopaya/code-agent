@@ -140,7 +140,8 @@ jest.mock("vscode", () => ({
 	WebviewView: jest.fn(),
 	Uri: {
 		joinPath: jest.fn(),
-		file: jest.fn(),
+		file: jest.fn((path) => ({ fsPath: path })),
+		parse: jest.fn((uri) => ({ fsPath: uri })),
 	},
 	CodeActionKind: {
 		QuickFix: { value: "quickfix" },
@@ -149,6 +150,28 @@ jest.mock("vscode", () => ({
 	window: {
 		showInformationMessage: jest.fn(),
 		showErrorMessage: jest.fn(),
+		showWarningMessage: jest.fn(),
+		showQuickPick: jest.fn(),
+		createOutputChannel: jest.fn().mockReturnValue({
+			appendLine: jest.fn(),
+			show: jest.fn(),
+			hide: jest.fn(),
+			dispose: jest.fn(),
+		}),
+		createWebviewPanel: jest.fn().mockReturnValue({
+			webview: {
+				html: "",
+				postMessage: jest.fn(),
+				onDidReceiveMessage: jest.fn(),
+			},
+			dispose: jest.fn(),
+		}),
+		createTerminal: jest.fn().mockReturnValue({
+			sendText: jest.fn(),
+			show: jest.fn(),
+			dispose: jest.fn(),
+		}),
+		onDidCloseTerminal: jest.fn(() => ({ dispose: jest.fn() })),
 	},
 	workspace: {
 		getConfiguration: jest.fn().mockReturnValue({
@@ -162,6 +185,18 @@ jest.mock("vscode", () => ({
 		onDidChangeTextDocument: jest.fn(() => ({ dispose: jest.fn() })),
 		onDidOpenTextDocument: jest.fn(() => ({ dispose: jest.fn() })),
 		onDidCloseTextDocument: jest.fn(() => ({ dispose: jest.fn() })),
+		onDidCreateFiles: jest.fn(() => ({ dispose: jest.fn() })),
+		onDidDeleteFiles: jest.fn(() => ({ dispose: jest.fn() })),
+		onDidRenameFiles: jest.fn(() => ({ dispose: jest.fn() })),
+		workspaceFolders: [{ uri: { fsPath: "/mock/workspace" } }],
+		fs: {
+			readFile: jest.fn(),
+			writeFile: jest.fn(),
+			delete: jest.fn(),
+			createDirectory: jest.fn(),
+			stat: jest.fn(),
+			readDirectory: jest.fn(),
+		},
 	},
 	env: {
 		uriScheme: "vscode",
@@ -172,6 +207,13 @@ jest.mock("vscode", () => ({
 		Development: 2,
 		Test: 3,
 	},
+	ViewColumn: {
+		One: 1,
+		Two: 2,
+		Three: 3,
+	},
+	TextEncoder: global.TextEncoder,
+	TextDecoder: global.TextDecoder,
 }))
 
 jest.mock("../../../utils/tts", () => ({
