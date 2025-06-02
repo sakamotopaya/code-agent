@@ -55,7 +55,7 @@ export async function accessMcpResourceTool(
 
 			// Now execute the tool
 			await cline.say("mcp_server_request_started")
-			const resourceResult = await cline.providerRef.deref()?.getMcpHub()?.readResource(server_name, uri)
+			const resourceResult = await cline.providerRef?.deref()?.getMcpHub()?.readResource(server_name, uri)
 
 			const resourceResultPretty =
 				resourceResult?.contents

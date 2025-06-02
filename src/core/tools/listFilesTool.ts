@@ -56,7 +56,7 @@ export async function listFilesTool(
 
 			const absolutePath = path.resolve(cline.cwd, relDirPath)
 			const [files, didHitLimit] = await listFiles(absolutePath, recursive, 200)
-			const { showRooIgnoredFiles = true } = (await cline.providerRef.deref()?.getState()) ?? {}
+			const { showRooIgnoredFiles = true } = (await cline.providerRef?.deref()?.getState()) ?? {}
 
 			const result = formatResponse.formatFilesList(
 				absolutePath,

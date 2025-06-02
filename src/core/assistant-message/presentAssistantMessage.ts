@@ -323,7 +323,7 @@ export async function presentAssistantMessage(cline: Task) {
 			}
 
 			// Validate tool use before execution.
-			const { mode, customModes } = (await cline.providerRef.deref()?.getState()) ?? {}
+			const { mode, customModes } = (await cline.providerRef?.deref()?.getState()) ?? {}
 
 			try {
 				validateToolUse(

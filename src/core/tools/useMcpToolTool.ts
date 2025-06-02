@@ -77,7 +77,7 @@ export async function useMcpToolTool(
 			await cline.say("mcp_server_request_started") // same as browser_action_result
 
 			const toolResult = await cline.providerRef
-				.deref()
+				?.deref()
 				?.getMcpHub()
 				?.callTool(server_name, tool_name, parsedArguments)
 
