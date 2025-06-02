@@ -189,7 +189,7 @@ export class TelemetryService {
 
 	static get instance() {
 		if (!this._instance) {
-			throw new Error("TelemetryService not initialized")
+			throw new Error("TelemetryService not initialized. Call TelemetryService.initialize() first.")
 		}
 
 		return this._instance
