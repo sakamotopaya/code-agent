@@ -64,7 +64,7 @@ export async function codebaseSearchTool(
 
 	// --- Core Logic ---
 	try {
-		const context = cline.providerRef.deref()?.context
+		const context = cline.providerRef?.deref()?.context
 		if (!context) {
 			throw new Error("Extension context is not available.")
 		}

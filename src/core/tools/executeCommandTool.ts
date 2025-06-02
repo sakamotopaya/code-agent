@@ -58,7 +58,7 @@ export async function executeCommandTool(
 			}
 
 			const executionId = cline.lastMessageTs?.toString() ?? Date.now().toString()
-			const clineProvider = await cline.providerRef.deref()
+			const clineProvider = await cline.providerRef?.deref()
 			const clineProviderState = await clineProvider?.getState()
 			const { terminalOutputLineLimit = 500, terminalShellIntegrationDisabled = false } = clineProviderState ?? {}
 
@@ -149,7 +149,7 @@ export async function executeCommand(
 	let shellIntegrationError: string | undefined
 
 	const terminalProvider = terminalShellIntegrationDisabled ? "execa" : "vscode"
-	const clineProvider = await cline.providerRef.deref()
+	const clineProvider = await cline.providerRef?.deref()
 
 	let accumulatedOutput = ""
 	const callbacks: RooTerminalCallbacks = {

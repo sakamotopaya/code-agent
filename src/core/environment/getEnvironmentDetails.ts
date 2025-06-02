@@ -22,7 +22,7 @@ import { Task } from "../task/Task"
 export async function getEnvironmentDetails(cline: Task, includeFileDetails: boolean = false) {
 	let details = ""
 
-	const clineProvider = cline.providerRef.deref()
+	const clineProvider = cline.providerRef?.deref()
 	const state = await clineProvider?.getState()
 	const { terminalOutputLineLimit = 500, maxWorkspaceFiles = 200 } = state ?? {}
 
