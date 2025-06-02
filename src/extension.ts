@@ -27,6 +27,7 @@ import { McpServerManager } from "./services/mcp/McpServerManager"
 import { CodeIndexManager } from "./services/code-index/manager"
 import { migrateSettings } from "./utils/migrateSettings"
 import { API } from "./extension/api"
+import { setVsCodeContext } from "./core/adapters/vscode"
 
 import {
 	handleUri,
@@ -55,6 +56,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	outputChannel = vscode.window.createOutputChannel(Package.outputChannel)
 	context.subscriptions.push(outputChannel)
 	outputChannel.appendLine(`${Package.name} extension activated - ${JSON.stringify(Package)}`)
+
+	// Initialize VS Code context for adapters
+	setVsCodeContext(context)
 
 	// Migrate old settings to new
 	await migrateSettings(context, outputChannel)

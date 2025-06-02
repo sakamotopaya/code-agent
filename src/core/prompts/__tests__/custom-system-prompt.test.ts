@@ -4,6 +4,23 @@ import * as vscode from "vscode"
 import * as fs from "fs/promises"
 import { toPosix } from "./utils"
 
+// Mock vscode module explicitly
+jest.mock("vscode", () => ({
+	env: {
+		language: "en",
+		shell: "/bin/zsh",
+	},
+	window: {
+		showInformationMessage: jest.fn(),
+		showErrorMessage: jest.fn(),
+		activeTextEditor: undefined,
+	},
+	workspace: {
+		workspaceFolders: [],
+		getWorkspaceFolder: jest.fn(),
+	},
+}))
+
 // Mock the fs/promises module
 jest.mock("fs/promises", () => ({
 	readFile: jest.fn(),

@@ -4,11 +4,13 @@ import process from "node:process"
 export default {
 	preset: "ts-jest",
 	testEnvironment: "node",
+	extensionsToTreatAsEsm: [".ts"],
 	moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
 	transform: {
 		"^.+\\.tsx?$": [
 			"ts-jest",
 			{
+				useESM: true,
 				tsconfig: {
 					module: "CommonJS",
 					moduleResolution: "node",
@@ -25,6 +27,8 @@ export default {
 		// Skip platform-specific tests based on environment
 		...(process.platform === "win32" ? [".*\\.bash\\.test\\.ts$"] : [".*\\.cmd\\.test\\.ts$"]),
 		// PowerShell tests are conditionally skipped in the test files themselves using the setupFilesAfterEnv
+		// Exclude packages directory to avoid mock conflicts
+		"<rootDir>/../packages/",
 	],
 	moduleNameMapper: {
 		"^vscode$": "<rootDir>/__mocks__/vscode.js",
@@ -42,9 +46,10 @@ export default {
 	},
 	transformIgnorePatterns: [
 		"node_modules/(?!(@modelcontextprotocol|delay|p-wait-for|serialize-error|strip-ansi|default-shell|os-name|strip-bom|execa)/)",
+		"<rootDir>/../packages/",
 	],
 	roots: ["<rootDir>"],
-	modulePathIgnorePatterns: ["dist", "out"],
+	modulePathIgnorePatterns: ["dist", "out", "../packages"],
 	reporters: [["jest-simple-dot-reporter", {}]],
 	setupFiles: ["<rootDir>/__mocks__/jest.setup.ts"],
 	setupFilesAfterEnv: ["<rootDir>/integrations/terminal/__tests__/setupTerminalTests.ts"],
