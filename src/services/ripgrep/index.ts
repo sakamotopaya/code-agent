@@ -88,12 +88,58 @@ export async function getBinPath(vscodeAppRoot: string): Promise<string | undefi
 		return (await fileExistsAtPath(fullPath)) ? fullPath : undefined
 	}
 
-	return (
+	const checkSystemPath = async (systemPath: string) => {
+		return (await fileExistsAtPath(systemPath)) ? systemPath : undefined
+	}
+
+	// First try VSCode-specific paths
+	const vscodeRipgrep =
 		(await checkPath("node_modules/@vscode/ripgrep/bin/")) ||
 		(await checkPath("node_modules/vscode-ripgrep/bin")) ||
 		(await checkPath("node_modules.asar.unpacked/vscode-ripgrep/bin/")) ||
 		(await checkPath("node_modules.asar.unpacked/@vscode/ripgrep/bin/"))
-	)
+
+	if (vscodeRipgrep) {
+		return vscodeRipgrep
+	}
+
+	// Fallback to system-installed ripgrep
+	const systemPaths = [
+		"/opt/homebrew/bin/rg", // Homebrew on Apple Silicon
+		"/usr/local/bin/rg", // Homebrew on Intel Mac / Linux
+		"/usr/bin/rg", // System package manager
+		"rg", // Check if rg is in PATH
+	]
+
+	for (const systemPath of systemPaths) {
+		if (systemPath === "rg") {
+			// For PATH lookup, use which/where command
+			try {
+				const whichCommand = isWindows ? "where" : "which"
+				const result = await new Promise<string>((resolve, reject) => {
+					childProcess.exec(`${whichCommand} rg`, (error, stdout) => {
+						if (error) {
+							reject(error)
+						} else {
+							resolve(stdout.trim())
+						}
+					})
+				})
+				if (result && (await fileExistsAtPath(result))) {
+					return result
+				}
+			} catch {
+				// Continue to next path if which/where fails
+			}
+		} else {
+			const systemRipgrep = await checkSystemPath(systemPath)
+			if (systemRipgrep) {
+				return systemRipgrep
+			}
+		}
+	}
+
+	return undefined
 }
 
 async function execRipgrep(bin: string, args: string[]): Promise<string> {
