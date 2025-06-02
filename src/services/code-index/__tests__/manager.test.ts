@@ -2,6 +2,23 @@ import * as vscode from "vscode"
 import { CodeIndexManager } from "../manager"
 import { ContextProxy } from "../../../core/config/ContextProxy"
 
+// Mock vscode module explicitly
+jest.mock("vscode", () => ({
+	ExtensionMode: {
+		Production: 1,
+		Development: 2,
+		Test: 3,
+	},
+	env: {
+		language: "en",
+		shell: "/bin/zsh",
+	},
+	window: {
+		showInformationMessage: jest.fn(),
+		showErrorMessage: jest.fn(),
+	},
+}))
+
 // Mock only the essential dependencies
 jest.mock("../../../utils/path", () => ({
 	getWorkspacePath: jest.fn(() => "/test/workspace"),

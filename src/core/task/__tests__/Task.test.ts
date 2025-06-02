@@ -5,6 +5,28 @@ import { IBrowser } from "../../interfaces/IBrowser"
 import { ProviderSettings } from "@roo-code/types"
 import { TelemetryService } from "@roo-code/telemetry"
 
+// Mock vscode module explicitly
+jest.mock("vscode", () => ({
+	window: {
+		showInformationMessage: jest.fn(),
+		showErrorMessage: jest.fn(),
+		createTextEditorDecorationType: jest.fn().mockReturnValue({
+			dispose: jest.fn(),
+		}),
+		tabGroups: {
+			all: [],
+		},
+	},
+	workspace: {
+		workspaceFolders: [],
+		getWorkspaceFolder: jest.fn(),
+	},
+	env: {
+		language: "en",
+		shell: "/bin/zsh",
+	},
+}))
+
 // Mock implementations for testing
 class MockFileSystem implements IFileSystem {
 	async readFile(filePath: string, encoding?: any): Promise<string> {

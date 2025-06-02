@@ -1,9 +1,10 @@
+console.log("VSCode mock loaded!")
 const vscode = {
 	env: {
 		language: "en", // Default language for tests
 		appName: "Visual Studio Code Test",
 		appHost: "desktop",
-		appRoot: "/test/path",
+		appRoot: "/mock/vscode",
 		machineId: "test-machine-id",
 		sessionId: "test-session-id",
 		shell: "/bin/zsh",
@@ -33,6 +34,11 @@ const vscode = {
 		fs: {
 			stat: jest.fn(),
 		},
+		getConfiguration: jest.fn().mockReturnValue({
+			get: jest.fn().mockReturnValue(""),
+			update: jest.fn(),
+		}),
+		workspaceFolders: [{ uri: { fsPath: "/mock/workspace" } }],
 	},
 	Disposable: class {
 		dispose() {}
