@@ -44,7 +44,7 @@ export async function newTaskTool(
 			cline.consecutiveMistakeCount = 0
 
 			// Verify the mode exists
-			const targetMode = getModeBySlug(mode, (await cline.providerRef.deref()?.getState())?.customModes)
+			const targetMode = getModeBySlug(mode, (await cline.providerRef?.deref()?.getState())?.customModes)
 
 			if (!targetMode) {
 				pushToolResult(formatResponse.toolError(`Invalid mode: ${mode}`))
@@ -63,7 +63,7 @@ export async function newTaskTool(
 				return
 			}
 
-			const provider = cline.providerRef.deref()
+			const provider = cline.providerRef?.deref()
 
 			if (!provider) {
 				return
