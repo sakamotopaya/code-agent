@@ -30,11 +30,12 @@ export async function getEnvironmentDetails(cline: Task, includeFileDetails: boo
 	// file to another between messages, so we always include this context.
 	details += "\n\n# VSCode Visible Files"
 
-	const visibleFilePaths = vscode.window.visibleTextEditors
-		?.map((editor) => editor.document?.uri?.fsPath)
-		.filter(Boolean)
-		.map((absolutePath) => path.relative(cline.cwd, absolutePath))
-		.slice(0, maxWorkspaceFiles)
+	const visibleFilePaths =
+		vscode.window.visibleTextEditors
+			?.map((editor) => editor.document?.uri?.fsPath)
+			?.filter(Boolean)
+			?.map((absolutePath) => path.relative(cline.cwd, absolutePath))
+			?.slice(0, maxWorkspaceFiles) || []
 
 	// Filter paths through rooIgnoreController
 	const allowedVisibleFiles = cline.rooIgnoreController
@@ -156,7 +157,7 @@ export async function getEnvironmentDetails(cline: Task, includeFileDetails: boo
 	// console.log(`[Cline#getEnvironmentDetails] terminalDetails: ${terminalDetails}`)
 
 	// Add recently modified files section.
-	const recentlyModifiedFiles = cline.fileContextTracker.getAndClearRecentlyModifiedFiles()
+	const recentlyModifiedFiles = cline.fileContextTracker?.getAndClearRecentlyModifiedFiles?.() || []
 
 	if (recentlyModifiedFiles.length > 0) {
 		details +=
