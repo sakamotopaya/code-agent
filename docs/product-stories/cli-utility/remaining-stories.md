@@ -1,4 +1,24 @@
-# Remaining CLI Utility Stories (10-20)
+# DEPRECATED - Stories Moved to Individual Files
+
+**Note**: This file has been deprecated. All stories (10-20) have been moved to individual detailed story files:
+
+- [Story 10: Implement CLI-Specific UI Elements](story-10-cli-ui-elements.md)
+- [Story 11: Ensure Browser Tools Headless Mode](story-11-browser-headless-mode.md)
+- [Story 12: Add Output Formatting Options](story-12-output-formatting-options.md)
+- [Story 13: Implement Session Persistence](story-13-session-persistence.md)
+- [Story 14: Add Non-Interactive Mode Support](story-14-non-interactive-mode.md)
+- [Story 15: Integrate MCP Server Support](story-15-mcp-server-support.md)
+- [Story 16: Add Comprehensive Error Handling](story-16-comprehensive-error-handling.md)
+- [Story 17: Comprehensive CLI Testing](story-17-comprehensive-cli-testing.md)
+- [Story 18: Update Documentation](story-18-update-documentation.md)
+- [Story 19: Create CLI Usage Examples](story-19-cli-usage-examples.md)
+- [Story 20: Performance Optimization](story-20-performance-optimization.md)
+
+Please refer to the individual story files for detailed technical specifications, acceptance criteria, and implementation guidance.
+
+---
+
+# Original Content (Deprecated)
 
 ## Story 10: Implement CLI-Specific UI Elements
 **Phase**: 3 - Tool Adaptation | **Points**: 8 | **Labels**: `cli-utility`, `phase-3`, `ui`
