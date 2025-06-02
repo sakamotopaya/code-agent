@@ -37,7 +37,7 @@ export async function fetchInstructionsTool(
 			}
 
 			// Bow fetch the content and provide it to the agent.
-			const provider = cline.providerRef.deref()
+			const provider = cline.providerRef?.deref()
 			const mcpHub = provider?.getMcpHub()
 
 			if (!mcpHub) {

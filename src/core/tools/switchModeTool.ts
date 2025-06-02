@@ -37,7 +37,7 @@ export async function switchModeTool(
 			cline.consecutiveMistakeCount = 0
 
 			// Verify the mode exists
-			const targetMode = getModeBySlug(mode_slug, (await cline.providerRef.deref()?.getState())?.customModes)
+			const targetMode = getModeBySlug(mode_slug, (await cline.providerRef?.deref()?.getState())?.customModes)
 
 			if (!targetMode) {
 				cline.recordToolError("switch_mode")
@@ -46,7 +46,7 @@ export async function switchModeTool(
 			}
 
 			// Check if already in requested mode
-			const currentMode = (await cline.providerRef.deref()?.getState())?.mode ?? defaultModeSlug
+			const currentMode = (await cline.providerRef?.deref()?.getState())?.mode ?? defaultModeSlug
 
 			if (currentMode === mode_slug) {
 				cline.recordToolError("switch_mode")
@@ -62,7 +62,7 @@ export async function switchModeTool(
 			}
 
 			// Switch the mode using shared handler
-			await cline.providerRef.deref()?.handleModeSwitch(mode_slug)
+			await cline.providerRef?.deref()?.handleModeSwitch(mode_slug)
 
 			pushToolResult(
 				`Successfully switched from ${getModeBySlug(currentMode)?.name ?? currentMode} mode to ${

@@ -28,7 +28,7 @@ export function getCheckpointService(cline: Task) {
 		return undefined
 	}
 
-	const provider = cline.providerRef.deref()
+	const provider = cline.providerRef?.deref()
 
 	const log = (message: string) => {
 		console.log(message)
@@ -161,7 +161,7 @@ export async function checkpointSave(cline: Task, force = false) {
 	}
 
 	if (!service.isInitialized) {
-		const provider = cline.providerRef.deref()
+		const provider = cline.providerRef?.deref()
 		provider?.log("[checkpointSave] checkpoints didn't initialize in time, disabling checkpoints for this task")
 		cline.enableCheckpoints = false
 		return
@@ -195,7 +195,7 @@ export async function checkpointRestore(cline: Task, { ts, commitHash, mode }: C
 		return
 	}
 
-	const provider = cline.providerRef.deref()
+	const provider = cline.providerRef?.deref()
 
 	try {
 		await service.restoreCheckpoint(commitHash)
@@ -290,7 +290,7 @@ export async function checkpointDiff(cline: Task, { ts, previousCommitHash, comm
 			]),
 		)
 	} catch (err) {
-		const provider = cline.providerRef.deref()
+		const provider = cline.providerRef?.deref()
 		provider?.log("[checkpointDiff] disabling checkpoints for this task")
 		cline.enableCheckpoints = false
 	}
