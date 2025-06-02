@@ -1,0 +1,384 @@
+
+> roo-cline@3.19.1 pretest
+> turbo run bundle --cwd ..
+
+turbo 2.5.4
+
+• Packages in scope: @roo-code/build, @roo-code/cloud, @roo-code/config-eslint, @roo-code/config-typescript, @roo-code/telemetry, @roo-code/types, @roo-code/vscode-e2e, @roo-code/vscode-nightly, @roo-code/vscode-webview, roo-cline
+• Running bundle in 10 packages
+• Remote caching disabled
+@roo-code/build:build: cache hit, replaying logs b87668426b548505
+@roo-code/build:build: 
+@roo-code/build:build: 
+@roo-code/build:build: > @roo-code/build@ build /Users/eo/code/code-agent/packages/build
+@roo-code/build:build: > tsc
+@roo-code/build:build: 
+@roo-code/types:build: cache hit, replaying logs 3680f45f0b74ca0d
+@roo-code/types:build: 
+@roo-code/types:build: 
+@roo-code/types:build: > @roo-code/types@0.0.0 build /Users/eo/code/code-agent/packages/types
+@roo-code/types:build: > tsup
+@roo-code/types:build: 
+@roo-code/types:build: [34mCLI[39m Building entry: src/index.ts
+@roo-code/types:build: [34mCLI[39m Using tsconfig: tsconfig.json
+@roo-code/types:build: [34mCLI[39m tsup v8.5.0
+@roo-code/types:build: [34mCLI[39m Using tsup config: /Users/eo/code/code-agent/packages/types/tsup.config.ts
+@roo-code/types:build: [34mCLI[39m Target: es2022
+@roo-code/types:build: [34mCJS[39m Build start
+@roo-code/types:build: [34mESM[39m Build start
+@roo-code/types:build: [32mESM[39m [1mdist/index.js     [22m[32m92.79 KB[39m
+@roo-code/types:build: [32mESM[39m [1mdist/index.js.map [22m[32m162.97 KB[39m
+@roo-code/types:build: [32mESM[39m ⚡️ Build success in 18ms
+@roo-code/types:build: [32mCJS[39m [1mdist/index.cjs     [22m[32m105.19 KB[39m
+@roo-code/types:build: [32mCJS[39m [1mdist/index.cjs.map [22m[32m163.80 KB[39m
+@roo-code/types:build: [32mCJS[39m ⚡️ Build success in 19ms
+@roo-code/types:build: DTS Build start
+@roo-code/types:build: DTS ⚡️ Build success in 1628ms
+@roo-code/types:build: DTS dist/index.d.cts 556.70 KB
+@roo-code/types:build: DTS dist/index.d.ts  556.70 KB
+roo-cline:bundle: cache bypass, force executing 03a6326f6b2fa047
+roo-cline:bundle:  WARN  Unsupported engine: wanted: {"node":"20.19.2"} (current: {"node":"v20.18.3","pnpm":"10.8.1"})
+roo-cline:bundle: 
+roo-cline:bundle: > roo-cline@3.19.1 bundle /Users/eo/code/code-agent/src
+roo-cline:bundle: > node esbuild.mjs
+roo-cline:bundle: 
+roo-cline:bundle: [extension] Cleaning dist directory: /Users/eo/code/code-agent/src/dist
+roo-cline:bundle: [esbuild-problem-matcher#onStart]
+roo-cline:bundle: [copyPaths] Copied ../README.md to README.md
+roo-cline:bundle: [copyPaths] Copied ../CHANGELOG.md to CHANGELOG.md
+roo-cline:bundle: [copyPaths] Copied ../LICENSE to LICENSE
+roo-cline:bundle: [copyPaths] Optional file not found: ../.env
+roo-cline:bundle: [copyPaths] Copied 911 files from node_modules/vscode-material-icons/generated to assets/vscode-material-icons
+roo-cline:bundle: [copyPaths] Copied 3 files from ../webview-ui/audio to webview-ui/audio
+roo-cline:bundle: [copyWasms] Copied tiktoken WASMs to /Users/eo/code/code-agent/src/dist
+roo-cline:bundle: [copyWasms] Copied tiktoken WASMs to /Users/eo/code/code-agent/src/dist/workers
+roo-cline:bundle: [copyWasms] Copied tree-sitter.wasm to /Users/eo/code/code-agent/src/dist
+roo-cline:bundle: [copyWasms] Copied 35 tree-sitter language wasms to /Users/eo/code/code-agent/src/dist
+roo-cline:bundle: [copyLocales] Copied 34 locale files to /Users/eo/code/code-agent/src/dist/i18n/locales
+roo-cline:bundle: [esbuild-problem-matcher#onEnd]
+
+ Tasks:    3 successful, 3 total
+Cached:    2 cached, 3 total
+  Time:    1.337s 
+
+
+> roo-cline@3.19.1 test
+> jest -w=40% && vitest run
+
+
+Found 179 test suites
+..***********..........................
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "Failed to save Roo messages: Error: ENOENT: no such file or directory, mkdir '/mock'
+        at Object.mkdir (node:internal/fs/promises:858:10)
+        at getTaskDirectoryPath (/Users/eo/code/code-agent/src/utils/storage.ts:57:2)
+        at saveTaskMessages (/Users/eo/code/code-agent/src/core/task-persistence/taskMessages.ts:38:18)
+        at TaskMessaging.saveClineMessages (/Users/eo/code/code-agent/src/core/task/TaskMessaging.ts:117:4)
+        at TaskMessaging.addToClineMessages (/Users/eo/code/code-agent/src/core/task/TaskMessaging.ts:80:3)
+        at TaskMessaging.say (/Users/eo/code/code-agent/src/core/task/TaskMessaging.ts:299:4)
+        at TaskLifecycle.startTask (/Users/eo/code/code-agent/src/core/task/TaskLifecycle.ts:32:3)
+        at Task.startTask (/Users/eo/code/code-agent/src/core/task/Task.ts:543:3) {
+      errno: -2,
+      code: 'ENOENT',
+      syscall: 'mkdir',
+      path: '/mock'
+    }".
+
+      55 | 	const basePath = await getStorageBasePath(globalStoragePath)
+      56 | 	const taskDir = path.join(basePath, "tasks", taskId)
+    > 57 | 	await fs.mkdir(taskDir, { recursive: true })
+         | 	^
+      58 | 	return taskDir
+      59 | }
+      60 |
+
+      at getTaskDirectoryPath (utils/storage.ts:57:2)
+      at saveTaskMessages (core/task-persistence/taskMessages.ts:38:18)
+      at TaskMessaging.saveClineMessages (core/task/TaskMessaging.ts:117:4)
+      at TaskMessaging.addToClineMessages (core/task/TaskMessaging.ts:80:3)
+      at TaskMessaging.say (core/task/TaskMessaging.ts:299:4)
+      at TaskLifecycle.startTask (core/task/TaskLifecycle.ts:32:3)
+      at Task.startTask (core/task/Task.ts:543:3) {
+        errno: -2,
+        code: 'ENOENT',
+        syscall: 'mkdir',
+        path: '/mock'
+      }".
+      at console.error (../node_modules/.pnpm/@jest+console@29.7.0/node_modules/@jest/console/build/BufferedConsole.js:127:10)
+      at TaskMessaging.saveClineMessages (core/task/TaskMessaging.ts:136:12)
+      at TaskMessaging.addToClineMessages (core/task/TaskMessaging.ts:80:3)
+      at TaskMessaging.say (core/task/TaskMessaging.ts:299:4)
+      at TaskLifecycle.startTask (core/task/TaskLifecycle.ts:32:3)
+      at Task.startTask (core/task/Task.ts:543:3)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[subtasks] task 75861b79-6f96-4678-b3e8-10bc5e242b8a.db8b9ce3 starting".
+
+      34 | 		let imageBlocks: Anthropic.ImageBlockParam[] = formatResponse.imageBlocks(images)
+      35 |
+    > 36 | 		console.log(`[subtasks] task ${this.taskId}.${this.instanceId} starting`)
+         | 		        ^
+      37 |
+      38 | 		this.onTaskStarted?.()
+      39 |
+
+      at console.log (../node_modules/.pnpm/@jest+console@29.7.0/node_modules/@jest/console/build/BufferedConsole.js:156:10)
+      at TaskLifecycle.startTask (core/task/TaskLifecycle.ts:36:11)
+      at Task.startTask (core/task/Task.ts:543:3)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[Cline#getCheckpointService] initializing checkpoints service".
+
+      69 | 		const service = RepoPerTaskCheckpointService.create(options)
+      70 |
+    > 71 | 		cline.checkpointServiceInitializing = true
+         | 		          ^
+      72 |
+      73 | 		service.on("initialize", () => {
+      74 | 			log("[Cline#getCheckpointService] service initialized")
+
+      at console.log (../node_modules/.pnpm/@jest+console@29.7.0/node_modules/@jest/console/build/BufferedConsole.js:156:10)
+      at getCheckpointService (core/checkpoints/index.ts:71:13)
+      at Task.initiateTaskLoop (core/task/Task.ts:596:23)
+      at core/task/Task.ts:543:70
+      at TaskLifecycle.startTask (core/task/TaskLifecycle.ts:41:10)
+      at Task.startTask (core/task/Task.ts:543:3)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "[Cline#getCheckpointService] workspace folder not found, disabling checkpoints".
+
+      61 |
+      62 | 		const options: CheckpointServiceOptions = {
+    > 63 | 			taskId: cline.taskId,
+         | 			             ^
+      64 | 			workspaceDir,
+      65 | 			shadowDir: globalStorageDir,
+      66 | 			log,
+
+      at console.log (../node_modules/.pnpm/@jest+console@29.7.0/node_modules/@jest/console/build/BufferedConsole.js:156:10)
+      at log (core/checkpoints/index.ts:63:17)
+      at getCheckpointService (core/checkpoints/index.ts:75:13)
+      at Task.initiateTaskLoop (core/task/Task.ts:596:23)
+      at core/task/Task.ts:543:70
+      at TaskLifecycle.startTask (core/task/TaskLifecycle.ts:41:10)
+      at Task.startTask (core/task/Task.ts:543:3)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "Could not access VSCode configuration - using default path".
+
+      20 | 		customStoragePath = config.get<string>("customStoragePath", "")
+      21 | 	} catch (error) {
+    > 22 | 		console.warn("Could not access VSCode configuration - using default path")
+         | 		        ^
+      23 | 		return defaultPath
+      24 | 	}
+      25 |
+
+      at console.warn (../node_modules/.pnpm/@jest+console@29.7.0/node_modules/@jest/console/build/BufferedConsole.js:191:10)
+      at getStorageBasePath (utils/storage.ts:22:11)
+      at getTaskDirectoryPath (utils/storage.ts:55:25)
+      at saveTaskMessages (core/task-persistence/taskMessages.ts:38:44)
+      at TaskMessaging.saveClineMessages (core/task/TaskMessaging.ts:117:26)
+      at TaskMessaging.addToClineMessages (core/task/TaskMessaging.ts:80:14)
+      at TaskMessaging.say (core/task/TaskMessaging.ts:299:4)
+      at TaskApiHandler.recursivelyMakeClineRequests (core/task/TaskApiHandler.ts:247:9)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "Failed to save Roo messages: Error: ENOENT: no such file or directory, mkdir '/mock'
+        at Object.mkdir (node:internal/fs/promises:858:10)
+        at getTaskDirectoryPath (/Users/eo/code/code-agent/src/utils/storage.ts:57:2)
+        at saveTaskMessages (/Users/eo/code/code-agent/src/core/task-persistence/taskMessages.ts:38:18)
+        at TaskMessaging.saveClineMessages (/Users/eo/code/code-agent/src/core/task/TaskMessaging.ts:117:4)
+        at TaskMessaging.addToClineMessages (/Users/eo/code/code-agent/src/core/task/TaskMessaging.ts:80:3)
+        at TaskMessaging.say (/Users/eo/code/code-agent/src/core/task/TaskMessaging.ts:299:4)
+        at TaskApiHandler.recursivelyMakeClineRequests (/Users/eo/code/code-agent/src/core/task/TaskApiHandler.ts:247:9)
+        at Task.initiateTaskLoop (/Users/eo/code/code-agent/src/core/task/Task.ts:602:23)
+        at TaskLifecycle.startTask (/Users/eo/code/code-agent/src/core/task/TaskLifecycle.ts:41:4)
+        at Task.startTask (/Users/eo/code/code-agent/src/core/task/Task.ts:543:3) {
+      errno: -2,
+      code: 'ENOENT',
+      syscall: 'mkdir',
+      path: '/mock'
+    }".
+
+      55 | 	const basePath = await getStorageBasePath(globalStoragePath)
+      56 | 	const taskDir = path.join(basePath, "tasks", taskId)
+    > 57 | 	await fs.mkdir(taskDir, { recursive: true })
+         | 	^
+      58 | 	return taskDir
+      59 | }
+      60 |
+
+      at getTaskDirectoryPath (utils/storage.ts:57:2)
+      at saveTaskMessages (core/task-persistence/taskMessages.ts:38:18)
+      at TaskMessaging.saveClineMessages (core/task/TaskMessaging.ts:117:4)
+      at TaskMessaging.addToClineMessages (core/task/TaskMessaging.ts:80:3)
+      at TaskMessaging.say (core/task/TaskMessaging.ts:299:4)
+      at TaskApiHandler.recursivelyMakeClineRequests (core/task/TaskApiHandler.ts:247:9)
+      at Task.initiateTaskLoop (core/task/Task.ts:602:23)
+      at TaskLifecycle.startTask (core/task/TaskLifecycle.ts:41:4)
+      at Task.startTask (core/task/Task.ts:543:3) {
+        errno: -2,
+        code: 'ENOENT',
+        syscall: 'mkdir',
+        path: '/mock'
+      }".
+      at console.error (../node_modules/.pnpm/@jest+console@29.7.0/node_modules/@jest/console/build/BufferedConsole.js:127:10)
+      at TaskMessaging.saveClineMessages (core/task/TaskMessaging.ts:136:12)
+      at TaskMessaging.addToClineMessages (core/task/TaskMessaging.ts:80:3)
+      at TaskMessaging.say (core/task/TaskMessaging.ts:299:4)
+      at TaskApiHandler.recursivelyMakeClineRequests (core/task/TaskApiHandler.ts:247:9)
+      at Task.initiateTaskLoop (core/task/Task.ts:602:23)
+      at TaskLifecycle.startTask (core/task/TaskLifecycle.ts:41:4)
+      at Task.startTask (core/task/Task.ts:543:3)
+
+........................................................................................*****......
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "ripgrep stderr: rg: /mock/workspace: IO error for operation on /mock/workspace: No such file or directory (os error 2)
+    ".
+
+      364 | 		// Process stderr but don't fail on non-zero exit codes
+      365 | 		rgProcess.stderr.on("data", (data) => {
+    > 366 | 			console.error(`ripgrep stderr: ${data}`)
+          | 			        ^
+      367 | 		})
+      368 |
+      369 | 		// Handle process completion
+
+      at console.error (../node_modules/.pnpm/@jest+console@29.7.0/node_modules/@jest/console/build/BufferedConsole.js:127:10)
+      at Socket.<anonymous> (services/glob/list-files.ts:366:12)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "ripgrep process exited with code 2, returning partial results".
+
+      377 | 			// Log non-zero exit codes but don't fail
+      378 | 			if (code !== 0 && code !== null && code !== 143 /* SIGTERM */) {
+    > 379 | 				console.warn(`ripgrep process exited with code ${code}, returning partial results`)
+          | 				        ^
+      380 | 			}
+      381 |
+      382 | 			resolve(results.slice(0, limit))
+
+      at console.warn (../node_modules/.pnpm/@jest+console@29.7.0/node_modules/@jest/console/build/BufferedConsole.js:191:10)
+      at ChildProcess.<anonymous> (services/glob/list-files.ts:379:13)
+
+..........
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "Error listing directories: Error: ENOENT: no such file or directory, scandir '/mock/workspace'".
+
+      229 | 		return directories.map((dir) => (dir.endsWith("/") ? dir : `${dir}/`))
+      230 | 	} catch (err) {
+    > 231 | 		console.error(`Error listing directories: ${err}`)
+          | 		        ^
+      232 | 		return [] // Return empty array on error
+      233 | 	}
+      234 | }
+
+      at console.error (../node_modules/.pnpm/@jest+console@29.7.0/node_modules/@jest/console/build/BufferedConsole.js:127:10)
+      at listFilteredDirectories (services/glob/list-files.ts:231:11)
+      at listFiles (services/glob/list-files.ts:56:22)
+      at getEnvironmentDetails (core/environment/getEnvironmentDetails.ts:236:42)
+      at TaskApiHandler.recursivelyMakeClineRequests (core/task/TaskApiHandler.ts:251:36)
+      at Task.initiateTaskLoop (core/task/Task.ts:602:23)
+      at TaskLifecycle.startTask (core/task/TaskLifecycle.ts:41:4)
+      at Task.startTask (core/task/Task.ts:543:3)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "Could not access VSCode configuration - using default path".
+
+      20 | 		customStoragePath = config.get<string>("customStoragePath", "")
+      21 | 	} catch (error) {
+    > 22 | 		console.warn("Could not access VSCode configuration - using default path")
+         | 		        ^
+      23 | 		return defaultPath
+      24 | 	}
+      25 |
+
+      at console.warn (../node_modules/.pnpm/@jest+console@29.7.0/node_modules/@jest/console/build/BufferedConsole.js:191:10)
+      at getStorageBasePath (utils/storage.ts:22:11)
+      at getTaskDirectoryPath (utils/storage.ts:55:25)
+      at saveApiMessages (core/task-persistence/apiMessages.ts:60:62)
+      at TaskMessaging.saveApiConversationHistory (core/task/TaskMessaging.ts:57:25)
+      at TaskMessaging.addToApiConversationHistory (core/task/TaskMessaging.ts:47:14)
+      at TaskApiHandler.recursivelyMakeClineRequests (core/task/TaskApiHandler.ts:253:30)
+      at Task.initiateTaskLoop (core/task/Task.ts:602:23)
+      at TaskLifecycle.startTask (core/task/TaskLifecycle.ts:41:4)
+      at Task.startTask (core/task/Task.ts:543:3)
+
+
+  ●  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "Failed to save API conversation history: Error: ENOENT: no such file or directory, mkdir '/mock'
+        at Object.mkdir (node:internal/fs/promises:858:10)
+        at getTaskDirectoryPath (/Users/eo/code/code-agent/src/utils/storage.ts:57:2)
+        at saveApiMessages (/Users/eo/code/code-agent/src/core/task-persistence/apiMessages.ts:60:21)
+        at TaskMessaging.saveApiConversationHistory (/Users/eo/code/code-agent/src/core/task/TaskMessaging.ts:57:4)
+        at TaskMessaging.addToApiConversationHistory (/Users/eo/code/code-agent/src/core/task/TaskMessaging.ts:47:3)
+        at TaskApiHandler.recursivelyMakeClineRequests (/Users/eo/code/code-agent/src/core/task/TaskApiHandler.ts:253:9)
+        at Task.initiateTaskLoop (/Users/eo/code/code-agent/src/core/task/Task.ts:602:23)
+        at TaskLifecycle.startTask (/Users/eo/code/code-agent/src/core/task/TaskLifecycle.ts:41:4)
+        at Task.startTask (/Users/eo/code/code-agent/src/core/task/Task.ts:543:3) {
+      errno: -2,
+      code: 'ENOENT',
+      syscall: 'mkdir',
+      path: '/mock'
+    }".
+
+      55 | 	const basePath = await getStorageBasePath(globalStoragePath)
+      56 | 	const taskDir = path.join(basePath, "tasks", taskId)
+    > 57 | 	await fs.mkdir(taskDir, { recursive: true })
+         | 	^
+      58 | 	return taskDir
+      59 | }
+      60 |
+
+      at getTaskDirectoryPath (utils/storage.ts:57:2)
+      at saveApiMessages (core/task-persistence/apiMessages.ts:60:21)
+      at TaskMessaging.saveApiConversationHistory (core/task/TaskMessaging.ts:57:4)
+      at TaskMessaging.addToApiConversationHistory (core/task/TaskMessaging.ts:47:3)
+      at TaskApiHandler.recursivelyMakeClineRequests (core/task/TaskApiHandler.ts:253:9)
+      at Task.initiateTaskLoop (core/task/Task.ts:602:23)
+      at TaskLifecycle.startTask (core/task/TaskLifecycle.ts:41:4)
+      at Task.startTask (core/task/Task.ts:543:3) {
+        errno: -2,
+        code: 'ENOENT',
+        syscall: 'mkdir',
+        path: '/mock'
+      }".
+      at console.error (../node_modules/.pnpm/@jest+console@29.7.0/node_modules/@jest/console/build/BufferedConsole.js:127:10)
+      at TaskMessaging.saveApiConversationHistory (core/task/TaskMessaging.ts:63:12)
+      at TaskMessaging.addToApiConversationHistory (core/task/TaskMessaging.ts:47:3)
+      at TaskApiHandler.recursivelyMakeClineRequests (core/task/TaskApiHandler.ts:253:9)
+      at Task.initiateTaskLoop (core/task/Task.ts:602:23)
+      at TaskLifecycle.startTask (core/task/TaskLifecycle.ts:41:4)
+      at Task.startTask (core/task/Task.ts:543:3)
+
+F..................................................................................................................../bin/sh: line 1: 96036 Terminated: 15          bash -c 'kill $$' 2> /dev/null
+/bin/sh: line 1: 96038 Segmentation fault: 11  bash -c 'kill -SIGSEGV $$' 2> /dev/null
+...........*..................................................................................................................................................................................................................................................................................................................................................................*.............................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................*.................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+  ● inspectRuby › should inspect Ruby tree structure and parse definitions
+
+    TelemetryService not initialized
+
+      146 |
+      147 | 	public captureShellIntegrationError(taskId: string): void {
+    > 148 | 		this.captureEvent(TelemetryEventName.SHELL_INTEGRATION_ERROR, { taskId })
+          | 		                ^
+      149 | 	}
+      150 |
+      151 | 	public captureConsecutiveMistakeError(taskId: string): void {
+
+      at Function.get instance [as instance] (../packages/telemetry/src/TelemetryService.ts:148:19)
+      at TaskApiHandler.recursivelyMakeClineRequests (core/task/TaskApiHandler.ts:254:38)
+      at Task.initiateTaskLoop (core/task/Task.ts:602:23)
+      at TaskLifecycle.startTask (core/task/TaskLifecycle.ts:34:13)
+      at Task.startTask (core/task/Task.ts:543:3)
+
+Ran 2103 tests in 26.87 s
+ 2083 passing 1 failing 19 pending

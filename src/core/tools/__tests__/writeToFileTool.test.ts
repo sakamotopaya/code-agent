@@ -131,6 +131,7 @@ describe("writeToFileTool", () => {
 			editType: undefined,
 			isEditing: false,
 			originalContent: "",
+			relPath: testFilePath,
 			open: jest.fn().mockResolvedValue(undefined),
 			update: jest.fn().mockResolvedValue(undefined),
 			reset: jest.fn().mockResolvedValue(undefined),
@@ -141,6 +142,7 @@ describe("writeToFileTool", () => {
 				finalContent: "final content",
 			}),
 			scrollToFirstDiff: jest.fn(),
+			pushToolWriteResult: jest.fn().mockResolvedValue("mock result"),
 		}
 		mockCline.api = {
 			getModel: jest.fn().mockReturnValue({ id: "claude-3" }),
@@ -343,11 +345,32 @@ describe("writeToFileTool", () => {
 		})
 
 		it("reports user edits with diff feedback", async () => {
-			mockCline.diffViewProvider.saveChanges.mockResolvedValue({
-				newProblemsMessage: " with warnings",
-				userEdits: "- old line\n+ new line",
-				finalContent: "modified content",
+			const userEdits = "- old line\n+ new line"
+			mockCline.diffViewProvider.saveChanges.mockImplementation(async () => {
+				// Set the userEdits property on the diffViewProvider mock
+				mockCline.diffViewProvider.userEdits = userEdits
+				return {
+					newProblemsMessage: " with warnings",
+					userEdits,
+					finalContent: "modified content",
+				}
 			})
+
+			// Mock pushToolWriteResult to simulate the actual behavior
+			mockCline.diffViewProvider.pushToolWriteResult.mockImplementation(
+				async (task: any, cwd: string, isNewFile: boolean) => {
+					// Simulate the actual pushToolWriteResult behavior
+					if (mockCline.diffViewProvider.userEdits) {
+						const say = {
+							tool: isNewFile ? "newFileCreated" : "editedExistingFile",
+							path: testFilePath,
+							diff: mockCline.diffViewProvider.userEdits,
+						}
+						await task.say("user_feedback_diff", JSON.stringify(say))
+					}
+					return "mock result"
+				},
+			)
 
 			await executeWriteFileTool({}, { fileExists: true })
 
