@@ -255,6 +255,34 @@ export class Task extends EventEmitter<ClineEvents> {
 		this.apiHandler.setStreamingState({ didCompleteReadingStream: value })
 	}
 
+	// Interface getters for tools
+	get fs(): IFileSystem {
+		if (!this.fileSystem) {
+			throw new Error(
+				"FileSystem interface not available. Make sure the Task was initialized with a fileSystem interface.",
+			)
+		}
+		return this.fileSystem
+	}
+
+	get term(): ITerminal {
+		if (!this.terminal) {
+			throw new Error(
+				"Terminal interface not available. Make sure the Task was initialized with a terminal interface.",
+			)
+		}
+		return this.terminal
+	}
+
+	get browserInterface(): IBrowser {
+		if (!this.browser) {
+			throw new Error(
+				"Browser interface not available. Make sure the Task was initialized with a browser interface.",
+			)
+		}
+		return this.browser
+	}
+
 	// Messaging compatibility
 	get lastMessageTs() {
 		return this.messaging.lastMessageTs

@@ -7,6 +7,7 @@ import {
 	ClineSayBrowserAction,
 } from "../../shared/ExtensionMessage"
 import { formatResponse } from "../prompts/responses"
+import { IBrowser, IBrowserSession } from "../interfaces/IBrowser"
 
 export async function browserActionTool(
 	cline: Task,
