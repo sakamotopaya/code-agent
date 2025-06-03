@@ -37,11 +37,25 @@ export class HeadlessBrowserManager {
 			timeout: options.timeout,
 		}
 
+		const browser = await stats.puppeteer.launch(launchOptions)
+
 		if (options.userAgent) {
-			// User agent will be set on individual pages
+			const userAgent = options.userAgent
+			// Apply user agent to all existing pages
+			const pages = await browser.pages()
+			for (const page of pages) {
+				await page.setUserAgent(userAgent)
+			}
+			// Ensure new pages inherit the user agent
+			browser.on("targetcreated", async (target) => {
+				const page = await target.page()
+				if (page) {
+					await page.setUserAgent(userAgent)
+				}
+			})
 		}
 
-		return await stats.puppeteer.launch(launchOptions)
+		return browser
 	}
 
 	private async ensureChromiumExists(): Promise<PCRStats> {
