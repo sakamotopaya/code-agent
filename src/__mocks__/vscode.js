@@ -3,10 +3,10 @@ const vscode = {
 	// Common constants
 	ExtensionContext: {},
 	Uri: {
-		file: jest.fn().mockImplementation((path) => ({ path, scheme: 'file' })),
-		parse: jest.fn().mockImplementation((uri) => ({ path: uri, scheme: 'file' })),
+		file: jest.fn().mockImplementation((path) => ({ path, scheme: "file" })),
+		parse: jest.fn().mockImplementation((uri) => ({ path: uri, scheme: "file" })),
 	},
-	
+
 	// Window namespace
 	window: {
 		showInformationMessage: jest.fn(),
@@ -27,7 +27,7 @@ const vscode = {
 		}),
 		withProgress: jest.fn().mockImplementation((options, task) => task()),
 	},
-	
+
 	// Workspace namespace
 	workspace: {
 		getConfiguration: jest.fn().mockReturnValue({
@@ -40,13 +40,13 @@ const vscode = {
 		openTextDocument: jest.fn(),
 		saveAll: jest.fn(),
 	},
-	
+
 	// Commands namespace
 	commands: {
 		registerCommand: jest.fn(),
 		executeCommand: jest.fn(),
 	},
-	
+
 	// Languages namespace
 	languages: {
 		registerCodeActionsProvider: jest.fn(),
@@ -57,14 +57,14 @@ const vscode = {
 			dispose: jest.fn(),
 		}),
 	},
-	
+
 	// Enums and constants
 	ConfigurationTarget: {
 		Global: 1,
 		Workspace: 2,
 		WorkspaceFolder: 3,
 	},
-	
+
 	ViewColumn: {
 		One: 1,
 		Two: 2,
@@ -72,24 +72,24 @@ const vscode = {
 		Active: -1,
 		Beside: -2,
 	},
-	
+
 	StatusBarAlignment: {
 		Left: 1,
 		Right: 2,
 	},
-	
+
 	// Progress location
 	ProgressLocation: {
 		SourceControl: 1,
 		Window: 10,
 		Notification: 15,
 	},
-	
+
 	// Disposable
 	Disposable: jest.fn().mockImplementation(() => ({
 		dispose: jest.fn(),
 	})),
-	
+
 	// Event emitter
 	EventEmitter: jest.fn().mockImplementation(() => ({
 		event: jest.fn(),

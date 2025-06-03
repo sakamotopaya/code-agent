@@ -10,6 +10,7 @@ interface BatchOptions extends CliAdapterOptions {
 	config?: string
 	verbose: boolean
 	color: boolean
+	colorScheme?: string
 }
 
 export class BatchProcessor {
