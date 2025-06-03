@@ -76,7 +76,7 @@ export class CLIBrowserService implements ICLIBrowserService {
 	async captureScreenshot(url: string, options?: ScreenshotOptions): Promise<string> {
 		const session = await this.launchHeadless()
 		try {
-			await session.navigateTo(url)
+			await session.launch(url)
 			return await session.captureScreenshot(options)
 		} finally {
 			await session.close()
@@ -86,7 +86,7 @@ export class CLIBrowserService implements ICLIBrowserService {
 	async extractContent(url: string, selectors?: string[]): Promise<ExtractedContent> {
 		const session = await this.launchHeadless()
 		try {
-			await session.navigateTo(url)
+			await session.launch(url)
 			return await session.extractContent(selectors)
 		} finally {
 			await session.close()
@@ -96,7 +96,7 @@ export class CLIBrowserService implements ICLIBrowserService {
 	async fillForm(url: string, formData: FormData): Promise<FormResult> {
 		const session = await this.launchHeadless()
 		try {
-			await session.navigateTo(url)
+			await session.launch(url)
 			return await session.fillForm(formData)
 		} finally {
 			await session.close()
@@ -106,7 +106,7 @@ export class CLIBrowserService implements ICLIBrowserService {
 	async submitForm(url: string, formSelector: string): Promise<SubmissionResult> {
 		const session = await this.launchHeadless()
 		try {
-			await session.navigateTo(url)
+			await session.launch(url)
 			return await session.submitForm(formSelector)
 		} finally {
 			await session.close()

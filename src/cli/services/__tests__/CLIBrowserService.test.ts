@@ -111,7 +111,7 @@ describe("CLIBrowserService", () => {
 		it("should capture screenshot of URL", async () => {
 			const mockBrowser = {} as Browser
 			const mockSession = {
-				navigateTo: jest.fn().mockResolvedValue(undefined),
+				launch: jest.fn().mockResolvedValue(undefined),
 				captureScreenshot: jest.fn().mockResolvedValue("/path/to/screenshot.png"),
 				close: jest.fn().mockResolvedValue(undefined),
 			}
@@ -121,7 +121,7 @@ describe("CLIBrowserService", () => {
 
 			const screenshotPath = await service.captureScreenshot("https://example.com")
 
-			expect(mockSession.navigateTo).toHaveBeenCalledWith("https://example.com")
+			expect(mockSession.launch).toHaveBeenCalledWith("https://example.com")
 			expect(mockSession.captureScreenshot).toHaveBeenCalled()
 			expect(mockSession.close).toHaveBeenCalled()
 			expect(screenshotPath).toBe("/path/to/screenshot.png")
@@ -130,7 +130,7 @@ describe("CLIBrowserService", () => {
 		it("should handle screenshot errors and close session", async () => {
 			const mockBrowser = {} as Browser
 			const mockSession = {
-				navigateTo: jest.fn().mockResolvedValue(undefined),
+				launch: jest.fn().mockResolvedValue(undefined),
 				captureScreenshot: jest.fn().mockRejectedValue(new Error("Screenshot failed")),
 				close: jest.fn().mockResolvedValue(undefined),
 			}
@@ -155,7 +155,7 @@ describe("CLIBrowserService", () => {
 				metadata: { url: "https://example.com", title: "Test Page", timestamp: "2023-01-01T00:00:00.000Z" },
 			}
 			const mockSession = {
-				navigateTo: jest.fn().mockResolvedValue(undefined),
+				launch: jest.fn().mockResolvedValue(undefined),
 				extractContent: jest.fn().mockResolvedValue(mockContent),
 				close: jest.fn().mockResolvedValue(undefined),
 			}
@@ -165,7 +165,7 @@ describe("CLIBrowserService", () => {
 
 			const content = await service.extractContent("https://example.com", ["h1", "p"])
 
-			expect(mockSession.navigateTo).toHaveBeenCalledWith("https://example.com")
+			expect(mockSession.launch).toHaveBeenCalledWith("https://example.com")
 			expect(mockSession.extractContent).toHaveBeenCalledWith(["h1", "p"])
 			expect(mockSession.close).toHaveBeenCalled()
 			expect(content).toEqual(mockContent)
@@ -178,7 +178,7 @@ describe("CLIBrowserService", () => {
 			const formData = { username: "test", password: "secret" }
 			const mockResult = { success: true, url: "https://example.com", responseTime: 100 }
 			const mockSession = {
-				navigateTo: jest.fn().mockResolvedValue(undefined),
+				launch: jest.fn().mockResolvedValue(undefined),
 				fillForm: jest.fn().mockResolvedValue(mockResult),
 				close: jest.fn().mockResolvedValue(undefined),
 			}
@@ -188,7 +188,7 @@ describe("CLIBrowserService", () => {
 
 			const result = await service.fillForm("https://example.com/login", formData)
 
-			expect(mockSession.navigateTo).toHaveBeenCalledWith("https://example.com/login")
+			expect(mockSession.launch).toHaveBeenCalledWith("https://example.com/login")
 			expect(mockSession.fillForm).toHaveBeenCalledWith(formData)
 			expect(mockSession.close).toHaveBeenCalled()
 			expect(result).toEqual(mockResult)
@@ -200,7 +200,7 @@ describe("CLIBrowserService", () => {
 			const mockBrowser = {} as Browser
 			const mockResult = { success: true, redirectUrl: "https://example.com/success" }
 			const mockSession = {
-				navigateTo: jest.fn().mockResolvedValue(undefined),
+				launch: jest.fn().mockResolvedValue(undefined),
 				submitForm: jest.fn().mockResolvedValue(mockResult),
 				close: jest.fn().mockResolvedValue(undefined),
 			}
@@ -210,7 +210,7 @@ describe("CLIBrowserService", () => {
 
 			const result = await service.submitForm("https://example.com/form", "#login-form")
 
-			expect(mockSession.navigateTo).toHaveBeenCalledWith("https://example.com/form")
+			expect(mockSession.launch).toHaveBeenCalledWith("https://example.com/form")
 			expect(mockSession.submitForm).toHaveBeenCalledWith("#login-form")
 			expect(mockSession.close).toHaveBeenCalled()
 			expect(result).toEqual(mockResult)
