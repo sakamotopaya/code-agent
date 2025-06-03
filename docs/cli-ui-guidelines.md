@@ -17,31 +17,31 @@ The CLI uses a consistent color scheme to provide visual hierarchy and improve u
 
 ### Default Colors
 
-| Type | Color | Usage |
-|------|-------|-------|
-| Success | Green | Successful operations, completed tasks |
-| Warning | Yellow | Warnings, non-critical issues |
-| Error | Red | Errors, failures, critical issues |
-| Info | Blue | Information messages, help text |
-| Highlight | Cyan | Important values, emphasized text |
-| Muted | Gray | Secondary information, timestamps |
-| Primary | White | Default text color |
+| Type      | Color  | Usage                                  |
+| --------- | ------ | -------------------------------------- |
+| Success   | Green  | Successful operations, completed tasks |
+| Warning   | Yellow | Warnings, non-critical issues          |
+| Error     | Red    | Errors, failures, critical issues      |
+| Info      | Blue   | Information messages, help text        |
+| Highlight | Cyan   | Important values, emphasized text      |
+| Muted     | Gray   | Secondary information, timestamps      |
+| Primary   | White  | Default text color                     |
 
 ### Color Configuration
 
 Colors can be configured programmatically:
 
 ```typescript
-import { CLIUIService } from './services/CLIUIService'
+import { CLIUIService } from "./services/CLIUIService"
 
 const customColorScheme = {
-  success: 'green',
-  warning: 'yellow',
-  error: 'red',
-  info: 'blue',
-  highlight: 'cyan',
-  muted: 'gray',
-  primary: 'white'
+	success: "green",
+	warning: "yellow",
+	error: "red",
+	info: "blue",
+	highlight: "cyan",
+	muted: "gray",
+	primary: "white",
 }
 
 const ui = new CLIUIService(true, customColorScheme)
@@ -60,17 +60,17 @@ const ui = new CLIUIService(true, customColorScheme)
 Use spinners for indeterminate progress:
 
 ```typescript
-const spinner = ui.showSpinner('Processing files...')
+const spinner = ui.showSpinner("Processing files...")
 spinner.start()
 
 // Update text as needed
-spinner.text = 'Analyzing dependencies...'
+spinner.text = "Analyzing dependencies..."
 
 // Complete with appropriate status
-spinner.succeed('Processing completed')
-spinner.fail('Processing failed')
-spinner.warn('Processing completed with warnings')
-spinner.info('Processing stopped')
+spinner.succeed("Processing completed")
+spinner.fail("Processing failed")
+spinner.warn("Processing completed with warnings")
+spinner.info("Processing stopped")
 ```
 
 ### Progress Bars
@@ -78,7 +78,7 @@ spinner.info('Processing stopped')
 Use progress bars for determinate progress:
 
 ```typescript
-const progressBar = ui.showProgressBar(100, 'Downloading...')
+const progressBar = ui.showProgressBar(100, "Downloading...")
 
 // Update progress
 progressBar.update(50) // Set to 50%
@@ -102,16 +102,16 @@ progressBar.stop()
 
 ```typescript
 // Success messages
-ui.success('Configuration saved successfully')
+ui.success("Configuration saved successfully")
 
-// Warning messages  
-ui.warning('API rate limit approaching')
+// Warning messages
+ui.warning("API rate limit approaching")
 
 // Error messages
-ui.error('Failed to connect to database')
+ui.error("Failed to connect to database")
 
 // Info messages
-ui.info('Loading configuration from ~/.roo/config.json')
+ui.info("Loading configuration from ~/.roo/config.json")
 ```
 
 ### Formatted Messages
@@ -120,16 +120,16 @@ For important messages, use boxes:
 
 ```typescript
 // Success box
-ui.showSuccessBox('Operation completed successfully', 'Success')
+ui.showSuccessBox("Operation completed successfully", "Success")
 
 // Error box
-ui.showErrorBox('Critical system error detected', 'Error')
+ui.showErrorBox("Critical system error detected", "Error")
 
 // Warning box
-ui.showWarningBox('This action cannot be undone', 'Warning')
+ui.showWarningBox("This action cannot be undone", "Warning")
 
 // Info box
-ui.showInfoBox('For more help, visit https://docs.roo.dev', 'Help')
+ui.showInfoBox("For more help, visit https://docs.roo.dev", "Help")
 ```
 
 ### Guidelines
@@ -147,8 +147,8 @@ For simple data display:
 
 ```typescript
 const data = [
-  { name: 'John', age: 30, role: 'Developer' },
-  { name: 'Jane', age: 25, role: 'Designer' }
+	{ name: "John", age: 30, role: "Developer" },
+	{ name: "Jane", age: 25, role: "Designer" },
 ]
 
 ui.showTable(data)
@@ -160,12 +160,12 @@ For configuration or details:
 
 ```typescript
 const config = {
-  'API Endpoint': 'https://api.example.com',
-  'Version': '1.0.0',
-  'Environment': 'production'
+	"API Endpoint": "https://api.example.com",
+	Version: "1.0.0",
+	Environment: "production",
 }
 
-ui.showKeyValueTable(config, 'Configuration')
+ui.showKeyValueTable(config, "Configuration")
 ```
 
 ### Columnar Tables
@@ -174,12 +174,12 @@ For structured data with custom formatting:
 
 ```typescript
 const columns = [
-  { header: 'Name', key: 'name', width: 20 },
-  { header: 'Status', key: 'status', width: 10, alignment: 'center' },
-  { header: 'Score', key: 'score', width: 10, alignment: 'right' }
+	{ header: "Name", key: "name", width: 20 },
+	{ header: "Status", key: "status", width: 10, alignment: "center" },
+	{ header: "Score", key: "score", width: 10, alignment: "right" },
 ]
 
-ui.showColumnarTable(data, columns, 'Results')
+ui.showColumnarTable(data, columns, "Results")
 ```
 
 ### Comparison Tables
@@ -190,7 +190,7 @@ For before/after comparisons:
 const before = { users: 100, errors: 5 }
 const after = { users: 120, errors: 2 }
 
-ui.showComparisonTable(before, after, 'Performance Comparison')
+ui.showComparisonTable(before, after, "Performance Comparison")
 ```
 
 ### Guidelines
@@ -206,37 +206,37 @@ ui.showComparisonTable(before, after, 'Performance Comparison')
 ### Text Input
 
 ```typescript
-const name = await ui.promptText('Enter your name:', 'John Doe')
+const name = await ui.promptText("Enter your name:", "John Doe")
 ```
 
 ### Password Input
 
 ```typescript
-const password = await ui.promptPassword('Enter password:')
+const password = await ui.promptPassword("Enter password:")
 ```
 
 ### Confirmation
 
 ```typescript
-const confirmed = await ui.promptConfirm('Are you sure?', false)
+const confirmed = await ui.promptConfirm("Are you sure?", false)
 ```
 
 ### Selection
 
 ```typescript
-const choice = await ui.promptSelect('Select environment:', [
-  { name: 'Development', value: 'dev' },
-  { name: 'Production', value: 'prod' }
+const choice = await ui.promptSelect("Select environment:", [
+	{ name: "Development", value: "dev" },
+	{ name: "Production", value: "prod" },
 ])
 ```
 
 ### Multiple Selection
 
 ```typescript
-const features = await ui.promptMultiSelect('Select features:', [
-  { name: 'Authentication', value: 'auth' },
-  { name: 'Database', value: 'db' },
-  { name: 'API', value: 'api' }
+const features = await ui.promptMultiSelect("Select features:", [
+	{ name: "Authentication", value: "auth" },
+	{ name: "Database", value: "db" },
+	{ name: "API", value: "api" },
 ])
 ```
 
@@ -286,33 +286,33 @@ const features = await ui.promptMultiSelect('Select features:', [
 ```typescript
 // Clear screen and show header
 ui.clearScreen()
-ui.showHeader('Roo CLI Setup', 'Initial configuration')
+ui.showHeader("Roo CLI Setup", "Initial configuration")
 
 // Show current status
 const status = {
-  'CLI Version': '1.0.0',
-  'Node Version': process.version,
-  'Platform': process.platform
+	"CLI Version": "1.0.0",
+	"Node Version": process.version,
+	Platform: process.platform,
 }
-ui.showKeyValueTable(status, 'System Information')
+ui.showKeyValueTable(status, "System Information")
 
 // Get user input
-const projectName = await ui.promptText('Project name:', 'my-project')
-const useTypescript = await ui.promptConfirm('Use TypeScript?', true)
+const projectName = await ui.promptText("Project name:", "my-project")
+const useTypescript = await ui.promptConfirm("Use TypeScript?", true)
 
 // Show progress
-const spinner = ui.showSpinner('Creating project...')
+const spinner = ui.showSpinner("Creating project...")
 spinner.start()
 
 // Simulate work
-spinner.text = 'Installing dependencies...'
+spinner.text = "Installing dependencies..."
 // ... do work ...
 
-spinner.succeed('Project created successfully')
+spinner.succeed("Project created successfully")
 
 // Show summary
-ui.showSuccessBox(`Project "${projectName}" created`, 'Success')
-ui.showSeparator('=', 50)
+ui.showSuccessBox(`Project "${projectName}" created`, "Success")
+ui.showSeparator("=", 50)
 ```
 
 This example demonstrates proper use of headers, tables, prompts, progress indicators, and final confirmation.
