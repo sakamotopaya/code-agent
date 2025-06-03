@@ -261,7 +261,7 @@ export class CliTerminal implements ITerminal {
 				}
 			})
 		} else {
-			// Parse Unix ps output
+			// Parse Unix ps aux output (note: ps aux doesn't include PPID)
 			lines.slice(1).forEach((line) => {
 				const parts = line.trim().split(/\s+/)
 				if (parts.length >= 11) {
@@ -271,7 +271,6 @@ export class CliTerminal implements ITerminal {
 						cmd: parts.slice(10).join(" "),
 						cpu: parseFloat(parts[2]) || undefined,
 						memory: parseInt(parts[5]) || undefined,
-						ppid: parseInt(parts[2]) || undefined,
 						user: parts[0] || undefined,
 					})
 				}

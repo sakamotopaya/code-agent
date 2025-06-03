@@ -168,6 +168,42 @@ describe("CliUserInterface", () => {
 				}),
 			])
 		})
+
+		it("should handle validation function", async () => {
+			const inquirer = require("inquirer")
+			inquirer.prompt.mockResolvedValue({ input: "valid input" })
+
+			const validateFn = jest.fn().mockReturnValue(undefined) // Valid input
+
+			await userInterface.askInput("Enter text:", {
+				validate: validateFn,
+			})
+
+			expect(inquirer.prompt).toHaveBeenCalledWith([
+				expect.objectContaining({
+					validate: expect.any(Function),
+				}),
+			])
+
+			// Test the validation function directly
+			const promptConfig = inquirer.prompt.mock.calls[0][0][0]
+			expect(promptConfig.validate("test")).toBe(true) // undefined should return true
+		})
+
+		it("should return error message when validation fails", async () => {
+			const inquirer = require("inquirer")
+			inquirer.prompt.mockResolvedValue({ input: "invalid input" })
+
+			const validateFn = jest.fn().mockReturnValue("Invalid input error")
+
+			await userInterface.askInput("Enter text:", {
+				validate: validateFn,
+			})
+
+			// Test the validation function directly
+			const promptConfig = inquirer.prompt.mock.calls[0][0][0]
+			expect(promptConfig.validate("test")).toBe("Invalid input error") // Error message should be returned
+		})
 	})
 
 	describe("log", () => {

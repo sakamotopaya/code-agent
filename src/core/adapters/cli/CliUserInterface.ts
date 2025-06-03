@@ -125,7 +125,7 @@ export class CliUserInterface implements IUserInterface {
 		if (options?.validate) {
 			promptConfig.validate = (input: string) => {
 				const validation = options.validate!(input)
-				return validation || true
+				return validation === undefined ? true : validation
 			}
 		}
 
