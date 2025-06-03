@@ -8,6 +8,8 @@ import { CliConfigManager } from "./config/CliConfigManager"
 import chalk from "chalk"
 import * as fs from "fs"
 
+const packageJson = require("../package.json")
+
 const program = new Command()
 
 interface CliOptions {
@@ -61,7 +63,7 @@ function validatePath(value: string): string {
 program
 	.name("roo-cli")
 	.description("Roo Code Agent CLI - Interactive coding assistant for the command line")
-	.version("1.0.0")
+	.version(packageJson.version)
 	.option("-c, --cwd <path>", "Working directory", validatePath, process.cwd())
 	.option("--config <path>", "Configuration file path", validatePath)
 	.option("-m, --model <name>", "AI model to use (overrides config)")
@@ -229,7 +231,7 @@ program
 	.description("Show version information")
 	.option("--json", "Output version information as JSON")
 	.action((options) => {
-		const version = "1.0.0" // TODO: Read from package.json
+		const version = packageJson.version
 		const nodeVersion = process.version
 		const platform = process.platform
 		const arch = process.arch
