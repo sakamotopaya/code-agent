@@ -4,12 +4,14 @@ import { createCliAdapters, type CliAdapterOptions } from "../core/adapters/cli"
 import { Task } from "../core/task/Task"
 import type { ProviderSettings, RooCodeSettings } from "@roo-code/types"
 import { CliConfigManager } from "./config/CliConfigManager"
+import { CLIUIService } from "./services/CLIUIService"
 
 interface ReplOptions extends CliAdapterOptions {
 	cwd: string
 	config?: string
 	verbose: boolean
 	color: boolean
+	colorScheme?: string
 }
 
 interface ReplConstructorOptions {
@@ -26,10 +28,20 @@ export class CliRepl {
 	private apiConfiguration?: ProviderSettings
 	private configManager?: CliConfigManager
 	private fullConfiguration?: RooCodeSettings
+	private uiService: CLIUIService
 
 	constructor(options: ReplOptions, configManager?: CliConfigManager) {
 		this.options = options
 		this.configManager = configManager
+
+		// Get color scheme from options
+		let colorScheme
+		if (options.colorScheme) {
+			const { PREDEFINED_COLOR_SCHEMES } = require("./types/ui-types")
+			colorScheme = PREDEFINED_COLOR_SCHEMES[options.colorScheme]
+		}
+
+		this.uiService = new CLIUIService(options.color, colorScheme)
 		this.rl = readline.createInterface({
 			input: process.stdin,
 			output: process.stdout,

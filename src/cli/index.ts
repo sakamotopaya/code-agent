@@ -20,6 +20,7 @@ interface CliOptions {
 	output?: "text" | "json"
 	verbose: boolean
 	color: boolean
+	colorScheme?: string
 	batch?: string
 	interactive: boolean
 	generateConfig?: string
@@ -60,6 +61,14 @@ function validatePath(value: string): string {
 	return value
 }
 
+function validateColorScheme(value: string): string {
+	const validSchemes = ["default", "dark", "light", "high-contrast", "minimal"]
+	if (!validSchemes.includes(value)) {
+		throw new Error(`Invalid color scheme: ${value}. Valid schemes are: ${validSchemes.join(", ")}`)
+	}
+	return value
+}
+
 program
 	.name("roo-cli")
 	.description("Roo Code Agent CLI - Interactive coding assistant for the command line")
@@ -75,6 +84,11 @@ program
 	.option("-o, --output <format>", "Output format (text, json)", validateOutput, "text")
 	.option("-v, --verbose", "Enable verbose logging", false)
 	.option("--no-color", "Disable colored output")
+	.option(
+		"--color-scheme <scheme>",
+		"Color scheme (default, dark, light, high-contrast, minimal)",
+		validateColorScheme,
+	)
 	.option("-b, --batch <task>", "Run in non-interactive mode with specified task")
 	.option("-i, --interactive", "Run in interactive mode (default)", true)
 	.option("--generate-config <path>", "Generate default configuration file at specified path", validatePath)
