@@ -4,7 +4,7 @@
  * This mock prevents filesystem access and provides predictable behavior for tests
  */
 
-export const getBinPath = jest.fn().mockResolvedValue("/mock/rg")
+export const getBinPath = jest.fn().mockResolvedValue("/opt/homebrew/bin/rg")
 
 export const regexSearchFiles = jest.fn().mockResolvedValue("No results found")
 

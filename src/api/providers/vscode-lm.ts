@@ -199,6 +199,31 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 	}
 
 	/**
+	 * Safely check if an object is a LanguageModelChatMessage
+	 * This avoids instanceof issues in test environments
+	 */
+	private isLanguageModelChatMessage(obj: any): obj is vscode.LanguageModelChatMessage {
+		try {
+			// Check if we have the VSCode API available
+			if (typeof vscode === "undefined" || !vscode.LanguageModelChatMessage) {
+				return false
+			}
+
+			// Use instanceof safely
+			return obj instanceof vscode.LanguageModelChatMessage
+		} catch (error) {
+			// Fallback: check for expected properties
+			return (
+				obj &&
+				typeof obj === "object" &&
+				"role" in obj &&
+				"content" in obj &&
+				(obj.role === 1 || obj.role === 2)
+			) // LanguageModelChatMessageRole values
+		}
+	}
+
+	/**
 	 * Private implementation of token counting used internally by VsCodeLmHandler
 	 */
 	private async internalCountTokens(text: string | vscode.LanguageModelChatMessage): Promise<number> {
@@ -225,7 +250,7 @@ export class VsCodeLmHandler extends BaseProvider implements SingleCompletionHan
 
 			if (typeof text === "string") {
 				tokenCount = await this.client.countTokens(text, this.currentRequestCancellation.token)
-			} else if (text instanceof vscode.LanguageModelChatMessage) {
+			} else if (this.isLanguageModelChatMessage(text)) {
 				// For chat messages, ensure we have content
 				if (!text.content || (Array.isArray(text.content) && text.content.length === 0)) {
 					console.debug("Roo Code <Language Model API>: Empty chat message content")

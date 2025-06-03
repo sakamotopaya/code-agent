@@ -37,17 +37,20 @@ export async function getTheme() {
 	const colorTheme = vscode.workspace.getConfiguration("workbench").get<string>("colorTheme") || "Default Dark Modern"
 
 	try {
-		for (let i = vscode.extensions.all.length - 1; i >= 0; i--) {
-			if (currentTheme) {
-				break
-			}
-			const extension = vscode.extensions.all[i]
-			if (extension.packageJSON?.contributes?.themes?.length > 0) {
-				for (const theme of extension.packageJSON.contributes.themes) {
-					if (theme.label === colorTheme) {
-						const themePath = path.join(extension.extensionPath, theme.path)
-						currentTheme = await fs.readFile(themePath, "utf-8")
-						break
+		// Check if VSCode extensions API is available (not in test environment)
+		if (vscode.extensions?.all) {
+			for (let i = vscode.extensions.all.length - 1; i >= 0; i--) {
+				if (currentTheme) {
+					break
+				}
+				const extension = vscode.extensions.all[i]
+				if (extension.packageJSON?.contributes?.themes?.length > 0) {
+					for (const theme of extension.packageJSON.contributes.themes) {
+						if (theme.label === colorTheme) {
+							const themePath = path.join(extension.extensionPath, theme.path)
+							currentTheme = await fs.readFile(themePath, "utf-8")
+							break
+						}
 					}
 				}
 			}

@@ -280,11 +280,15 @@ export class ContextProxy {
 			throw new Error("ContextProxy not initialized")
 		}
 
+		if (!this._instance.isInitialized) {
+			throw new Error("ContextProxy not initialized")
+		}
+
 		return this._instance
 	}
 
 	static async getInstance(context: vscode.ExtensionContext) {
-		if (this._instance) {
+		if (this._instance && this._instance.isInitialized) {
 			return this._instance
 		}
 
@@ -292,5 +296,44 @@ export class ContextProxy {
 		await this._instance.initialize()
 
 		return this._instance
+	}
+
+	/**
+	 * Initialize a test instance without requiring a VSCode context
+	 * This is useful for unit tests that need a ContextProxy instance
+	 */
+	static initializeTestInstance(): ContextProxy {
+		// Create a mock context for testing
+		const mockContext = {
+			globalState: {
+				get: () => undefined,
+				update: () => Promise.resolve(),
+			},
+			secrets: {
+				get: () => Promise.resolve(undefined),
+				store: () => Promise.resolve(),
+				delete: () => Promise.resolve(),
+			},
+			extensionUri: {} as any,
+			extensionPath: "/test/path",
+			globalStorageUri: {} as any,
+			logUri: {} as any,
+			extension: {} as any,
+			extensionMode: 1 as any,
+		} as any
+
+		this._instance = new ContextProxy(mockContext)
+		this._instance._isInitialized = true
+		this._instance.stateCache = {}
+		this._instance.secretCache = {}
+
+		return this._instance
+	}
+
+	/**
+	 * Reset the singleton instance (useful for tests)
+	 */
+	static reset() {
+		this._instance = null
 	}
 }
