@@ -110,18 +110,39 @@ async function main() {
 		outdir: "dist/workers",
 	}
 
-	const [extensionCtx, workerCtx] = await Promise.all([
+	/**
+	 * @type {import('esbuild').BuildOptions}
+	 */
+	const cliConfig = {
+		...buildOptions,
+		entryPoints: ["cli/index.ts"],
+		outfile: "dist/cli/index.js",
+		banner: {
+			js: '#!/usr/bin/env node'
+		},
+		external: ["vscode"]
+	}
+
+	const [extensionCtx, workerCtx, cliCtx] = await Promise.all([
 		esbuild.context(extensionConfig),
 		esbuild.context(workerConfig),
+		esbuild.context(cliConfig),
 	])
 
 	if (watch) {
-		await Promise.all([extensionCtx.watch(), workerCtx.watch()])
+		await Promise.all([extensionCtx.watch(), workerCtx.watch(), cliCtx.watch()])
 		copyLocales(srcDir, distDir)
 		setupLocaleWatcher(srcDir, distDir)
 	} else {
-		await Promise.all([extensionCtx.rebuild(), workerCtx.rebuild()])
-		await Promise.all([extensionCtx.dispose(), workerCtx.dispose()])
+		await Promise.all([extensionCtx.rebuild(), workerCtx.rebuild(), cliCtx.rebuild()])
+		
+		// Make CLI executable
+		const cliPath = path.join(distDir, "cli", "index.js")
+		if (fs.existsSync(cliPath)) {
+			fs.chmodSync(cliPath, 0o755)
+		}
+		
+		await Promise.all([extensionCtx.dispose(), workerCtx.dispose(), cliCtx.dispose()])
 	}
 }
 
