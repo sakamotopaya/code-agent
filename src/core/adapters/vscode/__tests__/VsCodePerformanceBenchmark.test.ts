@@ -46,11 +46,11 @@ const mockContext = {
 
 jest.mock("vscode", () => ({
 	window: {
-		showInformationMessage: jest.fn().mockResolvedValue(undefined),
-		showWarningMessage: jest.fn().mockResolvedValue(undefined),
-		showErrorMessage: jest.fn().mockResolvedValue(undefined),
-		showInputBox: jest.fn().mockResolvedValue(""),
-		showQuickPick: jest.fn().mockResolvedValue(""),
+		showInformationMessage: (jest.fn() as any).mockResolvedValue(undefined),
+		showWarningMessage: (jest.fn() as any).mockResolvedValue(undefined),
+		showErrorMessage: (jest.fn() as any).mockResolvedValue(undefined),
+		showInputBox: (jest.fn() as any).mockResolvedValue(""),
+		showQuickPick: (jest.fn() as any).mockResolvedValue(""),
 		createOutputChannel: jest.fn(() => ({
 			appendLine: jest.fn(),
 			show: jest.fn(),
@@ -58,9 +58,9 @@ jest.mock("vscode", () => ({
 			dispose: jest.fn(),
 		})),
 		createTextEditorDecorationType: jest.fn(() => ({ dispose: jest.fn() })),
-		showOpenDialog: jest.fn().mockResolvedValue([]),
-		showSaveDialog: jest.fn().mockResolvedValue(undefined),
-		withProgress: jest.fn().mockResolvedValue(undefined),
+		showOpenDialog: (jest.fn() as any).mockResolvedValue([]),
+		showSaveDialog: (jest.fn() as any).mockResolvedValue(undefined),
+		withProgress: (jest.fn() as any).mockResolvedValue(undefined),
 		createTerminal: jest.fn(() => ({
 			sendText: jest.fn(),
 			show: jest.fn(),
@@ -76,12 +76,12 @@ jest.mock("vscode", () => ({
 	},
 	workspace: {
 		fs: {
-			readFile: jest.fn().mockResolvedValue(new Uint8Array()),
-			writeFile: jest.fn().mockResolvedValue(undefined),
-			stat: jest.fn().mockResolvedValue({}),
-			readDirectory: jest.fn().mockResolvedValue([]),
-			createDirectory: jest.fn().mockResolvedValue(undefined),
-			delete: jest.fn().mockResolvedValue(undefined),
+			readFile: (jest.fn() as any).mockResolvedValue(new Uint8Array()),
+			writeFile: (jest.fn() as any).mockResolvedValue(undefined),
+			stat: (jest.fn() as any).mockResolvedValue({}),
+			readDirectory: (jest.fn() as any).mockResolvedValue([]),
+			createDirectory: (jest.fn() as any).mockResolvedValue(undefined),
+			delete: (jest.fn() as any).mockResolvedValue(undefined),
 		},
 		workspaceFolders: [{ uri: { fsPath: "/mock/workspace" }, name: "test-workspace", index: 0 }],
 		getConfiguration: jest.fn(() => ({ get: jest.fn(), update: jest.fn(), has: jest.fn(), inspect: jest.fn() })),
