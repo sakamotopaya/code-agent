@@ -2,7 +2,8 @@ import chalk from "chalk"
 import { createCliAdapters, type CliAdapterOptions } from "../../core/adapters/cli"
 import { Task } from "../../core/task/Task"
 import { defaultModeSlug } from "../../shared/modes"
-import type { ProviderSettings } from "@roo-code/types"
+import type { ProviderSettings, RooCodeSettings } from "@roo-code/types"
+import { CliConfigManager } from "../config/CliConfigManager"
 
 interface BatchOptions extends CliAdapterOptions {
 	cwd: string
@@ -13,9 +14,11 @@ interface BatchOptions extends CliAdapterOptions {
 
 export class BatchProcessor {
 	private options: BatchOptions
+	private configManager?: CliConfigManager
 
-	constructor(options: BatchOptions) {
+	constructor(options: BatchOptions, configManager?: CliConfigManager) {
 		this.options = options
+		this.configManager = configManager
 	}
 
 	async run(taskDescription: string): Promise<void> {
@@ -34,7 +37,7 @@ export class BatchProcessor {
 			})
 
 			// Load configuration
-			const apiConfiguration = await this.loadConfiguration()
+			const { apiConfiguration } = await this.loadConfiguration()
 
 			// Create and execute task
 			const task = new Task({
@@ -68,27 +71,92 @@ export class BatchProcessor {
 		}
 	}
 
-	private async loadConfiguration(): Promise<ProviderSettings> {
-		// TODO: Implement configuration loading from file
-		// For now, return a basic configuration that will need to be set up by the user
-		const config: ProviderSettings = {
-			apiProvider: "anthropic",
-			apiKey: process.env.ANTHROPIC_API_KEY || "",
-			apiModelId: "claude-3-5-sonnet-20241022",
-		}
-
-		if (!config.apiKey) {
-			const message =
-				"API configuration required. Please set ANTHROPIC_API_KEY environment variable or use --config option."
-			if (this.options.color) {
-				console.error(chalk.red("Configuration Error:"), message)
-			} else {
-				console.error("Configuration Error:", message)
+	private async loadConfiguration(): Promise<{
+		apiConfiguration: ProviderSettings
+		fullConfiguration: RooCodeSettings
+	}> {
+		try {
+			// Use existing config manager or create a new one
+			if (!this.configManager) {
+				this.configManager = new CliConfigManager({
+					cwd: this.options.cwd,
+					configPath: this.options.config,
+					verbose: this.options.verbose,
+				})
 			}
-			process.exit(1)
-		}
 
-		return config
+			// Load the full configuration
+			const fullConfiguration = await this.configManager.loadConfiguration()
+
+			// Extract provider settings for the API configuration
+			const apiConfiguration: ProviderSettings = {
+				apiProvider: fullConfiguration.apiProvider,
+				apiKey: fullConfiguration.apiKey,
+				apiModelId: fullConfiguration.apiModelId,
+				openAiBaseUrl: fullConfiguration.openAiBaseUrl,
+				// Add other provider-specific settings as needed
+				anthropicBaseUrl: fullConfiguration.anthropicBaseUrl,
+				openAiApiKey: fullConfiguration.openAiApiKey,
+				openAiModelId: fullConfiguration.openAiModelId,
+				glamaModelId: fullConfiguration.glamaModelId,
+				openRouterApiKey: fullConfiguration.openRouterApiKey,
+				openRouterModelId: fullConfiguration.openRouterModelId,
+			} as ProviderSettings
+
+			// Validate configuration
+			if (!apiConfiguration.apiKey) {
+				const message = [
+					"API configuration required. Set your API key using one of these methods:",
+					"  1. Environment variable: export ROO_API_KEY=your_api_key_here",
+					"  2. Config file: roo-cli --generate-config ~/.roo-cli/config.json",
+					"  3. Project config: Create .roo-cli.json in your project",
+				].join("\n")
+
+				if (this.options.color) {
+					console.error(chalk.red("Configuration Error:"), message)
+				} else {
+					console.error("Configuration Error:", message)
+				}
+				process.exit(1)
+			}
+
+			if (this.options.verbose) {
+				console.log(
+					chalk.gray(
+						`Configuration loaded - Provider: ${apiConfiguration.apiProvider}, Model: ${apiConfiguration.apiModelId}`,
+					),
+				)
+			}
+
+			return { apiConfiguration, fullConfiguration }
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			if (this.options.color) {
+				console.error(chalk.red("Failed to load configuration:"), message)
+			} else {
+				console.error("Failed to load configuration:", message)
+			}
+
+			// Fallback to environment variables
+			const apiConfiguration: ProviderSettings = {
+				apiProvider: "anthropic",
+				apiKey: process.env.ANTHROPIC_API_KEY || process.env.ROO_API_KEY || "",
+				apiModelId: "claude-3-5-sonnet-20241022",
+			} as ProviderSettings
+
+			if (!apiConfiguration.apiKey) {
+				process.exit(1)
+			}
+
+			const fullConfiguration = {
+				...apiConfiguration,
+				autoApprovalEnabled: false,
+				alwaysAllowReadOnly: false,
+				alwaysAllowWrite: false,
+			} as RooCodeSettings
+
+			return { apiConfiguration, fullConfiguration }
+		}
 	}
 
 	private async executeTask(task: Task): Promise<void> {

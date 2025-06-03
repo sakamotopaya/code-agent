@@ -11,6 +11,7 @@
 		"noImplicitOverride": true,
 		"noImplicitReturns": true,
 		"noUnusedLocals": false,
+		"outDir": "./dist",
 		"resolveJsonModule": true,
 		"rootDir": ".",
 		"skipLibCheck": true,

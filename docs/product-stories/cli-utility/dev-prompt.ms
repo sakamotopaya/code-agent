@@ -1,4 +1,4 @@
-we are ready to work on issue #6 in repo https://github.com/sakamotopaya/code-agent. 
+we are ready to work on issue #7 in repo https://github.com/sakamotopaya/code-agent. 
 follow the normal git flow. create a new local branch for the story, code the tasks and unit tests that 
 prove the task are complete. 
 if you need information about prior stories, you can find them locally here docs/product-stories/cli-utility
