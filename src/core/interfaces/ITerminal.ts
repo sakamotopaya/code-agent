@@ -22,7 +22,7 @@ export interface ITerminal {
 	executeCommandStreaming(
 		command: string,
 		options?: ExecuteCommandOptions,
-		onOutput?: (output: string, isError: boolean) => void
+		onOutput?: (output: string, isError: boolean) => void,
 	): Promise<CommandResult>
 
 	/**
@@ -291,7 +291,7 @@ export interface ProcessInfo {
 /**
  * Buffer encoding types
  */
-export type BufferEncoding = 
+export type BufferEncoding =
 	| "ascii"
 	| "utf8"
 	| "utf-8"

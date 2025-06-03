@@ -9,13 +9,70 @@
  */
 
 // Re-export all types and interfaces
-export type { IUserInterface, MessageOptions, QuestionOptions, ConfirmationOptions, InputOptions, LogLevel, WebviewContent, WebviewOptions } from "./IUserInterface"
+export type {
+	IUserInterface,
+	MessageOptions,
+	QuestionOptions,
+	ConfirmationOptions,
+	InputOptions,
+	LogLevel,
+	WebviewContent,
+	WebviewOptions,
+} from "./IUserInterface"
 
-export type { IFileSystem, BufferEncoding as FileSystemBufferEncoding, FileStats, MkdirOptions, RmdirOptions, ReaddirOptions, DirectoryEntry, CopyOptions, WatchOptions, FileWatcher } from "./IFileSystem"
+export type {
+	IFileSystem,
+	BufferEncoding as FileSystemBufferEncoding,
+	FileStats,
+	MkdirOptions,
+	RmdirOptions,
+	ReaddirOptions,
+	DirectoryEntry,
+	CopyOptions,
+	WatchOptions,
+	FileWatcher,
+} from "./IFileSystem"
 
-export type { ITerminal, ITerminalSession, ExecuteCommandOptions, CommandResult, TerminalOptions, ProcessInfo, BufferEncoding as TerminalBufferEncoding } from "./ITerminal"
+export type {
+	ITerminal,
+	ITerminalSession,
+	ExecuteCommandOptions,
+	CommandResult,
+	TerminalOptions,
+	ProcessInfo,
+	BufferEncoding as TerminalBufferEncoding,
+} from "./ITerminal"
 
-export type { IBrowser, IBrowserSession, BrowserType, ScrollDirection, BrowserEvent, BrowserLaunchOptions, BrowserConnectOptions, BrowserInstallOptions, NavigationOptions, ClickOptions, TypeOptions, HoverOptions, ScrollOptions, ResizeOptions, ScreenshotOptions, ScriptOptions, WaitOptions, LogOptions, BrowserActionResult, ScreenshotResult, ConsoleLog, ConsoleLogType, LogLocation, ViewportSize, ClipArea, MouseButton, ModifierKey, WaitCondition } from "./IBrowser"
+export type {
+	IBrowser,
+	IBrowserSession,
+	BrowserType,
+	ScrollDirection,
+	BrowserEvent,
+	BrowserLaunchOptions,
+	BrowserConnectOptions,
+	BrowserInstallOptions,
+	NavigationOptions,
+	ClickOptions,
+	TypeOptions,
+	HoverOptions,
+	ScrollOptions,
+	ResizeOptions,
+	ScreenshotOptions,
+	ScriptOptions,
+	WaitOptions,
+	LogOptions,
+	BrowserActionResult,
+	ScreenshotResult,
+	ConsoleLog,
+	ConsoleLogType,
+	LogLocation,
+	ViewportSize,
+	ClipArea,
+	MouseButton,
+	ModifierKey,
+	WaitCondition,
+} from "./IBrowser"
 
 // Import the interfaces for use in CoreInterfaces
 import type { IUserInterface } from "./IUserInterface"

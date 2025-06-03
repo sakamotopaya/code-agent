@@ -49,12 +49,20 @@ import type {
 	ConsoleLog,
 	LogLocation,
 	ViewportSize,
-	ClipArea
+	ClipArea,
 } from "../index"
 
 // Import enums as values
 import { LogLevel } from "../IUserInterface"
-import { BrowserType, ScrollDirection, BrowserEvent, ConsoleLogType, MouseButton, ModifierKey, WaitCondition } from "../IBrowser"
+import {
+	BrowserType,
+	ScrollDirection,
+	BrowserEvent,
+	ConsoleLogType,
+	MouseButton,
+	ModifierKey,
+	WaitCondition,
+} from "../IBrowser"
 
 describe("Core Interfaces", () => {
 	describe("IUserInterface", () => {
@@ -71,7 +79,7 @@ describe("Core Interfaces", () => {
 				log: jest.fn(),
 				showWebview: jest.fn(),
 				sendWebviewMessage: jest.fn(),
-				onWebviewMessage: jest.fn()
+				onWebviewMessage: jest.fn(),
 			}
 
 			expect(mockUserInterface).toBeDefined()
@@ -99,7 +107,7 @@ describe("Core Interfaces", () => {
 		it("should validate MessageOptions interface", () => {
 			const options: MessageOptions = {
 				modal: true,
-				actions: ["OK", "Cancel"]
+				actions: ["OK", "Cancel"],
 			}
 			expect(options.modal).toBe(true)
 			expect(options.actions).toEqual(["OK", "Cancel"])
@@ -109,7 +117,7 @@ describe("Core Interfaces", () => {
 			const options: QuestionOptions = {
 				choices: ["Yes", "No", "Maybe"],
 				defaultChoice: "Yes",
-				modal: false
+				modal: false,
 			}
 			expect(options.choices).toEqual(["Yes", "No", "Maybe"])
 			expect(options.defaultChoice).toBe("Yes")
@@ -142,7 +150,7 @@ describe("Core Interfaces", () => {
 				relative: jest.fn(),
 				createDirectoriesForFile: jest.fn(),
 				cwd: jest.fn(),
-				chdir: jest.fn()
+				chdir: jest.fn(),
 			}
 
 			expect(mockFileSystem).toBeDefined()
@@ -163,7 +171,7 @@ describe("Core Interfaces", () => {
 				mtime: new Date(),
 				atime: new Date(),
 				ctime: new Date(),
-				mode: 0o644
+				mode: 0o644,
 			}
 			expect(stats.size).toBe(1024)
 			expect(stats.isFile).toBe(true)
@@ -175,7 +183,7 @@ describe("Core Interfaces", () => {
 				name: "test.txt",
 				isFile: true,
 				isDirectory: false,
-				isSymbolicLink: false
+				isSymbolicLink: false,
 			}
 			expect(entry.name).toBe("test.txt")
 			expect(entry.isFile).toBe(true)
@@ -196,7 +204,7 @@ describe("Core Interfaces", () => {
 				isCommandAvailable: jest.fn(),
 				getShellType: jest.fn(),
 				killProcess: jest.fn(),
-				getProcesses: jest.fn()
+				getProcesses: jest.fn(),
 			}
 
 			expect(mockTerminal).toBeDefined()
@@ -213,7 +221,7 @@ describe("Core Interfaces", () => {
 				stderr: "",
 				success: true,
 				command: "echo 'Hello World'",
-				executionTime: 100
+				executionTime: 100,
 			}
 			expect(result.exitCode).toBe(0)
 			expect(result.stdout).toBe("Hello World")
@@ -229,7 +237,7 @@ describe("Core Interfaces", () => {
 				memory: 1024000,
 				ppid: 1,
 				user: "testuser",
-				startTime: new Date()
+				startTime: new Date(),
 			}
 			expect(process.pid).toBe(1234)
 			expect(process.name).toBe("node")
@@ -244,7 +252,7 @@ describe("Core Interfaces", () => {
 				getAvailableBrowsers: jest.fn(),
 				isBrowserInstalled: jest.fn(),
 				getBrowserExecutablePath: jest.fn(),
-				installBrowser: jest.fn()
+				installBrowser: jest.fn(),
 			}
 
 			expect(mockBrowser).toBeDefined()
@@ -282,7 +290,7 @@ describe("Core Interfaces", () => {
 				deviceScaleFactor: 1,
 				isMobile: false,
 				hasTouch: false,
-				isLandscape: true
+				isLandscape: true,
 			}
 			expect(viewport.width).toBe(1920)
 			expect(viewport.height).toBe(1080)
@@ -305,7 +313,7 @@ describe("Core Interfaces", () => {
 				userInterface: {} as IUserInterface,
 				fileSystem: {} as IFileSystem,
 				terminal: {} as ITerminal,
-				browser: {} as IBrowser
+				browser: {} as IBrowser,
 			}
 
 			expect(mockCoreInterfaces).toBeDefined()
@@ -323,7 +331,7 @@ describe("Core Interfaces", () => {
 					userInterface: {} as IUserInterface,
 					fileSystem: {} as IFileSystem,
 					terminal: {} as ITerminal,
-					browser: {} as IBrowser
+					browser: {} as IBrowser,
 				}
 			}
 
@@ -338,16 +346,16 @@ describe("Core Interfaces", () => {
 				timeouts: {
 					command: 30000,
 					browser: 10000,
-					fileSystem: 5000
+					fileSystem: 5000,
 				},
 				platform: {
 					vscodeContext: null,
 					cliOptions: {
 						interactive: true,
 						verbose: false,
-						outputFormat: "json"
-					}
-				}
+						outputFormat: "json",
+					},
+				},
 			}
 
 			expect(config.debug).toBe(true)
@@ -370,7 +378,7 @@ describe("Core Interfaces", () => {
 				log: jest.fn().mockResolvedValue(undefined),
 				showWebview: jest.fn().mockResolvedValue(undefined),
 				sendWebviewMessage: jest.fn().mockResolvedValue(undefined),
-				onWebviewMessage: jest.fn()
+				onWebviewMessage: jest.fn(),
 			}
 
 			// Test method calls
@@ -407,7 +415,7 @@ describe("Core Interfaces", () => {
 				relative: jest.fn().mockReturnValue("relative/path"),
 				createDirectoriesForFile: jest.fn().mockResolvedValue([]),
 				cwd: jest.fn().mockReturnValue("/current/dir"),
-				chdir: jest.fn()
+				chdir: jest.fn(),
 			}
 
 			// Test method calls
