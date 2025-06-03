@@ -1,18 +1,16 @@
-import path from "path"
 import delay from "delay"
-import * as vscode from "vscode"
 
 import { Task } from "../task/Task"
 import { ClineSayTool } from "../../shared/ExtensionMessage"
 import { formatResponse } from "../prompts/responses"
 import { ToolUse, AskApproval, HandleError, PushToolResult, RemoveClosingTag } from "../../shared/tools"
 import { RecordSource } from "../context-tracking/FileContextTrackerTypes"
-import { fileExistsAtPath } from "../../utils/fs"
 import { stripLineNumbers, everyLineHasLineNumbers } from "../../integrations/misc/extract-text"
 import { getReadablePath } from "../../utils/path"
 import { isPathOutsideWorkspace } from "../../utils/pathUtils"
 import { detectCodeOmission } from "../../integrations/editor/detect-omission"
 import { unescapeHtmlEntities } from "../../utils/text-normalization"
+import { IFileSystem } from "../interfaces/IFileSystem"
 
 export async function writeToFileTool(
 	cline: Task,
@@ -46,8 +44,8 @@ export async function writeToFileTool(
 	if (cline.diffViewProvider.editType !== undefined) {
 		fileExists = cline.diffViewProvider.editType === "modify"
 	} else {
-		const absolutePath = path.resolve(cline.cwd, relPath)
-		fileExists = await fileExistsAtPath(absolutePath)
+		const absolutePath = cline.fs.resolve(relPath)
+		fileExists = await cline.fs.exists(absolutePath)
 		cline.diffViewProvider.editType = fileExists ? "modify" : "create"
 	}
 
@@ -66,7 +64,7 @@ export async function writeToFileTool(
 	}
 
 	// Determine if the path is outside the workspace
-	const fullPath = relPath ? path.resolve(cline.cwd, removeClosingTag("path", relPath)) : ""
+	const fullPath = relPath ? cline.fs.resolve(removeClosingTag("path", relPath)) : ""
 	const isOutsideWorkspace = isPathOutsideWorkspace(fullPath)
 
 	const sharedMessageProps: ClineSayTool = {
@@ -176,20 +174,13 @@ export async function writeToFileTool(
 					)
 					return
 				} else {
-					vscode.window
-						.showWarningMessage(
-							"Potential code truncation detected. cline happens when the AI reaches its max output limit.",
-							"Follow cline guide to fix the issue",
-						)
-						.then((selection) => {
-							if (selection === "Follow cline guide to fix the issue") {
-								vscode.env.openExternal(
-									vscode.Uri.parse(
-										"https://github.com/cline/cline/wiki/Troubleshooting-%E2%80%90-Cline-Deleting-Code-with-%22Rest-of-Code-Here%22-Comments",
-									),
-								)
-							}
-						})
+					// For CLI compatibility, we'll just log the warning instead of showing VS Code UI
+					console.warn(
+						"Potential code truncation detected. This happens when the AI reaches its max output limit.",
+					)
+					console.warn(
+						"See: https://github.com/cline/cline/wiki/Troubleshooting-%E2%80%90-Cline-Deleting-Code-with-%22Rest-of-Code-Here%22-Comments",
+					)
 				}
 			}
 
