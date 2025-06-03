@@ -299,6 +299,9 @@ importers:
       clone-deep:
         specifier: ^4.0.1
         version: 4.0.1
+      commander:
+        specifier: ^12.1.0
+        version: 12.1.0
       default-shell:
         specifier: ^2.2.0
         version: 2.2.0
