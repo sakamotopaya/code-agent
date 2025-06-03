@@ -390,6 +390,46 @@ export class CliConfigManager {
 	}
 
 	/**
+	 * Validate a configuration file
+	 */
+	public async validateConfigFile(configPath: string): Promise<void> {
+		if (!fs.existsSync(configPath)) {
+			throw new Error(`Configuration file not found: ${configPath}`)
+		}
+
+		const fileContent = fs.readFileSync(configPath, "utf-8")
+		const ext = path.extname(configPath).toLowerCase()
+
+		let configData: any
+		try {
+			if (ext === ".json") {
+				configData = JSON.parse(fileContent)
+			} else if (ext === ".yaml" || ext === ".yml") {
+				configData = parseYaml(fileContent)
+			} else {
+				throw new Error(`Unsupported configuration file format: ${ext}. Supported formats: .json, .yaml, .yml`)
+			}
+		} catch (error) {
+			throw new Error(
+				`Failed to parse configuration file: ${error instanceof Error ? error.message : String(error)}`,
+			)
+		}
+
+		try {
+			// Validate against the CLI config schema
+			cliConfigFileSchema.parse(configData)
+		} catch (error) {
+			if (error instanceof z.ZodError) {
+				const errorMessages = error.errors.map((err) => `${err.path.join(".")}: ${err.message}`).join(", ")
+				throw new Error(`Configuration validation failed: ${errorMessages}`)
+			}
+			throw new Error(
+				`Configuration validation failed: ${error instanceof Error ? error.message : String(error)}`,
+			)
+		}
+	}
+
+	/**
 	 * Get the default user config directory
 	 */
 	public static getDefaultUserConfigDir(): string {
