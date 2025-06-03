@@ -14,6 +14,80 @@ import { readLines } from "../../integrations/misc/read-lines"
 import { extractTextFromFile, addLineNumbers } from "../../integrations/misc/extract-text"
 import { parseSourceCodeDefinitionsForFile } from "../../services/tree-sitter"
 import { parseXml } from "../../utils/xml"
+import { IFileSystem } from "../interfaces/IFileSystem"
+
+// Helper functions for interface-compatible file operations
+async function countFileLinesWithInterface(fs: IFileSystem, filePath: string): Promise<number> {
+	try {
+		const content = await fs.readFile(filePath, "utf8")
+		return content.split("\n").length
+	} catch (error) {
+		throw new Error(`File not found: ${filePath}`)
+	}
+}
+
+async function isBinaryFileWithInterface(fs: IFileSystem, filePath: string): Promise<boolean> {
+	try {
+		// Read first 1KB to check for binary content
+		const content = await fs.readFile(filePath, "utf8")
+		const firstKB = content.slice(0, 1024)
+
+		// Simple binary detection: look for null bytes or high percentage of non-printable chars
+		if (firstKB.includes("\0")) {
+			return true
+		}
+
+		let nonPrintableCount = 0
+		for (let i = 0; i < firstKB.length; i++) {
+			const code = firstKB.charCodeAt(i)
+			// Count chars that are not printable ASCII (except newlines, tabs, etc.)
+			if (code < 32 && code !== 9 && code !== 10 && code !== 13) {
+				nonPrintableCount++
+			}
+		}
+
+		// If more than 30% non-printable, consider it binary
+		return nonPrintableCount / firstKB.length > 0.3
+	} catch (error) {
+		// If we can't read as text, assume it's binary
+		return true
+	}
+}
+
+async function readLinesWithInterface(
+	fs: IFileSystem,
+	filePath: string,
+	endLine?: number,
+	startLine?: number,
+): Promise<string> {
+	try {
+		const content = await fs.readFile(filePath, "utf8")
+		const lines = content.split("\n")
+
+		const effectiveStartLine = startLine === undefined ? 0 : Math.max(0, Math.floor(startLine))
+		const effectiveEndLine = endLine === undefined ? lines.length - 1 : Math.floor(endLine)
+
+		if (effectiveStartLine > effectiveEndLine) {
+			throw new RangeError(
+				`startLine (${effectiveStartLine}) must be less than or equal to endLine (${effectiveEndLine})`,
+			)
+		}
+
+		if (effectiveStartLine >= lines.length) {
+			throw new RangeError(
+				`Line with index ${effectiveStartLine} does not exist in '${filePath}'. Note that line indexing is zero-based`,
+			)
+		}
+
+		const selectedLines = lines.slice(effectiveStartLine, effectiveEndLine + 1)
+		return selectedLines.join("\n")
+	} catch (error) {
+		if (error instanceof RangeError) {
+			throw error
+		}
+		throw new Error(`Failed to read lines from ${filePath}: ${error}`)
+	}
+}
 
 export function getReadFileToolDescription(blockName: string, blockParams: any): string {
 	// Handle both single path and multiple files via args
@@ -96,7 +170,7 @@ export async function readFileTool(
 			filePath = legacyPath
 		}
 
-		const fullPath = filePath ? path.resolve(cline.cwd, filePath) : ""
+		const fullPath = filePath ? cline.fs.resolve(filePath) : ""
 		const sharedMessageProps: ClineSayTool = {
 			tool: "readFile",
 			path: getReadablePath(cline.cwd, filePath),
@@ -200,7 +274,7 @@ export async function readFileTool(
 		for (let i = 0; i < fileResults.length; i++) {
 			const fileResult = fileResults[i]
 			const relPath = fileResult.path
-			const fullPath = path.resolve(cline.cwd, relPath)
+			const fullPath = cline.fs.resolve(relPath)
 
 			// Validate line ranges first
 			if (fileResult.lineRanges) {
@@ -258,7 +332,7 @@ export async function readFileTool(
 			// Prepare batch file data
 			const batchFiles = filesToApprove.map((fileResult) => {
 				const relPath = fileResult.path
-				const fullPath = path.resolve(cline.cwd, relPath)
+				const fullPath = cline.fs.resolve(relPath)
 				const isOutsideWorkspace = isPathOutsideWorkspace(fullPath)
 
 				// Create line snippet for this file
@@ -366,7 +440,7 @@ export async function readFileTool(
 			// Handle single file approval (existing logic)
 			const fileResult = filesToApprove[0]
 			const relPath = fileResult.path
-			const fullPath = path.resolve(cline.cwd, relPath)
+			const fullPath = cline.fs.resolve(relPath)
 			const isOutsideWorkspace = isPathOutsideWorkspace(fullPath)
 			const { maxReadFileLine = -1 } = (await cline.providerRef?.deref()?.getState()) ?? {}
 
@@ -428,12 +502,15 @@ export async function readFileTool(
 			}
 
 			const relPath = fileResult.path
-			const fullPath = path.resolve(cline.cwd, relPath)
+			const fullPath = cline.fs.resolve(relPath)
 			const { maxReadFileLine = 500 } = (await cline.providerRef?.deref()?.getState()) ?? {}
 
 			// Process approved files
 			try {
-				const [totalLines, isBinary] = await Promise.all([countFileLines(fullPath), isBinaryFile(fullPath)])
+				const [totalLines, isBinary] = await Promise.all([
+					countFileLinesWithInterface(cline.fs, fullPath),
+					isBinaryFileWithInterface(cline.fs, fullPath),
+				])
 
 				// Handle binary files
 				if (isBinary) {
@@ -449,7 +526,7 @@ export async function readFileTool(
 					const rangeResults: string[] = []
 					for (const range of fileResult.lineRanges) {
 						const content = addLineNumbers(
-							await readLines(fullPath, range.end - 1, range.start - 1),
+							await readLinesWithInterface(cline.fs, fullPath, range.end - 1, range.start - 1),
 							range.start,
 						)
 						const lineRangeAttr = ` lines="${range.start}-${range.end}"`
@@ -485,7 +562,9 @@ export async function readFileTool(
 
 				// Handle files exceeding line threshold
 				if (maxReadFileLine > 0 && totalLines > maxReadFileLine) {
-					const content = addLineNumbers(await readLines(fullPath, maxReadFileLine - 1, 0))
+					const content = addLineNumbers(
+						await readLinesWithInterface(cline.fs, fullPath, maxReadFileLine - 1, 0),
+					)
 					const lineRangeAttr = ` lines="1-${maxReadFileLine}"`
 					let xmlInfo = `<content${lineRangeAttr}>\n${content}</content>\n`
 

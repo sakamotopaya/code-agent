@@ -1,6 +1,3 @@
-import fs from "fs/promises"
-import * as path from "path"
-
 import delay from "delay"
 
 import { CommandExecutionStatus } from "@roo-code/types"
@@ -14,6 +11,7 @@ import { unescapeHtmlEntities } from "../../utils/text-normalization"
 import { ExitCodeDetails, RooTerminalCallbacks, RooTerminalProcess } from "../../integrations/terminal/types"
 import { TerminalRegistry } from "../../integrations/terminal/TerminalRegistry"
 import { Terminal } from "../../integrations/terminal/Terminal"
+import { ITerminal, ExecuteCommandOptions as ITerminalExecuteCommandOptions } from "../interfaces/ITerminal"
 
 class ShellIntegrationError extends Error {}
 
@@ -129,14 +127,17 @@ export async function executeCommand(
 
 	if (!customCwd) {
 		workingDir = cline.cwd
-	} else if (path.isAbsolute(customCwd)) {
+	} else if (cline.fs.isAbsolute(customCwd)) {
 		workingDir = customCwd
 	} else {
-		workingDir = path.resolve(cline.cwd, customCwd)
+		workingDir = cline.fs.resolve(customCwd)
 	}
 
 	try {
-		await fs.access(workingDir)
+		const dirExists = await cline.fs.exists(workingDir)
+		if (!dirExists) {
+			return [false, `Working directory '${workingDir}' does not exist.`]
+		}
 	} catch (error) {
 		return [false, `Working directory '${workingDir}' does not exist.`]
 	}
