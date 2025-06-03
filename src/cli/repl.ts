@@ -274,11 +274,39 @@ export class CliRepl {
 			const message = error instanceof Error ? error.message : String(error)
 			console.error(chalk.red("Failed to load configuration:"), message)
 
-			// Fallback to basic configuration
-			this.apiConfiguration = {
+			// Fallback to basic configuration for both fullConfiguration and apiConfiguration
+			this.fullConfiguration = {
 				apiProvider: "anthropic",
 				apiKey: process.env.ANTHROPIC_API_KEY || process.env.ROO_API_KEY || "",
 				apiModelId: "claude-3-5-sonnet-20241022",
+				openAiBaseUrl: "",
+				anthropicBaseUrl: "",
+				openAiApiKey: "",
+				openAiModelId: "",
+				glamaModelId: "",
+				openRouterApiKey: "",
+				openRouterModelId: "",
+				autoApprovalEnabled: false,
+				alwaysAllowReadOnly: false,
+				alwaysAllowWrite: false,
+				alwaysAllowBrowser: false,
+				alwaysAllowExecute: false,
+				alwaysAllowMcp: false,
+				requestDelaySeconds: 0,
+				allowedMaxRequests: undefined,
+			} as RooCodeSettings
+
+			this.apiConfiguration = {
+				apiProvider: this.fullConfiguration.apiProvider,
+				apiKey: this.fullConfiguration.apiKey,
+				apiModelId: this.fullConfiguration.apiModelId,
+				openAiBaseUrl: this.fullConfiguration.openAiBaseUrl,
+				anthropicBaseUrl: this.fullConfiguration.anthropicBaseUrl,
+				openAiApiKey: this.fullConfiguration.openAiApiKey,
+				openAiModelId: this.fullConfiguration.openAiModelId,
+				glamaModelId: this.fullConfiguration.glamaModelId,
+				openRouterApiKey: this.fullConfiguration.openRouterApiKey,
+				openRouterModelId: this.fullConfiguration.openRouterModelId,
 			} as ProviderSettings
 		}
 	}
