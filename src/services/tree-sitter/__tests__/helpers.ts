@@ -1,7 +1,6 @@
 import { jest } from "@jest/globals"
 import { parseSourceCodeDefinitionsForFile, setMinComponentLines } from ".."
 import * as fs from "fs/promises"
-import { existsSync } from "fs"
 import * as path from "path"
 import Parser from "web-tree-sitter"
 import tsxQuery from "../queries/tsx"
@@ -50,45 +49,14 @@ export async function initializeWorkingParser() {
 
 	// Initialize directly using the default export or the module itself
 	const ParserConstructor = TreeSitter.default || TreeSitter
-
-	try {
-		// Try to initialize with proper WASM path
-		const wasmPath = path.join(process.cwd(), "dist", "tree-sitter.wasm")
-		if (existsSync(wasmPath)) {
-			await ParserConstructor.init({
-				locateFile(scriptName: string, scriptDirectory: string) {
-					if (scriptName === "tree-sitter.wasm") {
-						return wasmPath
-					}
-					return path.join(process.cwd(), "dist", scriptName)
-				},
-			})
-		} else {
-			// Fallback for tests - mock the init
-			;(ParserConstructor as any).init = jest.fn(() => Promise.resolve())
-			await ParserConstructor.init()
-		}
-	} catch (error) {
-		// For tests, create a mock initialization
-		;(ParserConstructor as any).init = jest.fn(() => Promise.resolve())
-		await ParserConstructor.init()
-	}
+	await ParserConstructor.init()
 
 	// Override the Parser.Language.load to use dist directory
 	const originalLoad = TreeSitter.Language.load
 	TreeSitter.Language.load = async (wasmPath: string) => {
 		const filename = path.basename(wasmPath)
 		const correctPath = path.join(process.cwd(), "dist", filename)
-
-		// Check if file exists, if not return a mock for tests
-		if (!existsSync(correctPath)) {
-			return {
-				query: jest.fn().mockReturnValue({
-					matches: jest.fn().mockReturnValue([]),
-				}),
-			}
-		}
-
+		// console.log(`Redirecting WASM load from ${wasmPath} to ${correctPath}`)
 		return originalLoad(correctPath)
 	}
 

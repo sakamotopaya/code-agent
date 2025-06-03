@@ -1,6 +1,5 @@
 import * as vscode from "vscode"
 import { ZodError } from "zod"
-import { jest } from "@jest/globals"
 
 import {
 	PROVIDER_SETTINGS_KEYS,
@@ -278,38 +277,10 @@ export class ContextProxy {
 
 	static get instance() {
 		if (!this._instance) {
-			// In test environments, create a mock instance to prevent crashes
-			if (process.env.NODE_ENV === "test" || process.env.JEST_WORKER_ID) {
-				return this.createMockInstance()
-			}
 			throw new Error("ContextProxy not initialized")
 		}
 
 		return this._instance
-	}
-
-	private static createMockInstance(): ContextProxy {
-		const mockContext = {
-			globalState: {
-				get: jest.fn(),
-				update: jest.fn(),
-			},
-			secrets: {
-				get: jest.fn(),
-				store: jest.fn(),
-				delete: jest.fn(),
-			},
-			extensionUri: { fsPath: "/mock/extension" },
-			extensionPath: "/mock/extension",
-			globalStorageUri: { fsPath: "/mock/global" },
-			logUri: { fsPath: "/mock/log" },
-			extension: { id: "mock.extension" },
-			extensionMode: 1,
-		} as any
-
-		const mockInstance = new ContextProxy(mockContext)
-		mockInstance._isInitialized = true
-		return mockInstance
 	}
 
 	static async getInstance(context: vscode.ExtensionContext) {

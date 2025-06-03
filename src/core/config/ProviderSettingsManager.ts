@@ -441,11 +441,6 @@ export class ProviderSettingsManager {
 
 	private async load(): Promise<ProviderProfiles> {
 		try {
-			// In test environments, return default profiles to prevent failures
-			if (process.env.NODE_ENV === "test" || process.env.JEST_WORKER_ID) {
-				return this.defaultProviderProfiles
-			}
-
 			const content = await this.context.secrets.get(this.secretsKey)
 
 			if (!content) {
@@ -473,11 +468,6 @@ export class ProviderSettingsManager {
 				),
 			}
 		} catch (error) {
-			// In test environments, return default profiles instead of throwing
-			if (process.env.NODE_ENV === "test" || process.env.JEST_WORKER_ID) {
-				return this.defaultProviderProfiles
-			}
-
 			if (error instanceof ZodError) {
 				TelemetryService.instance.captureSchemaValidationError({
 					schemaName: "ProviderProfiles",
