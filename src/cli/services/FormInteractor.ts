@@ -140,19 +140,20 @@ export class FormInteractor {
 				break
 
 			case "checkbox":
-			case "radio":
+			case "radio": {
 				const isChecked = await element.evaluate((el) => (el as HTMLInputElement).checked)
 				const shouldCheck = Boolean(value)
 				if (isChecked !== shouldCheck) {
 					await element.click()
 				}
 				break
+			}
 
 			case "select":
 				await element.select(String(value))
 				break
 
-			case "file":
+			case "file": {
 				if (value instanceof File) {
 					// For file uploads, we would need the file path
 					// In CLI context, this would be a file path string
@@ -160,6 +161,7 @@ export class FormInteractor {
 					await fileInput.uploadFile(String(value))
 				}
 				break
+			}
 
 			case "date":
 			case "datetime-local":
