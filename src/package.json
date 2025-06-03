@@ -50,6 +50,9 @@
 		"onStartupFinished"
 	],
 	"main": "./dist/extension.js",
+	"bin": {
+		"roo-cli": "./dist/cli/index.js"
+	},
 	"contributes": {
 		"viewsContainers": {
 			"activitybar": [
@@ -350,6 +353,8 @@
 		"publish:marketplace": "vsce publish --no-dependencies && ovsx publish --no-dependencies",
 		"watch:bundle": "pnpm bundle --watch",
 		"watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+		"build:cli": "tsc && chmod +x ./dist/cli/index.js",
+		"start:cli": "node ./dist/cli/index.js",
 		"clean": "rimraf README.md CHANGELOG.md LICENSE dist webview-ui out mock .turbo"
 	},
 	"dependencies": {
@@ -374,6 +379,7 @@
 		"chalk": "^5.3.0",
 		"chokidar": "^4.0.1",
 		"clone-deep": "^4.0.1",
+		"commander": "^12.1.0",
 		"default-shell": "^2.2.0",
 		"delay": "^6.0.0",
 		"diff": "^5.2.0",
