@@ -86,7 +86,17 @@ async function handleSpecialDirectories(dirPath: string): Promise<[string[], boo
  * Get the path to the ripgrep binary
  */
 async function getRipgrepPath(): Promise<string> {
-	const vscodeAppRoot = vscode.env.appRoot
+	// Use VSCode app root if available, otherwise fall back to project root
+	// This allows the function to work in both VSCode and CLI/test environments
+	let vscodeAppRoot = vscode.env.appRoot
+
+	if (!vscodeAppRoot) {
+		// When running outside VSCode (tests/CLI), find the project root
+		// If we're in src/ directory, go up one level to project root
+		const cwd = process.cwd()
+		vscodeAppRoot = cwd.endsWith("/src") ? path.dirname(cwd) : cwd
+	}
+
 	const rgPath = await getBinPath(vscodeAppRoot)
 
 	if (!rgPath) {
