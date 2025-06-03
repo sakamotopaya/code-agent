@@ -5,6 +5,7 @@ import { showHelp } from "./commands/help"
 import { showBanner } from "./utils/banner"
 import { validateCliAdapterOptions } from "../core/adapters/cli"
 import { CliConfigManager } from "./config/CliConfigManager"
+import { validateBrowserViewport, validateTimeout } from "./utils/browser-config"
 import chalk from "chalk"
 import * as fs from "fs"
 
@@ -24,6 +25,12 @@ interface CliOptions {
 	batch?: string
 	interactive: boolean
 	generateConfig?: string
+	// Browser options
+	headless: boolean
+	browserViewport?: string
+	browserTimeout?: number
+	screenshotOutput?: string
+	userAgent?: string
 }
 
 // Validation functions
@@ -92,6 +99,12 @@ program
 	.option("-b, --batch <task>", "Run in non-interactive mode with specified task")
 	.option("-i, --interactive", "Run in interactive mode (default)", true)
 	.option("--generate-config <path>", "Generate default configuration file at specified path", validatePath)
+	.option("--headless", "Run browser in headless mode (default: true)", true)
+	.option("--no-headless", "Run browser in headed mode")
+	.option("--browser-viewport <size>", "Browser viewport size (e.g., 1920x1080)", validateBrowserViewport)
+	.option("--browser-timeout <ms>", "Browser operation timeout in milliseconds", validateTimeout)
+	.option("--screenshot-output <dir>", "Directory for screenshot output", validatePath)
+	.option("--user-agent <agent>", "Custom user agent string for browser")
 	.action(async (options: CliOptions) => {
 		try {
 			// Handle config generation
@@ -112,6 +125,28 @@ program
 			}
 			if (options.mode) {
 				cliOverrides.mode = options.mode
+			}
+
+			// Apply browser configuration overrides
+			if (options.headless !== undefined) {
+				cliOverrides.browser = cliOverrides.browser || {}
+				cliOverrides.browser.headless = options.headless
+			}
+			if (options.browserViewport) {
+				cliOverrides.browser = cliOverrides.browser || {}
+				cliOverrides.browser.viewport = options.browserViewport
+			}
+			if (options.browserTimeout) {
+				cliOverrides.browser = cliOverrides.browser || {}
+				cliOverrides.browser.timeout = options.browserTimeout
+			}
+			if (options.screenshotOutput) {
+				cliOverrides.browser = cliOverrides.browser || {}
+				cliOverrides.browser.screenshotOutput = options.screenshotOutput
+			}
+			if (options.userAgent) {
+				cliOverrides.browser = cliOverrides.browser || {}
+				cliOverrides.browser.userAgent = options.userAgent
 			}
 
 			const configManager = new CliConfigManager({
@@ -288,8 +323,18 @@ program.on("--help", () => {
 	console.log('  $ roo-cli --batch "Create a hello function" # Run single task')
 	console.log("  $ roo-cli --model gpt-4                     # Use specific model")
 	console.log("  $ roo-cli --mode debug                      # Start in debug mode")
+	console.log("  $ roo-cli --no-headless                     # Run browser in headed mode")
+	console.log("  $ roo-cli --browser-viewport 1280x720      # Set browser viewport")
+	console.log("  $ roo-cli --screenshot-output ./screenshots # Set screenshot directory")
 	console.log("  $ roo-cli config --show                     # Show current configuration")
 	console.log("  $ roo-cli config --generate ~/.roo-cli/config.json")
+	console.log()
+	console.log("Browser Options:")
+	console.log("  --headless/--no-headless     Run browser in headless or headed mode")
+	console.log("  --browser-viewport <size>    Set browser viewport (e.g., 1920x1080)")
+	console.log("  --browser-timeout <ms>       Set browser timeout in milliseconds")
+	console.log("  --screenshot-output <dir>    Directory for saving screenshots")
+	console.log("  --user-agent <agent>         Custom user agent string")
 	console.log()
 	console.log("For more information, visit: https://docs.roocode.com/cli")
 })
