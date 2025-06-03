@@ -205,7 +205,7 @@ export enum BrowserType {
 	FIREFOX = "firefox",
 	SAFARI = "safari",
 	EDGE = "edge",
-	CHROMIUM = "chromium"
+	CHROMIUM = "chromium",
 }
 
 /**
@@ -215,7 +215,7 @@ export enum ScrollDirection {
 	UP = "up",
 	DOWN = "down",
 	LEFT = "left",
-	RIGHT = "right"
+	RIGHT = "right",
 }
 
 /**
@@ -228,7 +228,7 @@ export enum BrowserEvent {
 	RESPONSE = "response",
 	NAVIGATION = "navigation",
 	LOAD = "load",
-	DOM_CONTENT_LOADED = "domcontentloaded"
+	DOM_CONTENT_LOADED = "domcontentloaded",
 }
 
 /**
@@ -498,7 +498,7 @@ export enum ConsoleLogType {
 	WARN = "warn",
 	ERROR = "error",
 	DEBUG = "debug",
-	TRACE = "trace"
+	TRACE = "trace",
 }
 
 /**
@@ -561,7 +561,7 @@ export interface ClipArea {
 export enum MouseButton {
 	LEFT = "left",
 	RIGHT = "right",
-	MIDDLE = "middle"
+	MIDDLE = "middle",
 }
 
 /**
@@ -571,7 +571,7 @@ export enum ModifierKey {
 	ALT = "Alt",
 	CONTROL = "Control",
 	META = "Meta",
-	SHIFT = "Shift"
+	SHIFT = "Shift",
 }
 
 /**
@@ -581,5 +581,5 @@ export enum WaitCondition {
 	LOAD = "load",
 	DOM_CONTENT_LOADED = "domcontentloaded",
 	NETWORK_IDLE_0 = "networkidle0",
-	NETWORK_IDLE_2 = "networkidle2"
+	NETWORK_IDLE_2 = "networkidle2",
 }
