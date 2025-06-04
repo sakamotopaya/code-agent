@@ -28,6 +28,15 @@ interface CliOptions {
 	batch?: string
 	interactive: boolean
 	generateConfig?: string
+	// Non-interactive mode options
+	stdin?: boolean
+	yes?: boolean
+	no?: boolean
+	timeout?: number
+	parallel?: boolean
+	continueOnError?: boolean
+	dryRun?: boolean
+	quiet?: boolean
 	// Browser options
 	headless: boolean
 	browserViewport?: string
@@ -107,6 +116,14 @@ program
 	)
 	.option("-b, --batch <task>", "Run in non-interactive mode with specified task")
 	.option("-i, --interactive", "Run in interactive mode (default)", true)
+	.option("--stdin", "Read commands from stdin (non-interactive mode)")
+	.option("--yes", "Assume yes for all prompts (non-interactive mode)")
+	.option("--no", "Assume no for all prompts (non-interactive mode)")
+	.option("--timeout <ms>", "Global timeout in milliseconds", validateTimeout)
+	.option("--parallel", "Execute commands in parallel (batch mode)")
+	.option("--continue-on-error", "Continue execution on command failure")
+	.option("--dry-run", "Show what would be executed without running commands")
+	.option("--quiet", "Suppress non-essential output")
 	.option("--generate-config <path>", "Generate default configuration file at specified path", validatePath)
 	.option("--headless", "Run browser in headless mode (default: true)", true)
 	.option("--no-headless", "Run browser in headed mode")
@@ -202,9 +219,48 @@ program
 			}
 
 			// Pass configuration to processors
-			if (options.batch) {
-				const batchProcessor = new BatchProcessor(options, configManager)
-				await batchProcessor.run(options.batch)
+			if (options.batch || options.stdin || !options.interactive) {
+				// Use NonInteractiveModeService for non-interactive operations
+				const { NonInteractiveModeService } = await import("./services/NonInteractiveModeService")
+				const nonInteractiveService = new NonInteractiveModeService({
+					batch: options.batch,
+					stdin: options.stdin,
+					yes: options.yes,
+					no: options.no,
+					timeout: options.timeout,
+					parallel: options.parallel,
+					continueOnError: options.continueOnError,
+					dryRun: options.dryRun,
+					quiet: options.quiet,
+					verbose: options.verbose,
+				})
+
+				try {
+					if (options.stdin) {
+						await nonInteractiveService.executeFromStdin()
+					} else if (options.batch) {
+						// Check if batch is a file path or a direct command
+						if (
+							options.batch.includes(".") ||
+							options.batch.startsWith("/") ||
+							options.batch.startsWith("./")
+						) {
+							await nonInteractiveService.executeFromFile(options.batch)
+						} else {
+							// Treat as direct command - use existing BatchProcessor
+							const batchProcessor = new BatchProcessor(options, configManager)
+							await batchProcessor.run(options.batch)
+						}
+					}
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error)
+					if (options.color) {
+						console.error(chalk.red("❌ Non-interactive execution failed:"), message)
+					} else {
+						console.error("Non-interactive execution failed:", message)
+					}
+					process.exit(1)
+				}
 			} else {
 				const repl = new CliRepl(options, configManager)
 				await repl.start()
@@ -346,6 +402,11 @@ program.on("--help", () => {
 	console.log("  $ roo-cli                                    # Start interactive mode")
 	console.log("  $ roo-cli --cwd /path/to/project            # Start in specific directory")
 	console.log('  $ roo-cli --batch "Create a hello function" # Run single task')
+	console.log("  $ roo-cli --batch commands.json             # Run batch file")
+	console.log("  $ roo-cli --stdin --yes                     # Read from stdin, auto-confirm")
+	console.log("  $ echo 'npm test' | roo-cli --stdin         # Pipe commands")
+	console.log("  $ roo-cli --batch script.yaml --parallel    # Run batch in parallel")
+	console.log("  $ roo-cli --batch tasks.txt --dry-run       # Preview batch execution")
 	console.log("  $ roo-cli --model gpt-4                     # Use specific model")
 	console.log("  $ roo-cli --mode debug                      # Start in debug mode")
 	console.log("  $ roo-cli --format json                     # Output as JSON")
@@ -369,6 +430,17 @@ program.on("--help", () => {
 	console.log("  --format markdown     Markdown documentation format")
 	console.log("  --output <file>       Write output to file (format auto-detected)")
 	console.log("  ROO_OUTPUT_FORMAT     Environment variable for default format")
+	console.log()
+	console.log("Non-Interactive Mode Options:")
+	console.log("  --batch <file|task>   Run batch file or single task")
+	console.log("  --stdin               Read commands from stdin")
+	console.log("  --yes                 Assume yes for all prompts")
+	console.log("  --no                  Assume no for all prompts")
+	console.log("  --timeout <ms>        Global timeout for operations")
+	console.log("  --parallel            Execute batch commands in parallel")
+	console.log("  --continue-on-error   Continue execution on command failure")
+	console.log("  --dry-run             Show what would be executed")
+	console.log("  --quiet               Suppress non-essential output")
 	console.log()
 	console.log("Browser Options:")
 	console.log("  --headless/--no-headless     Run browser in headless or headed mode")
