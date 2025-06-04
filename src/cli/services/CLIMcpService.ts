@@ -273,10 +273,10 @@ export class CLIMcpService implements ICLIMcpService {
 
 			return configFile.servers.map((server) => ({
 				...server,
-				timeout: server.timeout || this.defaults.timeout,
-				retryAttempts: server.retryAttempts || this.defaults.retryAttempts,
-				retryDelay: server.retryDelay || this.defaults.retryDelay,
-				healthCheckInterval: server.healthCheckInterval || this.defaults.healthCheckInterval,
+				timeout: server.timeout ?? this.defaults.timeout,
+				retryAttempts: server.retryAttempts ?? this.defaults.retryAttempts,
+				retryDelay: server.retryDelay ?? this.defaults.retryDelay,
+				healthCheckInterval: server.healthCheckInterval ?? this.defaults.healthCheckInterval,
 			}))
 		} catch (error) {
 			if (error.code === "ENOENT") {

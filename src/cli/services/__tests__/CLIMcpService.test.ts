@@ -112,6 +112,55 @@ describe("CLIMcpService", () => {
 			// Should try home directory config
 			expect(mockFs.readFile).toHaveBeenCalledWith(path.join(os.homedir(), ".roo", "mcp-config.json"), "utf-8")
 		})
+		it("should preserve zero values and not replace them with defaults", async () => {
+			const mockConfig = {
+				version: "1.0.0",
+				servers: [
+					{
+						id: "test-server-zero-values",
+						name: "Test Server with Zero Values",
+						type: "stdio" as const,
+						enabled: true,
+						command: "test-command",
+						timeout: 0, // Intentionally set to 0
+						retryAttempts: 0, // Intentionally set to 0
+						retryDelay: 0, // Intentionally set to 0
+						healthCheckInterval: 0, // Intentionally set to 0
+					},
+					{
+						id: "test-server-undefined-values",
+						name: "Test Server with Undefined Values",
+						type: "stdio" as const,
+						enabled: true,
+						command: "test-command",
+						// No timeout, retryAttempts, retryDelay, healthCheckInterval - should use defaults
+					},
+				],
+				defaults: DEFAULT_MCP_CONFIG,
+			}
+
+			mockFs.readFile.mockResolvedValue(JSON.stringify(mockConfig))
+
+			const configs = await service.loadServerConfigs("/test/config.json")
+
+			expect(configs).toHaveLength(2)
+
+			// First server should preserve zero values
+			const zeroValueServer = configs[0]
+			expect(zeroValueServer.id).toBe("test-server-zero-values")
+			expect(zeroValueServer.timeout).toBe(0)
+			expect(zeroValueServer.retryAttempts).toBe(0)
+			expect(zeroValueServer.retryDelay).toBe(0)
+			expect(zeroValueServer.healthCheckInterval).toBe(0)
+
+			// Second server should use defaults for undefined values
+			const undefinedValueServer = configs[1]
+			expect(undefinedValueServer.id).toBe("test-server-undefined-values")
+			expect(undefinedValueServer.timeout).toBe(DEFAULT_MCP_CONFIG.timeout)
+			expect(undefinedValueServer.retryAttempts).toBe(DEFAULT_MCP_CONFIG.retryAttempts)
+			expect(undefinedValueServer.retryDelay).toBe(DEFAULT_MCP_CONFIG.retryDelay)
+			expect(undefinedValueServer.healthCheckInterval).toBe(DEFAULT_MCP_CONFIG.healthCheckInterval)
+		})
 	})
 
 	describe("validateServerConfig", () => {
