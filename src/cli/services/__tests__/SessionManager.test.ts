@@ -29,6 +29,11 @@ describe("SessionManager", () => {
 		mockStorage.getSessionSize = jest.fn()
 	})
 
+	afterEach(() => {
+		// Clean up any timers or async operations
+		sessionManager.destroy()
+	})
+
 	describe("initialization", () => {
 		it("should initialize storage", async () => {
 			await sessionManager.initialize()
