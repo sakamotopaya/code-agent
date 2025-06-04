@@ -50,6 +50,7 @@ interface CliOptions {
 	mcpTimeout?: number
 	mcpRetries?: number
 	mcpAutoConnect?: boolean
+	noMcpAutoConnect?: boolean
 	mcpLogLevel?: string
 }
 
@@ -154,10 +155,20 @@ program
 	.option("--mcp-config <path>", "Path to MCP configuration file", validatePath)
 	.option("--mcp-server <id>", "MCP server IDs to connect to (can be repeated)", collectArray, [])
 	.option("--mcp-timeout <ms>", "Timeout for MCP operations in milliseconds", validateTimeout)
-	.option("--mcp-retries <count>", "Number of retry attempts for MCP operations", parseInt)
-	.option("--mcp-auto-connect", "Automatically connect to enabled MCP servers", true)
+	.option("--mcp-retries <count>", "Number of retry attempts for MCP operations", (value) => parseInt(value, 10))
+	.option("--mcp-auto-connect", "Automatically connect to enabled MCP servers")
+	.option("--no-mcp-auto-connect", "Do not automatically connect to enabled MCP servers")
 	.option("--mcp-log-level <level>", "MCP logging level (error, warn, info, debug)", validateMcpLogLevel)
 	.action(async (options: CliOptions) => {
+		// Handle MCP auto-connect logic: default to true, but allow explicit override
+		if (options.mcpAutoConnect === undefined && options.noMcpAutoConnect === undefined) {
+			options.mcpAutoConnect = true // Default behavior
+		} else if (options.noMcpAutoConnect) {
+			options.mcpAutoConnect = false
+		} else if (options.mcpAutoConnect) {
+			options.mcpAutoConnect = true
+		}
+
 		try {
 			// Handle config generation
 			if (options.generateConfig) {
