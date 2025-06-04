@@ -35,8 +35,57 @@ export class RecoveryManager implements IRecoveryManager {
 	}
 
 	async attemptRecovery(error: Error, context: ErrorContext, options: RecoveryOptions = {}): Promise<RecoveryResult> {
-		const { maxAttempts = 3, enableRollback = true, strategies = this.strategies } = options
+		const {
+			maxAttempts = 3,
+			enableRollback = true,
+			strategies = this.strategies,
+			timeout,
+			backoffMultiplier,
+		} = options
 
+		const recoveryPromise = this.executeRecoveryStrategies(
+			error,
+			context,
+			strategies,
+			maxAttempts,
+			enableRollback,
+			backoffMultiplier,
+		)
+
+		// Set up overall timeout if specified
+		if (timeout) {
+			const timeoutPromise = new Promise<RecoveryResult>((_, reject) => {
+				setTimeout(() => {
+					reject(new Error(`Recovery timeout after ${timeout}ms`))
+				}, timeout)
+			})
+
+			try {
+				return await Promise.race([recoveryPromise, timeoutPromise])
+			} catch (timeoutError) {
+				return {
+					success: false,
+					finalError: timeoutError instanceof Error ? timeoutError : new Error(String(timeoutError)),
+					suggestions: [
+						"Recovery operation timed out",
+						"Consider increasing timeout value",
+						"Check for hanging operations",
+					],
+				}
+			}
+		} else {
+			return await recoveryPromise
+		}
+	}
+
+	private async executeRecoveryStrategies(
+		error: Error,
+		context: ErrorContext,
+		strategies: RecoveryStrategy[],
+		maxAttempts: number,
+		enableRollback: boolean,
+		backoffMultiplier?: number,
+	): Promise<RecoveryResult> {
 		// Find applicable recovery strategies
 		const applicableStrategies = strategies.filter((strategy) => strategy.canRecover(error, context))
 
@@ -50,7 +99,14 @@ export class RecoveryManager implements IRecoveryManager {
 		// Try each strategy in order
 		for (const strategy of applicableStrategies) {
 			try {
-				const result = await strategy.recover(error, context)
+				// Pass backoff configuration to strategies that support it
+				const result = await this.executeStrategyWithOptions(
+					strategy,
+					error,
+					context,
+					maxAttempts,
+					backoffMultiplier,
+				)
 
 				if (result.success) {
 					return result
@@ -86,6 +142,30 @@ export class RecoveryManager implements IRecoveryManager {
 				"Check error logs for details",
 			],
 		}
+	}
+
+	private async executeStrategyWithOptions(
+		strategy: RecoveryStrategy,
+		error: Error,
+		context: ErrorContext,
+		maxAttempts: number,
+		backoffMultiplier?: number,
+	): Promise<RecoveryResult> {
+		// Check if strategy supports configurable options and if custom options are provided
+		if (
+			strategy.constructor.name === "NetworkRecoveryStrategy" &&
+			(maxAttempts !== 3 || backoffMultiplier !== undefined)
+		) {
+			// Only create configured strategy if error can be handled by NetworkRecoveryStrategy
+			if (strategy.canRecover(error, context)) {
+				const configurableStrategy = new NetworkRecoveryStrategy(maxAttempts, undefined, backoffMultiplier)
+				// NetworkRecoveryStrategy.canRecover already verified this is a compatible error
+				return await configurableStrategy.recover(error as any, context)
+			}
+		}
+
+		// Use strategy as-is for other strategies or default configuration
+		return await strategy.recover(error, context)
 	}
 
 	async rollbackOperation(operationId: string): Promise<void> {

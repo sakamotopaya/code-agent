@@ -25,7 +25,10 @@ export interface OperationState {
 	operation: string
 	timestamp: Date
 	context: ErrorContext
-	checkpoint?: any
+	/**
+	 * A checkpoint to save the state of the operation. Use runtime checks to validate its type before usage.
+	 */
+	checkpoint?: unknown
 	rollbackActions?: RollbackAction[]
 }
 
