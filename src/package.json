@@ -382,6 +382,7 @@
 		"cli-table3": "^0.6.5",
 		"clone-deep": "^4.0.1",
 		"commander": "^12.1.0",
+		"csv-stringify": "^6.5.2",
 		"default-shell": "^2.2.0",
 		"delay": "^6.0.0",
 		"diff": "^5.2.0",
