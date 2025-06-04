@@ -1,23 +1,31 @@
 import { SessionStorage } from "../SessionStorage"
-import { SessionStatus, SESSION_FORMAT_VERSION } from "../../types/session-types"
-import type { Session, SessionFile } from "../../types/session-types"
+import { SessionStatus, SESSION_FORMAT_VERSION, Session, SessionFile } from "../../types/session-types"
 import * as fs from "fs/promises"
 import * as path from "path"
 import * as os from "os"
 
 jest.mock("fs/promises")
-jest.mock("zlib")
+jest.mock("os")
+jest.mock("util", () => ({
+	promisify: (fn: any) => fn, // Return the original function since our mocks already return promises
+}))
+jest.mock("zlib", () => ({
+	gzip: jest.fn().mockImplementation((data: any) => Promise.resolve(Buffer.from(data))),
+	gunzip: jest.fn().mockImplementation((data: any) => Promise.resolve(Buffer.from(data.toString()))),
+}))
 
 const mockFs = fs as jest.Mocked<typeof fs>
 
-// Mock crypto
-const mockCreateHash = jest.fn().mockReturnValue({
-	update: jest.fn().mockReturnThis(),
-	digest: jest.fn().mockReturnValue("mock-checksum"),
-})
+// Mock os module
+const mockOs = os as jest.Mocked<typeof os>
+jest.mocked(mockOs.homedir).mockReturnValue("/home/test")
 
+// Mock crypto
 jest.mock("crypto", () => ({
-	createHash: mockCreateHash,
+	createHash: jest.fn().mockReturnValue({
+		update: jest.fn().mockReturnThis(),
+		digest: jest.fn().mockReturnValue("mock-checksum"),
+	}),
 }))
 
 describe("SessionStorage", () => {
@@ -27,6 +35,25 @@ describe("SessionStorage", () => {
 
 	beforeEach(() => {
 		tempDir = "/tmp/test-sessions"
+
+		// Reset all mocks before each test
+		jest.clearAllMocks()
+
+		// Setup default mock behaviors
+		mockFs.mkdir.mockResolvedValue(undefined)
+		mockFs.access.mockResolvedValue()
+		mockFs.writeFile.mockResolvedValue()
+		mockFs.readFile.mockResolvedValue(
+			JSON.stringify({
+				version: SESSION_FORMAT_VERSION,
+				created: new Date().toISOString(),
+				sessions: {},
+			}),
+		)
+		mockFs.readdir.mockResolvedValue([])
+		mockFs.stat.mockResolvedValue({ size: 1024 } as any)
+		mockFs.unlink.mockResolvedValue()
+
 		storage = new SessionStorage({
 			sessionDirectory: tempDir,
 			compressionLevel: 0, // Disable compression for easier testing
@@ -87,8 +114,6 @@ describe("SessionStorage", () => {
 				maxSessionSize: 100,
 			},
 		}
-
-		jest.clearAllMocks()
 	})
 
 	describe("initialization", () => {
@@ -117,10 +142,6 @@ describe("SessionStorage", () => {
 	describe("session operations", () => {
 		describe("saveSession", () => {
 			it("should save session to file", async () => {
-				mockFs.mkdir.mockResolvedValue(undefined)
-				mockFs.writeFile.mockResolvedValue()
-				mockFs.readFile.mockResolvedValue("{}") // For metadata update
-
 				await storage.saveSession(mockSession)
 
 				const expectedPath = path.join(tempDir, `session-${mockSession.id}.json`)
@@ -128,10 +149,6 @@ describe("SessionStorage", () => {
 			})
 
 			it("should sanitize sensitive data before saving", async () => {
-				mockFs.mkdir.mockResolvedValue(undefined)
-				mockFs.writeFile.mockResolvedValue()
-				mockFs.readFile.mockResolvedValue("{}")
-
 				const sessionWithSensitiveData = {
 					...mockSession,
 					config: {
@@ -159,8 +176,7 @@ describe("SessionStorage", () => {
 					compressed: false,
 				}
 
-				mockFs.readFile.mockResolvedValue(JSON.stringify(sessionFile))
-				mockFs.writeFile.mockResolvedValue() // For updating last accessed time
+				mockFs.readFile.mockResolvedValueOnce(JSON.stringify(sessionFile))
 
 				// Mock checksum validation
 				const crypto = require("crypto")
@@ -169,7 +185,7 @@ describe("SessionStorage", () => {
 					digest: jest.fn().mockReturnValue("test-checksum"),
 				})
 
-				const result = await storage.loadSession(mockSession.id)
+				const result = await storage.loadSession(mockSession.id, false) // Disable last accessed update
 
 				expect(result.id).toBe(mockSession.id)
 				expect(result.name).toBe(mockSession.name)
@@ -184,7 +200,7 @@ describe("SessionStorage", () => {
 					compressed: false,
 				}
 
-				mockFs.readFile.mockResolvedValue(JSON.stringify(sessionFile))
+				mockFs.readFile.mockResolvedValueOnce(JSON.stringify(sessionFile))
 
 				// Mock checksum validation to fail
 				const crypto = require("crypto")
@@ -193,16 +209,12 @@ describe("SessionStorage", () => {
 					digest: jest.fn().mockReturnValue("different-checksum"),
 				})
 
-				await expect(storage.loadSession(mockSession.id)).rejects.toThrow("checksum validation failed")
+				await expect(storage.loadSession(mockSession.id, false)).rejects.toThrow("checksum validation failed")
 			})
 		})
 
 		describe("deleteSession", () => {
 			it("should delete session file", async () => {
-				mockFs.unlink.mockResolvedValue()
-				mockFs.readFile.mockResolvedValue("{}")
-				mockFs.writeFile.mockResolvedValue()
-
 				await storage.deleteSession(mockSession.id)
 
 				const expectedPath = path.join(tempDir, `session-${mockSession.id}.json`)
@@ -213,8 +225,6 @@ describe("SessionStorage", () => {
 				const error = new Error("File not found") as NodeJS.ErrnoException
 				error.code = "ENOENT"
 				mockFs.unlink.mockRejectedValue(error)
-				mockFs.readFile.mockResolvedValue("{}")
-				mockFs.writeFile.mockResolvedValue()
 
 				await expect(storage.deleteSession(mockSession.id)).resolves.not.toThrow()
 			})
@@ -222,7 +232,6 @@ describe("SessionStorage", () => {
 
 		describe("listSessions", () => {
 			it("should list all session files", async () => {
-				mockFs.mkdir.mockResolvedValue(undefined)
 				mockFs.readdir.mockResolvedValue([
 					"session-id1.json",
 					"session-id2.json",
@@ -230,23 +239,22 @@ describe("SessionStorage", () => {
 					"other-file.txt",
 				] as any)
 
-				// Mock loading session info
-				mockFs.stat.mockResolvedValue({ size: 1024 } as any)
-				const sessionFile: SessionFile = {
+				const sessionFile1: SessionFile = {
 					version: SESSION_FORMAT_VERSION,
-					session: mockSession,
+					session: { ...mockSession, id: "id1" },
 					checksum: "test-checksum",
 					compressed: false,
 				}
-				mockFs.readFile.mockResolvedValue(JSON.stringify(sessionFile))
-				mockFs.writeFile.mockResolvedValue()
+				const sessionFile2: SessionFile = {
+					version: SESSION_FORMAT_VERSION,
+					session: { ...mockSession, id: "id2" },
+					checksum: "test-checksum",
+					compressed: false,
+				}
 
-				// Mock checksum validation
-				const crypto = require("crypto")
-				crypto.createHash = jest.fn().mockReturnValue({
-					update: jest.fn(),
-					digest: jest.fn().mockReturnValue("test-checksum"),
-				})
+				mockFs.readFile
+					.mockResolvedValueOnce(JSON.stringify(sessionFile1)) // First session file
+					.mockResolvedValueOnce(JSON.stringify(sessionFile2)) // Second session file
 
 				const sessions = await storage.listSessions()
 
@@ -256,12 +264,11 @@ describe("SessionStorage", () => {
 			})
 
 			it("should filter sessions by status", async () => {
-				mockFs.mkdir.mockResolvedValue(undefined)
 				mockFs.readdir.mockResolvedValue(["session-id1.json"] as any)
-				mockFs.stat.mockResolvedValue({ size: 1024 } as any)
 
 				const activeSession = {
 					...mockSession,
+					id: "id1",
 					metadata: { ...mockSession.metadata, status: SessionStatus.ACTIVE },
 				}
 				const sessionFile: SessionFile = {
@@ -270,14 +277,7 @@ describe("SessionStorage", () => {
 					checksum: "test-checksum",
 					compressed: false,
 				}
-				mockFs.readFile.mockResolvedValue(JSON.stringify(sessionFile))
-				mockFs.writeFile.mockResolvedValue()
-
-				const crypto = require("crypto")
-				crypto.createHash = jest.fn().mockReturnValue({
-					update: jest.fn(),
-					digest: jest.fn().mockReturnValue("test-checksum"),
-				})
+				mockFs.readFile.mockResolvedValueOnce(JSON.stringify(sessionFile))
 
 				const sessions = await storage.listSessions({
 					status: SessionStatus.ACTIVE,
@@ -374,6 +374,121 @@ describe("SessionStorage", () => {
 			const isValid = storage.validateChecksum(sessionFile)
 
 			expect(isValid).toBe(false)
+		})
+
+		describe("sanitizeSession", () => {
+			it("should preserve Date objects when sanitizing sessions", async () => {
+				// Create a session with Date objects
+				const testDate = new Date("2024-01-01T12:00:00Z")
+				const sessionWithDates: Session = {
+					...mockSession,
+					metadata: {
+						...mockSession.metadata,
+						createdAt: testDate,
+						updatedAt: testDate,
+						lastAccessedAt: testDate,
+					},
+					history: {
+						...mockSession.history,
+						messages: [
+							{
+								id: "msg-1",
+								timestamp: testDate,
+								role: "user",
+								content: "Test message",
+							},
+						],
+					},
+					tools: [
+						{
+							toolName: "test-tool",
+							configuration: {},
+							cache: { someData: "test" },
+							lastUsed: testDate,
+							usageCount: 1,
+							results: [
+								{
+									timestamp: testDate,
+									input: "test",
+									output: "result",
+									success: true,
+								},
+							],
+						},
+					],
+					files: {
+						...mockSession.files,
+						lastScanTime: testDate,
+					},
+				}
+
+				// Save the session
+				await storage.saveSession(sessionWithDates)
+
+				// Find the session file write call (should contain the SessionFile structure)
+				const sessionFileCall = mockFs.writeFile.mock.calls.find((call) => {
+					try {
+						const data = JSON.parse(call[1] as string)
+						return data.version && data.session && data.checksum
+					} catch {
+						return false
+					}
+				})
+
+				expect(sessionFileCall).toBeDefined()
+				const savedData = JSON.parse(sessionFileCall![1] as string)
+				const sanitizedSession = savedData.session
+
+				// Check that Date objects are preserved as Date objects, not strings
+				expect(sanitizedSession.metadata.createdAt).toEqual(testDate.toISOString())
+				expect(sanitizedSession.metadata.updatedAt).toEqual(testDate.toISOString())
+				expect(sanitizedSession.metadata.lastAccessedAt).toEqual(testDate.toISOString())
+				expect(sanitizedSession.history.messages[0].timestamp).toEqual(testDate.toISOString())
+				expect(sanitizedSession.tools[0].lastUsed).toEqual(testDate.toISOString())
+				expect(sanitizedSession.tools[0].results[0].timestamp).toEqual(testDate.toISOString())
+				expect(sanitizedSession.files.lastScanTime).toEqual(testDate.toISOString())
+
+				// Verify cache was cleared
+				expect(sanitizedSession.tools[0].cache).toEqual({})
+			})
+
+			it("should remove sensitive configuration data during sanitization", async () => {
+				// Create a session with sensitive config data
+				const sessionWithSensitiveData: Session = {
+					...mockSession,
+					config: {
+						...mockSession.config,
+						apiKey: "secret-api-key",
+						encryptionKey: "secret-encryption-key",
+						password: "secret-password",
+						token: "secret-token",
+						secret: "secret-value",
+					} as any,
+				}
+
+				// Save the session
+				await storage.saveSession(sessionWithSensitiveData)
+
+				// Find the session file write call (should contain the SessionFile structure)
+				const sessionFileCall = mockFs.writeFile.mock.calls.find((call) => {
+					try {
+						const data = JSON.parse(call[1] as string)
+						return data.version && data.session && data.checksum
+					} catch {
+						return false
+					}
+				})
+
+				expect(sessionFileCall).toBeDefined()
+				const savedData = JSON.parse(sessionFileCall![1] as string)
+				const sanitizedSession = savedData.session
+
+				expect(sanitizedSession.config.apiKey).toBeUndefined()
+				expect(sanitizedSession.config.encryptionKey).toBeUndefined()
+				expect(sanitizedSession.config.password).toBeUndefined()
+				expect(sanitizedSession.config.token).toBeUndefined()
+				expect(sanitizedSession.config.secret).toBeUndefined()
+			})
 		})
 	})
 })
