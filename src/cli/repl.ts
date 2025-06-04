@@ -5,6 +5,8 @@ import { Task } from "../core/task/Task"
 import type { ProviderSettings, RooCodeSettings } from "@roo-code/types"
 import { CliConfigManager } from "./config/CliConfigManager"
 import { CLIUIService } from "./services/CLIUIService"
+import { SessionManager } from "./services/SessionManager"
+import type { Session } from "./types/session-types"
 
 interface ReplOptions extends CliAdapterOptions {
 	cwd: string
@@ -29,10 +31,16 @@ export class CliRepl {
 	private configManager?: CliConfigManager
 	private fullConfiguration?: RooCodeSettings
 	private uiService: CLIUIService
+	private sessionManager: SessionManager
+	private currentSession: Session | null = null
 
 	constructor(options: ReplOptions, configManager?: CliConfigManager) {
 		this.options = options
 		this.configManager = configManager
+
+		// Initialize session management
+		this.sessionManager = new SessionManager()
+		this.currentSession = null
 
 		// Get color scheme from options
 		let colorScheme
@@ -55,6 +63,12 @@ export class CliRepl {
 		try {
 			// Load configuration using the config manager
 			await this.loadConfiguration()
+
+			// Initialize session management
+			await this.sessionManager.initialize()
+
+			// Try to create or resume a session
+			await this.initializeSession()
 
 			this.setupEventHandlers()
 			this.showWelcome()
@@ -184,6 +198,10 @@ export class CliRepl {
 				await this.handleConfigCommand(args)
 				return true
 
+			case "session":
+				await this.handleSessionCommand(args)
+				return true
+
 			default:
 				return false
 		}
@@ -196,6 +214,11 @@ export class CliRepl {
 		}
 
 		try {
+			// Record user message in session
+			if (this.currentSession) {
+				await this.sessionManager.addMessage(userInput, "user")
+			}
+
 			const adapters = createCliAdapters({
 				workspaceRoot: this.options.cwd,
 				isInteractive: true,
@@ -215,22 +238,49 @@ export class CliRepl {
 			})
 
 			// Set up task event handlers
-			this.currentTask.on("taskCompleted", () => {
+			this.currentTask.on("taskCompleted", async () => {
 				console.log(chalk.green("✅ Task completed!"))
+
+				// Record task completion in session
+				if (this.currentSession) {
+					await this.sessionManager.addMessage("Task completed successfully", "system")
+				}
+
 				this.currentTask = null
 			})
 
-			this.currentTask.on("taskAborted", () => {
+			this.currentTask.on("taskAborted", async () => {
 				console.log(chalk.yellow("⚠️ Task aborted"))
+
+				// Record task abortion in session
+				if (this.currentSession) {
+					await this.sessionManager.addMessage("Task was aborted", "system")
+				}
+
 				this.currentTask = null
 			})
 
-			this.currentTask.on("taskToolFailed", (taskId: string, tool: string, error: string) => {
+			this.currentTask.on("taskToolFailed", async (taskId: string, tool: string, error: string) => {
 				console.log(chalk.red(`❌ Tool ${tool} failed: ${error}`))
+
+				// Record tool failure in session
+				if (this.currentSession) {
+					await this.sessionManager.addMessage(`Tool ${tool} failed: ${error}`, "system", {
+						tool,
+						error,
+						taskId,
+					})
+				}
 			})
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			console.error(chalk.red("Task execution failed:"), message)
+
+			// Record execution failure in session
+			if (this.currentSession) {
+				await this.sessionManager.addMessage(`Task execution failed: ${message}`, "system", { error: message })
+			}
+
 			this.currentTask = null
 		}
 	}
@@ -481,6 +531,155 @@ export class CliRepl {
 		}
 		return this.currentTask ? chalk.yellow("roo (busy)> ") : chalk.cyan("roo> ")
 	}
+	private async initializeSession(): Promise<void> {
+		try {
+			// Create a new session for this REPL instance
+			const sessionName = `CLI Session ${new Date().toISOString().split("T")[0]}`
+			this.currentSession = await this.sessionManager.createSession(sessionName, "Interactive CLI session")
+
+			if (this.options.verbose) {
+				console.log(chalk.gray(`Session created: ${this.currentSession.name} (${this.currentSession.id})`))
+			}
+		} catch (error) {
+			console.warn(
+				chalk.yellow("Warning: Could not initialize session:"),
+				error instanceof Error ? error.message : String(error),
+			)
+		}
+	}
+
+	private async handleSessionCommand(args: string[]): Promise<void> {
+		const [subcommand, ...subArgs] = args
+
+		switch (subcommand) {
+			case "save":
+				await this.saveCurrentSession(subArgs[0])
+				break
+
+			case "list":
+				await this.listSessions()
+				break
+
+			case "load":
+				if (subArgs[0]) {
+					await this.loadSession(subArgs[0])
+				} else {
+					console.log(chalk.red("Session ID required"))
+				}
+				break
+
+			case "info":
+				await this.showCurrentSessionInfo()
+				break
+
+			case "checkpoint":
+				if (subArgs[0]) {
+					await this.createCheckpoint(subArgs.join(" "))
+				} else {
+					console.log(chalk.red("Checkpoint description required"))
+				}
+				break
+
+			case undefined:
+			case "show":
+				await this.showCurrentSessionInfo()
+				break
+
+			default:
+				console.log(chalk.yellow(`Unknown session command: ${subcommand}`))
+				console.log(
+					chalk.gray("Available commands: save [name], list, load <id>, info, checkpoint <description>"),
+				)
+		}
+	}
+
+	private async saveCurrentSession(name?: string): Promise<void> {
+		if (!this.currentSession) {
+			console.log(chalk.yellow("No active session to save"))
+			return
+		}
+
+		try {
+			if (name) {
+				this.currentSession.name = name
+			}
+
+			await this.sessionManager.saveSession(this.currentSession.id)
+			console.log(chalk.green(`✓ Session saved: ${this.currentSession.name}`))
+		} catch (error) {
+			console.error(chalk.red("Failed to save session:"), error instanceof Error ? error.message : String(error))
+		}
+	}
+
+	private async listSessions(): Promise<void> {
+		try {
+			const sessions = await this.sessionManager.listSessions({ limit: 10 })
+
+			if (sessions.length === 0) {
+				console.log(chalk.gray("No sessions found"))
+				return
+			}
+
+			console.log(chalk.cyan.bold("Recent Sessions:"))
+			for (const session of sessions) {
+				const isActive = this.currentSession?.id === session.id
+				const marker = isActive ? chalk.green("●") : chalk.gray("○")
+				const name = isActive ? chalk.green(session.name) : session.name
+				console.log(`  ${marker} ${name} (${session.id.substring(0, 8)}) - ${session.messageCount} messages`)
+			}
+		} catch (error) {
+			console.error(chalk.red("Failed to list sessions:"), error instanceof Error ? error.message : String(error))
+		}
+	}
+
+	private async loadSession(sessionId: string): Promise<void> {
+		try {
+			this.currentSession = await this.sessionManager.loadSession(sessionId)
+			console.log(chalk.green(`✓ Session loaded: ${this.currentSession.name}`))
+
+			// Update the prompt to reflect the loaded session
+			this.rl.setPrompt(this.getPrompt())
+		} catch (error) {
+			console.error(chalk.red("Failed to load session:"), error instanceof Error ? error.message : String(error))
+		}
+	}
+
+	private async showCurrentSessionInfo(): Promise<void> {
+		if (!this.currentSession) {
+			console.log(chalk.gray("No active session"))
+			return
+		}
+
+		console.log(chalk.cyan.bold("Current Session:"))
+		console.log(`  Name: ${this.currentSession.name}`)
+		console.log(`  ID: ${this.currentSession.id}`)
+		console.log(`  Created: ${this.currentSession.metadata.createdAt.toLocaleString()}`)
+		console.log(`  Updated: ${this.currentSession.metadata.updatedAt.toLocaleString()}`)
+		console.log(`  Messages: ${this.currentSession.history.messages.length}`)
+		console.log(`  Working Directory: ${this.currentSession.state.workingDirectory}`)
+		console.log(`  Status: ${this.currentSession.metadata.status}`)
+
+		if (this.currentSession.metadata.tags.length > 0) {
+			console.log(`  Tags: ${this.currentSession.metadata.tags.join(", ")}`)
+		}
+	}
+
+	private async createCheckpoint(description: string): Promise<void> {
+		if (!this.currentSession) {
+			console.log(chalk.yellow("No active session for checkpoint"))
+			return
+		}
+
+		try {
+			await this.sessionManager.createCheckpoint(description)
+			console.log(chalk.green(`✓ Checkpoint created: ${description}`))
+		} catch (error) {
+			console.error(
+				chalk.red("Failed to create checkpoint:"),
+				error instanceof Error ? error.message : String(error),
+			)
+		}
+	}
 
 	private completer(line: string): [string[], string] {
 		const completions = [
@@ -488,6 +687,7 @@ export class CliRepl {
 			"clear",
 			"status",
 			"config",
+			"session",
 			"abort",
 			"exit",
 			"quit",
