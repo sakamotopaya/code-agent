@@ -32,11 +32,11 @@ export const cliEnvironmentConfigSchema = z.object({
 		.optional(),
 	ROO_MAX_REQUESTS: z
 		.string()
-		.transform((val) => parseInt(val))
+		.transform((val) => parseInt(val, 10))
 		.optional(),
 	ROO_REQUEST_DELAY: z
 		.string()
-		.transform((val) => parseInt(val))
+		.transform((val) => parseInt(val, 10))
 		.optional(),
 
 	// File paths

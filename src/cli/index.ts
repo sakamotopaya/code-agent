@@ -3,6 +3,7 @@ import { CliRepl } from "./repl"
 import { BatchProcessor } from "./commands/batch"
 import { showHelp } from "./commands/help"
 import { SessionCommands } from "./commands/session-commands"
+import { registerMcpCommands } from "./commands/mcp-commands"
 import { showBanner } from "./utils/banner"
 import { validateCliAdapterOptions } from "../core/adapters/cli"
 import { CliConfigManager } from "./config/CliConfigManager"
@@ -43,6 +44,14 @@ interface CliOptions {
 	browserTimeout?: number
 	screenshotOutput?: string
 	userAgent?: string
+	// MCP options
+	mcpConfig?: string
+	mcpServer?: string[]
+	mcpTimeout?: number
+	mcpRetries?: number
+	mcpAutoConnect?: boolean
+	noMcpAutoConnect?: boolean
+	mcpLogLevel?: string
 }
 
 // Validation functions
@@ -93,6 +102,18 @@ function validateColorScheme(value: string): string {
 	return value
 }
 
+function validateMcpLogLevel(value: string): string {
+	const validLevels = ["error", "warn", "info", "debug"]
+	if (!validLevels.includes(value)) {
+		throw new Error(`Invalid MCP log level: ${value}. Available levels: ${validLevels.join(", ")}`)
+	}
+	return value
+}
+
+function collectArray(value: string, previous: string[]): string[] {
+	return previous.concat([value])
+}
+
 program
 	.name("roo-cli")
 	.description("Roo Code Agent CLI - Interactive coding assistant for the command line")
@@ -131,7 +152,23 @@ program
 	.option("--browser-timeout <ms>", "Browser operation timeout in milliseconds", validateTimeout)
 	.option("--screenshot-output <dir>", "Directory for screenshot output", validatePath)
 	.option("--user-agent <agent>", "Custom user agent string for browser")
+	.option("--mcp-config <path>", "Path to MCP configuration file", validatePath)
+	.option("--mcp-server <id>", "MCP server IDs to connect to (can be repeated)", collectArray, [])
+	.option("--mcp-timeout <ms>", "Timeout for MCP operations in milliseconds", validateTimeout)
+	.option("--mcp-retries <count>", "Number of retry attempts for MCP operations", (value) => parseInt(value, 10))
+	.option("--mcp-auto-connect", "Automatically connect to enabled MCP servers")
+	.option("--no-mcp-auto-connect", "Do not automatically connect to enabled MCP servers")
+	.option("--mcp-log-level <level>", "MCP logging level (error, warn, info, debug)", validateMcpLogLevel)
 	.action(async (options: CliOptions) => {
+		// Handle MCP auto-connect logic: default to true, but allow explicit override
+		if (options.mcpAutoConnect === undefined && options.noMcpAutoConnect === undefined) {
+			options.mcpAutoConnect = true // Default behavior
+		} else if (options.noMcpAutoConnect) {
+			options.mcpAutoConnect = false
+		} else if (options.mcpAutoConnect) {
+			options.mcpAutoConnect = true
+		}
+
 		try {
 			// Handle config generation
 			if (options.generateConfig) {
@@ -388,6 +425,16 @@ try {
 	)
 }
 
+// Register MCP commands
+try {
+	registerMcpCommands(program)
+} catch (error) {
+	console.warn(
+		chalk.yellow("Warning: MCP functionality not available:"),
+		error instanceof Error ? error.message : String(error),
+	)
+}
+
 // Enhanced error handling for unknown commands
 program.on("command:*", function (operands) {
 	console.error(chalk.red(`❌ Unknown command: ${operands[0]}`))
@@ -421,6 +468,11 @@ program.on("--help", () => {
 	console.log("  $ roo-cli session save 'My Project'         # Save current session")
 	console.log("  $ roo-cli session load <session-id>         # Load a session")
 	console.log("  $ roo-cli session cleanup --max-age 30      # Cleanup old sessions")
+	console.log("  $ roo-cli mcp list                          # List MCP servers")
+	console.log("  $ roo-cli mcp connect github-server         # Connect to an MCP server")
+	console.log("  $ roo-cli mcp tools                         # List available MCP tools")
+	console.log("  $ roo-cli mcp execute github-server get_repo owner=user repo=project")
+	console.log("  $ roo-cli mcp config init                   # Initialize MCP configuration")
 	console.log()
 	console.log("Output Format Options:")
 	console.log("  --format json         Structured JSON output")
@@ -448,6 +500,14 @@ program.on("--help", () => {
 	console.log("  --browser-timeout <ms>       Set browser timeout in milliseconds")
 	console.log("  --screenshot-output <dir>    Directory for saving screenshots")
 	console.log("  --user-agent <agent>         Custom user agent string")
+	console.log()
+	console.log("MCP (Model Context Protocol) Options:")
+	console.log("  --mcp-config <path>          Path to MCP configuration file")
+	console.log("  --mcp-server <id>            MCP server IDs to connect to (repeatable)")
+	console.log("  --mcp-timeout <ms>           Timeout for MCP operations")
+	console.log("  --mcp-retries <count>        Number of retry attempts for MCP operations")
+	console.log("  --mcp-auto-connect           Automatically connect to enabled servers")
+	console.log("  --mcp-log-level <level>      MCP logging level (error, warn, info, debug)")
 	console.log()
 	console.log("For more information, visit: https://docs.roocode.com/cli")
 })
