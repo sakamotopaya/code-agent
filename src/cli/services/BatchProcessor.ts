@@ -95,12 +95,14 @@ export class BatchProcessor extends EventEmitter {
 	private async executeParallel(commands: BatchCommand[], settings: BatchSettings): Promise<CommandResult[]> {
 		const maxConcurrency = settings.maxConcurrency || 3
 		const results: CommandResult[] = []
-		const executing: Promise<CommandResult>[] = []
 		let commandIndex = 0
 
-		while (commandIndex < commands.length || executing.length > 0) {
-			// Start new commands up to concurrency limit
-			while (executing.length < maxConcurrency && commandIndex < commands.length) {
+		// Process commands in batches
+		while (commandIndex < commands.length) {
+			const currentBatch: Promise<CommandResult>[] = []
+
+			// Start up to maxConcurrency commands
+			while (currentBatch.length < maxConcurrency && commandIndex < commands.length) {
 				const command = commands[commandIndex]
 
 				if (!this.shouldExecute(command, results)) {
@@ -124,50 +126,33 @@ export class BatchProcessor extends EventEmitter {
 						return errorResult
 					})
 
-				executing.push(promise)
+				currentBatch.push(promise)
 				commandIndex++
 			}
 
-			// Wait for at least one command to complete
-			if (executing.length > 0) {
-				const result = await Promise.race(executing)
-				results.push(result)
+			// Wait for all commands in this batch to complete
+			if (currentBatch.length > 0) {
+				const batchResults = await Promise.allSettled(currentBatch)
 
-				// Remove completed promise from executing array
-				const completedIndex = executing.findIndex(async (p) => {
-					try {
-						const resolved = await Promise.race([p, Promise.resolve(result)])
-						return resolved === result
-					} catch {
-						return false
+				for (const settledResult of batchResults) {
+					if (settledResult.status === "fulfilled") {
+						const result = settledResult.value
+						results.push(result)
+
+						// Update progress
+						const progress = (results.length / commands.length) * 100
+						this.emit("batchProgress", {
+							completed: results.length,
+							total: commands.length,
+							progress: progress,
+						})
+
+						// Check if we should stop on error
+						if (!result.success && !settings.continueOnError) {
+							return results
+						}
 					}
-				})
-
-				if (completedIndex !== -1) {
-					executing.splice(completedIndex, 1)
 				}
-
-				// Update progress
-				const progress = (results.length / commands.length) * 100
-				this.emit("batchProgress", {
-					completed: results.length,
-					total: commands.length,
-					progress: progress,
-				})
-
-				// Check if we should stop on error
-				if (!result.success && !settings.continueOnError) {
-					// Cancel remaining commands
-					break
-				}
-			}
-		}
-
-		// Wait for any remaining executing commands
-		const remainingResults = await Promise.allSettled(executing)
-		for (const settledResult of remainingResults) {
-			if (settledResult.status === "fulfilled") {
-				results.push(settledResult.value)
 			}
 		}
 
