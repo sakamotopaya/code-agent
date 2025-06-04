@@ -9,11 +9,13 @@ import { BaseRecoveryStrategy } from "./RecoveryStrategy"
 export class NetworkRecoveryStrategy extends BaseRecoveryStrategy {
 	private readonly maxAttempts: number = 3
 	private readonly baseDelay: number = 1000
+	private readonly backoffMultiplier: number = 2
 
-	constructor(maxAttempts?: number, baseDelay?: number) {
+	constructor(maxAttempts?: number, baseDelay?: number, backoffMultiplier?: number) {
 		super()
 		if (maxAttempts) this.maxAttempts = maxAttempts
 		if (baseDelay) this.baseDelay = baseDelay
+		if (backoffMultiplier) this.backoffMultiplier = backoffMultiplier
 	}
 
 	canRecover(error: Error, context: ErrorContext): boolean {
@@ -47,7 +49,7 @@ export class NetworkRecoveryStrategy extends BaseRecoveryStrategy {
 		// Exponential backoff retry for other network errors
 		for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
 			if (attempt > 1) {
-				const delay = this.calculateBackoffDelay(attempt, this.baseDelay)
+				const delay = this.calculateBackoffDelay(attempt, this.baseDelay, this.backoffMultiplier)
 				await this.delay(delay)
 				this.logRecoveryAttempt(error, attempt, context)
 			}

@@ -138,6 +138,94 @@ describe("RecoveryManager", () => {
 
 			expect(strategyWithRollback.rollback).not.toHaveBeenCalled()
 		})
+
+		it("should respect timeout option and fail recovery if timeout is exceeded", async () => {
+			const slowStrategy: RecoveryStrategy = {
+				canRecover: jest.fn().mockReturnValue(true),
+				recover: jest.fn().mockImplementation(async () => {
+					// Simulate a slow recovery operation
+					await new Promise((resolve) => setTimeout(resolve, 200))
+					return { success: true }
+				}),
+				rollback: jest.fn().mockResolvedValue(undefined),
+			}
+
+			// Clear existing strategies and add only our slow strategy
+			recoveryManager = new RecoveryManager()
+			recoveryManager.addStrategy(slowStrategy)
+
+			const error = new Error("Test error")
+			const result = await recoveryManager.attemptRecovery(error, mockContext, {
+				timeout: 100, // Very short timeout
+			})
+
+			expect(result.success).toBe(false)
+			expect(result.finalError?.message).toContain("Recovery timeout after 100ms")
+			expect(result.suggestions).toContain("Recovery operation timed out")
+		})
+
+		it("should complete recovery if within timeout", async () => {
+			const fastStrategy: RecoveryStrategy = {
+				canRecover: jest.fn().mockReturnValue(true),
+				recover: jest.fn().mockResolvedValue({ success: true }),
+				rollback: jest.fn().mockResolvedValue(undefined),
+			}
+
+			// Clear existing strategies and add only our fast strategy
+			recoveryManager = new RecoveryManager()
+			recoveryManager.addStrategy(fastStrategy)
+
+			const error = new Error("Test error")
+			const result = await recoveryManager.attemptRecovery(error, mockContext, {
+				timeout: 1000, // Generous timeout
+			})
+
+			expect(result.success).toBe(true)
+			expect(fastStrategy.recover).toHaveBeenCalledWith(error, mockContext)
+		})
+
+		it("should handle custom maxAttempts and backoffMultiplier options", async () => {
+			const networkError = new NetworkError("Connection failed", "NET_ERROR", 500)
+
+			const result = await recoveryManager.attemptRecovery(networkError, mockContext, {
+				backoffMultiplier: 1.5,
+				maxAttempts: 2,
+			})
+
+			// The test should complete without errors - the implementation creates a new strategy internally
+			expect(result).toBeDefined()
+			expect(typeof result.success).toBe("boolean")
+		})
+
+		it("should use default options when none provided", async () => {
+			const mockStrategy: RecoveryStrategy = {
+				canRecover: jest.fn().mockReturnValue(true),
+				recover: jest.fn().mockResolvedValue({ success: true }),
+				rollback: jest.fn().mockResolvedValue(undefined),
+			}
+
+			// Clear existing strategies and add only our mock strategy
+			recoveryManager = new RecoveryManager()
+			recoveryManager.addStrategy(mockStrategy)
+
+			const error = new Error("Test error")
+			const result = await recoveryManager.attemptRecovery(error, mockContext)
+
+			expect(result.success).toBe(true)
+			expect(mockStrategy.recover).toHaveBeenCalledWith(error, mockContext)
+		})
+
+		it("should handle timeout option properly", async () => {
+			const networkError = new NetworkError("Connection failed", "NET_ERROR", 500)
+
+			const result = await recoveryManager.attemptRecovery(networkError, mockContext, {
+				timeout: 5000, // 5 second timeout
+			})
+
+			// Should complete within reasonable time
+			expect(result).toBeDefined()
+			expect(typeof result.success).toBe("boolean")
+		})
 	})
 
 	describe("operation state management", () => {

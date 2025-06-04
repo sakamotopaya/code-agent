@@ -20,8 +20,13 @@ export abstract class BaseRecoveryStrategy implements RecoveryStrategy {
 	/**
 	 * Calculate exponential backoff delay
 	 */
-	protected calculateBackoffDelay(attempt: number, baseDelay: number = 1000, maxDelay: number = 30000): number {
-		const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), maxDelay)
+	protected calculateBackoffDelay(
+		attempt: number,
+		baseDelay: number = 1000,
+		backoffMultiplier: number = 2,
+		maxDelay: number = 30000,
+	): number {
+		const delay = Math.min(baseDelay * Math.pow(backoffMultiplier, attempt - 1), maxDelay)
 		// Add jitter to prevent thundering herd
 		return delay + Math.random() * delay * 0.1
 	}
