@@ -2,6 +2,7 @@ import { Command } from "commander"
 import { CliRepl } from "./repl"
 import { BatchProcessor } from "./commands/batch"
 import { showHelp } from "./commands/help"
+import { SessionCommands } from "./commands/session-commands"
 import { showBanner } from "./utils/banner"
 import { validateCliAdapterOptions } from "../core/adapters/cli"
 import { CliConfigManager } from "./config/CliConfigManager"
@@ -320,6 +321,17 @@ program
 		}
 	})
 
+// Register session commands
+try {
+	const sessionCommands = new SessionCommands()
+	sessionCommands.registerCommands(program)
+} catch (error) {
+	console.warn(
+		chalk.yellow("Warning: Session management not available:"),
+		error instanceof Error ? error.message : String(error),
+	)
+}
+
 // Enhanced error handling for unknown commands
 program.on("command:*", function (operands) {
 	console.error(chalk.red(`❌ Unknown command: ${operands[0]}`))
@@ -344,6 +356,10 @@ program.on("--help", () => {
 	console.log("  $ roo-cli --screenshot-output ./screenshots # Set screenshot directory")
 	console.log("  $ roo-cli config --show                     # Show current configuration")
 	console.log("  $ roo-cli config --generate ~/.roo-cli/config.json")
+	console.log("  $ roo-cli session list                      # List all sessions")
+	console.log("  $ roo-cli session save 'My Project'         # Save current session")
+	console.log("  $ roo-cli session load <session-id>         # Load a session")
+	console.log("  $ roo-cli session cleanup --max-age 30      # Cleanup old sessions")
 	console.log()
 	console.log("Output Format Options:")
 	console.log("  --format json         Structured JSON output")
