@@ -42,10 +42,11 @@ export class SessionStorage implements ISessionStorage {
 	async saveSession(session: Session): Promise<void> {
 		await this.initialize()
 
+		const sanitizedSession = this.sanitizeSession(session)
 		const sessionFile: SessionFile = {
 			version: SESSION_FORMAT_VERSION,
-			session: this.sanitizeSession(session),
-			checksum: this.calculateChecksum(session),
+			session: sanitizedSession,
+			checksum: this.calculateChecksum(sanitizedSession),
 			compressed: this.config.compressionLevel > 0,
 		}
 
@@ -63,7 +64,7 @@ export class SessionStorage implements ISessionStorage {
 		await this.updateMetadata(session)
 	}
 
-	async loadSession(sessionId: string): Promise<Session> {
+	async loadSession(sessionId: string, updateLastAccessed: boolean = true): Promise<Session> {
 		const filePath = this.getSessionFilePath(sessionId)
 
 		try {
@@ -85,9 +86,11 @@ export class SessionStorage implements ISessionStorage {
 				throw new Error("Session file checksum validation failed")
 			}
 
-			// Update last accessed time
-			sessionFile.session.metadata.lastAccessedAt = new Date()
-			await this.saveSession(sessionFile.session)
+			// Update last accessed time if requested
+			if (updateLastAccessed) {
+				sessionFile.session.metadata.lastAccessedAt = new Date()
+				await this.saveSession(sessionFile.session)
+			}
 
 			return this.deserializeSession(sessionFile.session)
 		} catch (error) {
@@ -124,8 +127,42 @@ export class SessionStorage implements ISessionStorage {
 			for (const file of sessionFiles) {
 				try {
 					const sessionId = this.extractSessionIdFromFilename(file)
-					const sessionInfo = await this.getSessionInfo(sessionId)
-					if (sessionInfo && this.matchesFilter(sessionInfo, filter)) {
+					const filePath = path.join(this.sessionDir, file)
+
+					// Get file stats for size
+					const stats = await fs.stat(filePath)
+
+					// Read file content directly without full loadSession
+					const fileData = await fs.readFile(filePath)
+					let data: string
+
+					// Handle decompression if needed
+					try {
+						data = await gunzip(fileData).then((buf) => buf.toString())
+					} catch {
+						// If decompression fails, assume it's uncompressed
+						data = fileData.toString()
+					}
+
+					const sessionFile: SessionFile = JSON.parse(data)
+					const session = sessionFile.session
+
+					// Create SessionInfo without full deserialization
+					const sessionInfo: SessionInfo = {
+						id: session.id,
+						name: session.name,
+						description: session.description,
+						createdAt: new Date(session.metadata.createdAt),
+						updatedAt: new Date(session.metadata.updatedAt),
+						lastAccessedAt: new Date(session.metadata.lastAccessedAt),
+						tags: session.metadata.tags,
+						status: session.metadata.status,
+						size: stats.size,
+						messageCount: session.history.messages.length,
+						duration: session.metadata.duration,
+					}
+
+					if (this.matchesFilter(sessionInfo, filter)) {
 						sessions.push(sessionInfo)
 					}
 				} catch (error) {
@@ -209,13 +246,18 @@ export class SessionStorage implements ISessionStorage {
 	}
 
 	private sanitizeSession(session: Session): Session {
-		// Remove sensitive data before saving
-		const sanitized = JSON.parse(JSON.stringify(session))
+		// Use structuredClone to properly preserve Date objects and other types
+		const sanitized = structuredClone(session)
 
-		// Remove API keys and other sensitive information
-		if (sanitized.config) {
-			delete sanitized.config.apiKey
-			delete sanitized.config.encryptionKey
+		// Remove any potentially sensitive information from config if it exists
+		if (sanitized.config && typeof sanitized.config === "object") {
+			const configAny = sanitized.config as any
+			// Defensively remove common sensitive fields that might exist
+			delete configAny.apiKey
+			delete configAny.encryptionKey
+			delete configAny.password
+			delete configAny.token
+			delete configAny.secret
 		}
 
 		// Remove large cache data that can be regenerated
@@ -229,7 +271,7 @@ export class SessionStorage implements ISessionStorage {
 
 	private deserializeSession(session: Session): Session {
 		// Convert date strings back to Date objects
-		const deserialized = JSON.parse(JSON.stringify(session))
+		const deserialized = structuredClone(session)
 
 		deserialized.metadata.createdAt = new Date(deserialized.metadata.createdAt)
 		deserialized.metadata.updatedAt = new Date(deserialized.metadata.updatedAt)
@@ -272,19 +314,33 @@ export class SessionStorage implements ISessionStorage {
 		try {
 			const filePath = this.getSessionFilePath(sessionId)
 			const stats = await fs.stat(filePath)
-			const session = await this.loadSession(sessionId)
+
+			// Read file content directly without triggering loadSession side effects
+			const fileData = await fs.readFile(filePath)
+			let data: string
+
+			// Handle decompression if needed
+			try {
+				data = await gunzip(fileData).then((buf) => buf.toString())
+			} catch {
+				// If decompression fails, assume it's uncompressed
+				data = fileData.toString()
+			}
+
+			const sessionFile: SessionFile = JSON.parse(data)
+			const session = sessionFile.session
 
 			return {
 				id: session.id,
 				name: session.name,
 				description: session.description,
-				createdAt: session.metadata.createdAt,
-				updatedAt: session.metadata.updatedAt,
-				lastAccessedAt: session.metadata.lastAccessedAt,
+				createdAt: new Date(session.metadata.createdAt),
+				updatedAt: new Date(session.metadata.updatedAt),
+				lastAccessedAt: new Date(session.metadata.lastAccessedAt),
 				tags: session.metadata.tags,
 				status: session.metadata.status,
 				size: stats.size,
-				messageCount: session.history.messages.length,
+				messageCount: session.history?.messages?.length || 0,
 				duration: session.metadata.duration,
 			}
 		} catch {
@@ -331,6 +387,11 @@ export class SessionStorage implements ISessionStorage {
 			const metadataContent = await fs.readFile(metadataPath, "utf-8")
 			const metadata = JSON.parse(metadataContent)
 
+			// Ensure sessions object exists
+			if (!metadata.sessions) {
+				metadata.sessions = {}
+			}
+
 			metadata.sessions[session.id] = {
 				name: session.name,
 				updatedAt: session.metadata.updatedAt.toISOString(),
@@ -352,7 +413,10 @@ export class SessionStorage implements ISessionStorage {
 			const metadataContent = await fs.readFile(metadataPath, "utf-8")
 			const metadata = JSON.parse(metadataContent)
 
-			delete metadata.sessions[sessionId]
+			// Ensure sessions object exists before trying to delete from it
+			if (metadata.sessions) {
+				delete metadata.sessions[sessionId]
+			}
 
 			await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2))
 		} catch (error) {
