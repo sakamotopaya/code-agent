@@ -37,7 +37,7 @@ export function isOutputRedirected(): boolean {
  */
 export function getSuggestedFormat(): OutputFormat {
 	// Check environment variable first
-	const envFormat = process.env.ROO_OUTPUT_FORMAT
+	const envFormat = process.env.ROO_OUTPUT_FORMAT?.toLowerCase()
 	if (envFormat && isValidFormat(envFormat)) {
 		return envFormat as OutputFormat
 	}

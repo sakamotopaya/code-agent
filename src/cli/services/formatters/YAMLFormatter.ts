@@ -1,5 +1,5 @@
 import { IFormatter } from "../../types/formatter-types"
-import { FormattedOutput, ProgressData, TableData } from "../../types/output-types"
+import { FormattedOutput, ProgressData, TableData, OutputFormat } from "../../types/output-types"
 import * as yaml from "yaml"
 
 export class YAMLFormatter implements IFormatter {
@@ -29,7 +29,7 @@ export class YAMLFormatter implements IFormatter {
 			},
 			metadata: {
 				timestamp: new Date().toISOString(),
-				format: "yaml",
+				format: OutputFormat.YAML,
 			},
 		}
 
@@ -48,7 +48,7 @@ export class YAMLFormatter implements IFormatter {
 			},
 			metadata: {
 				timestamp: new Date().toISOString(),
-				format: "yaml",
+				format: OutputFormat.YAML,
 			},
 		}
 
@@ -69,7 +69,7 @@ export class YAMLFormatter implements IFormatter {
 			},
 			metadata: {
 				timestamp: new Date().toISOString(),
-				format: "yaml",
+				format: OutputFormat.YAML,
 			},
 		}
 

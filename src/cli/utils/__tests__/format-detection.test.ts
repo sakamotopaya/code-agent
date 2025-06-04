@@ -81,6 +81,17 @@ describe("format-detection", () => {
 			expect(getSuggestedFormat()).toBe(OutputFormat.JSON)
 		})
 
+		it("should handle uppercase environment variable format", () => {
+			process.env.ROO_OUTPUT_FORMAT = "JSON"
+			expect(getSuggestedFormat()).toBe(OutputFormat.JSON)
+
+			process.env.ROO_OUTPUT_FORMAT = "YAML"
+			expect(getSuggestedFormat()).toBe(OutputFormat.YAML)
+
+			process.env.ROO_OUTPUT_FORMAT = "CSV"
+			expect(getSuggestedFormat()).toBe(OutputFormat.CSV)
+		})
+
 		it("should ignore invalid environment variable format", () => {
 			process.env.ROO_OUTPUT_FORMAT = "invalid"
 			process.stdout.isTTY = true

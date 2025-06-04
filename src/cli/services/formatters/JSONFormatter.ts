@@ -1,5 +1,5 @@
 import { IFormatter } from "../../types/formatter-types"
-import { FormattedOutput, ProgressData, TableData } from "../../types/output-types"
+import { FormattedOutput, ProgressData, TableData, OutputFormat } from "../../types/output-types"
 
 export class JSONFormatter implements IFormatter {
 	format(data: FormattedOutput): string {
@@ -21,7 +21,7 @@ export class JSONFormatter implements IFormatter {
 			},
 			metadata: {
 				timestamp: new Date().toISOString(),
-				format: "json",
+				format: OutputFormat.JSON,
 			},
 		}
 
@@ -38,7 +38,7 @@ export class JSONFormatter implements IFormatter {
 			},
 			metadata: {
 				timestamp: new Date().toISOString(),
-				format: "json",
+				format: OutputFormat.JSON,
 			},
 		}
 
@@ -55,7 +55,7 @@ export class JSONFormatter implements IFormatter {
 			},
 			metadata: {
 				timestamp: new Date().toISOString(),
-				format: "json",
+				format: OutputFormat.JSON,
 			},
 		}
 

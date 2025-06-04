@@ -6,6 +6,7 @@ import { showBanner } from "./utils/banner"
 import { validateCliAdapterOptions } from "../core/adapters/cli"
 import { CliConfigManager } from "./config/CliConfigManager"
 import { validateBrowserViewport, validateTimeout } from "./utils/browser-config"
+import { isValidFormat, getAvailableFormatsWithDescriptions } from "./utils/format-detection"
 import chalk from "chalk"
 import * as fs from "fs"
 
@@ -55,11 +56,15 @@ function validateMode(value: string): string {
 }
 
 function validateFormat(value: string): string {
-	const validFormats = ["json", "plain", "yaml", "csv", "markdown"]
-	if (!validFormats.includes(value)) {
-		throw new Error(`Invalid format: ${value}. Valid formats are: ${validFormats.join(", ")}`)
+	// Normalize to lowercase for case-insensitive validation
+	const normalizedValue = value.toLowerCase()
+	if (!isValidFormat(normalizedValue)) {
+		const availableFormats = getAvailableFormatsWithDescriptions()
+			.map((f) => f.format)
+			.join(", ")
+		throw new Error(`Invalid format: ${value}. Valid formats are: ${availableFormats}`)
 	}
-	return value
+	return normalizedValue
 }
 
 function validatePath(value: string): string {

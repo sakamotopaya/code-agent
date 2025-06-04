@@ -5,6 +5,7 @@ import { PlainTextFormatter } from "./formatters/PlainTextFormatter"
 import { YAMLFormatter } from "./formatters/YAMLFormatter"
 import { CSVFormatter } from "./formatters/CSVFormatter"
 import { MarkdownFormatter } from "./formatters/MarkdownFormatter"
+import { detectFormatFromFilename, getSuggestedFormat } from "../utils/format-detection"
 
 export class OutputFormatterService implements IOutputFormatterService {
 	private formatters: Map<OutputFormat, IFormatter>
@@ -21,14 +22,8 @@ export class OutputFormatterService implements IOutputFormatterService {
 			[OutputFormat.MARKDOWN, new MarkdownFormatter()],
 		])
 
-		// Set default format from environment variable if available
-		const envFormat = process.env.ROO_OUTPUT_FORMAT
-		if (envFormat && this.validateFormat(envFormat)) {
-			this.defaultFormat = envFormat as OutputFormat
-		}
-
-		// Auto-detect format based on output redirection
-		this.autoDetectFormat()
+		// Use centralized format detection logic
+		this.defaultFormat = getSuggestedFormat()
 	}
 
 	format(data: any, format: OutputFormat = this.defaultFormat): string {
@@ -140,19 +135,15 @@ export class OutputFormatterService implements IOutputFormatterService {
 	 */
 	resolveFormat(explicitFormat?: string): OutputFormat {
 		// 1. Explicit format parameter
-		if (explicitFormat && this.validateFormat(explicitFormat)) {
-			return explicitFormat as OutputFormat
+		if (explicitFormat) {
+			const normalizedFormat = explicitFormat.toLowerCase()
+			if (this.validateFormat(normalizedFormat)) {
+				return normalizedFormat as OutputFormat
+			}
 		}
 
-		// 2. Environment variable
-		const envFormat = process.env.ROO_OUTPUT_FORMAT
-		if (envFormat && this.validateFormat(envFormat)) {
-			return envFormat as OutputFormat
-		}
-
-		// 3. Auto-detection (already done in constructor)
-		// 4. Default format
-		return this.defaultFormat
+		// 2. Use centralized format detection for environment variable and auto-detection
+		return getSuggestedFormat()
 	}
 
 	private createMetadata(format: OutputFormat): OutputMetadata {
@@ -221,39 +212,6 @@ export class OutputFormatterService implements IOutputFormatterService {
 		return {
 			code: "UNKNOWN_WARNING",
 			message: String(warning),
-		}
-	}
-
-	private autoDetectFormat(): void {
-		// Check if output is being redirected to a file
-		if (!process.stdout.isTTY) {
-			// Output is being redirected, try to detect format from filename
-			const outputFile = process.env.ROO_OUTPUT_FILE
-			if (outputFile) {
-				const extension = outputFile.split(".").pop()?.toLowerCase()
-				switch (extension) {
-					case "json":
-						this.defaultFormat = OutputFormat.JSON
-						break
-					case "yaml":
-					case "yml":
-						this.defaultFormat = OutputFormat.YAML
-						break
-					case "csv":
-						this.defaultFormat = OutputFormat.CSV
-						break
-					case "md":
-					case "markdown":
-						this.defaultFormat = OutputFormat.MARKDOWN
-						break
-					default:
-						// Keep current default
-						break
-				}
-			} else {
-				// Default to JSON for redirected output
-				this.defaultFormat = OutputFormat.JSON
-			}
 		}
 	}
 }
