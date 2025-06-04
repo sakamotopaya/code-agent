@@ -295,9 +295,9 @@ export class SessionManager extends EventEmitter implements ISessionManager {
 		this.activeSession.metadata.updatedAt = new Date()
 
 		// Trim history if it exceeds max length
-		if (this.activeSession.history.messages.length > this.config.maxHistoryLength) {
+		if (this.activeSession.history.messages.length > this.activeSession.config.maxHistoryLength) {
 			this.activeSession.history.messages = this.activeSession.history.messages.slice(
-				-this.config.maxHistoryLength,
+				-this.activeSession.config.maxHistoryLength,
 			)
 		}
 
