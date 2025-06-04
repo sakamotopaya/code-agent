@@ -18,7 +18,8 @@ interface CliOptions {
 	config?: string
 	model?: string
 	mode?: string
-	output?: "text" | "json"
+	format?: string
+	output?: string
 	verbose: boolean
 	color: boolean
 	colorScheme?: string
@@ -53,9 +54,10 @@ function validateMode(value: string): string {
 	return value
 }
 
-function validateOutput(value: string): "text" | "json" {
-	if (value !== "text" && value !== "json") {
-		throw new Error(`Invalid output format: ${value}. Valid formats are: text, json`)
+function validateFormat(value: string): string {
+	const validFormats = ["json", "plain", "yaml", "csv", "markdown"]
+	if (!validFormats.includes(value)) {
+		throw new Error(`Invalid format: ${value}. Valid formats are: ${validFormats.join(", ")}`)
 	}
 	return value
 }
@@ -88,7 +90,8 @@ program
 		"Agent mode (code, debug, architect, ask, test, design-engineer, release-engineer, translate, product-owner, orchestrator)",
 		validateMode,
 	)
-	.option("-o, --output <format>", "Output format (text, json)", validateOutput, "text")
+	.option("-f, --format <format>", "Output format (json, plain, yaml, csv, markdown)", validateFormat)
+	.option("-o, --output <file>", "Output file path")
 	.option("-v, --verbose", "Enable verbose logging", false)
 	.option("--no-color", "Disable colored output")
 	.option(
@@ -183,7 +186,12 @@ program
 				if (options.mode) {
 					console.log(chalk.gray(`  Mode Override: ${options.mode}`))
 				}
-				console.log(chalk.gray(`  Output Format: ${options.output}`))
+				if (options.format) {
+					console.log(chalk.gray(`  Output Format: ${options.format}`))
+				}
+				if (options.output) {
+					console.log(chalk.gray(`  Output File: ${options.output}`))
+				}
 				console.log()
 			}
 
@@ -226,7 +234,7 @@ program
 		if (options.show) {
 			try {
 				const config = await configManager.loadConfiguration()
-				if (program.opts().output === "json") {
+				if (program.opts().format === "json") {
 					console.log(JSON.stringify(config, null, 2))
 				} else {
 					console.log(chalk.cyan("Current Configuration:"))
@@ -285,7 +293,7 @@ program
 		const platform = process.platform
 		const arch = process.arch
 
-		if (options.json || program.opts().output === "json") {
+		if (options.json || program.opts().format === "json") {
 			console.log(
 				JSON.stringify(
 					{
@@ -323,11 +331,23 @@ program.on("--help", () => {
 	console.log('  $ roo-cli --batch "Create a hello function" # Run single task')
 	console.log("  $ roo-cli --model gpt-4                     # Use specific model")
 	console.log("  $ roo-cli --mode debug                      # Start in debug mode")
+	console.log("  $ roo-cli --format json                     # Output as JSON")
+	console.log("  $ roo-cli --format yaml --output result.yml # Save as YAML file")
+	console.log("  $ ROO_OUTPUT_FORMAT=json roo-cli            # Use environment variable")
 	console.log("  $ roo-cli --no-headless                     # Run browser in headed mode")
 	console.log("  $ roo-cli --browser-viewport 1280x720      # Set browser viewport")
 	console.log("  $ roo-cli --screenshot-output ./screenshots # Set screenshot directory")
 	console.log("  $ roo-cli config --show                     # Show current configuration")
 	console.log("  $ roo-cli config --generate ~/.roo-cli/config.json")
+	console.log()
+	console.log("Output Format Options:")
+	console.log("  --format json         Structured JSON output")
+	console.log("  --format plain        Human-readable plain text (default)")
+	console.log("  --format yaml         YAML configuration format")
+	console.log("  --format csv          Comma-separated values (tabular data)")
+	console.log("  --format markdown     Markdown documentation format")
+	console.log("  --output <file>       Write output to file (format auto-detected)")
+	console.log("  ROO_OUTPUT_FORMAT     Environment variable for default format")
 	console.log()
 	console.log("Browser Options:")
 	console.log("  --headless/--no-headless     Run browser in headless or headed mode")
