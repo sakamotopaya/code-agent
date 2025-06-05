@@ -377,8 +377,10 @@ program
 program
 	.command("help")
 	.description("Show detailed help information")
-	.action(() => {
-		showHelp()
+	.argument("[topic]", "Help topic (command, config, tools, search)")
+	.argument("[subtopic]", "Subtopic or search query")
+	.action((topic, subtopic) => {
+		showHelp(topic, subtopic)
 	})
 
 // Add version command with more details
