@@ -51,7 +51,7 @@ export class TestHelpers {
 				reject(new Error(`Command timed out after ${timeout}ms`))
 			}, timeout)
 
-			const child = spawn("node", ["../dist/cli/index.js", ...args], {
+			const child = spawn("node", [path.resolve(__dirname, "../../index.js"), ...args], {
 				stdio: "pipe",
 				cwd,
 				env: { ...process.env, ...env },
