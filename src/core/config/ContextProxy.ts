@@ -65,6 +65,50 @@ export class ContextProxy {
 		this._isInitialized = false
 	}
 
+	/**
+	 * Helper method to get values from either VSCode context or platform services
+	 */
+	private getFromStorage<T>(key: string, storageType: "globalState" | "secrets" = "globalState"): T | undefined {
+		if (isVsCodeContext() && this.originalContext) {
+			if (storageType === "secrets") {
+				return this.originalContext.secrets.get(key)
+			}
+			return this.originalContext.globalState.get(key)
+		} else if (this.platformServices) {
+			if (storageType === "secrets") {
+				// In CLI mode, secrets are stored as prefixed config keys
+				return this.platformServices.configuration.get(`secret:${key}`) as T
+			}
+			return this.platformServices.configuration.get(key) as T
+		}
+		return undefined
+	}
+
+	/**
+	 * Helper method to set values to either VSCode context or platform services
+	 */
+	private async setToStorage<T>(
+		key: string,
+		value: T,
+		storageType: "globalState" | "secrets" = "globalState",
+	): Promise<void> {
+		if (isVsCodeContext() && this.originalContext) {
+			if (storageType === "secrets") {
+				return value === undefined
+					? this.originalContext.secrets.delete(key)
+					: this.originalContext.secrets.store(key, value)
+			}
+			return this.originalContext.globalState.update(key, value)
+		} else if (this.platformServices) {
+			if (storageType === "secrets") {
+				// In CLI mode, store secrets as regular config (not ideal but functional)
+				// TODO: Implement proper secret storage for CLI
+				return this.platformServices.configuration.set(`secret:${key}`, value)
+			}
+			return this.platformServices.configuration.set(key, value)
+		}
+	}
+
 	public get isInitialized() {
 		return this._isInitialized
 	}
@@ -72,8 +116,7 @@ export class ContextProxy {
 	public async initialize() {
 		for (const key of GLOBAL_STATE_KEYS) {
 			try {
-				// Revert to original assignment
-				this.stateCache[key] = this.originalContext.globalState.get(key)
+				this.stateCache[key] = this.getFromStorage(key)
 			} catch (error) {
 				logger.error(`Error loading global ${key}: ${error instanceof Error ? error.message : String(error)}`)
 			}
@@ -81,7 +124,7 @@ export class ContextProxy {
 
 		const promises = SECRET_STATE_KEYS.map(async (key) => {
 			try {
-				this.secretCache[key] = await this.originalContext.secrets.get(key)
+				this.secretCache[key] = await this.getFromStorage(key, "secrets")
 			} catch (error) {
 				logger.error(`Error loading secret ${key}: ${error instanceof Error ? error.message : String(error)}`)
 			}
@@ -125,14 +168,7 @@ export class ContextProxy {
 	getGlobalState<K extends GlobalStateKey>(key: K, defaultValue: GlobalState[K]): GlobalState[K]
 	getGlobalState<K extends GlobalStateKey>(key: K, defaultValue?: GlobalState[K]): GlobalState[K] {
 		if (isPassThroughStateKey(key)) {
-			let value: GlobalState[K] | undefined
-
-			if (isVsCodeContext() && this.originalContext) {
-				value = this.originalContext.globalState.get(key)
-			} else if (this.platformServices) {
-				// CLI mode - use platform services configuration
-				value = this.platformServices.configuration.get(key) as GlobalState[K]
-			}
+			const value = this.getFromStorage<GlobalState[K]>(key)
 			return value === undefined || value === null ? defaultValue : value
 		}
 
@@ -142,20 +178,11 @@ export class ContextProxy {
 
 	async updateGlobalState<K extends GlobalStateKey>(key: K, value: GlobalState[K]) {
 		if (isPassThroughStateKey(key)) {
-			if (isVsCodeContext() && this.originalContext) {
-				return this.originalContext.globalState.update(key, value)
-			} else if (this.platformServices) {
-				return this.platformServices.configuration.set(key, value)
-			}
+			return this.setToStorage(key, value)
 		}
 
 		this.stateCache[key] = value
-
-		if (isVsCodeContext() && this.originalContext) {
-			return this.originalContext.globalState.update(key, value)
-		} else if (this.platformServices) {
-			return this.platformServices.configuration.set(key, value)
-		}
+		return this.setToStorage(key, value)
 	}
 
 	private getAllGlobalState(): GlobalState {
@@ -176,15 +203,7 @@ export class ContextProxy {
 		this.secretCache[key] = value
 
 		// Write directly to context or platform storage
-		if (isVsCodeContext() && this.originalContext) {
-			return value === undefined
-				? this.originalContext.secrets.delete(key)
-				: this.originalContext.secrets.store(key, value)
-		} else if (this.platformServices) {
-			// In CLI mode, store secrets as regular config (not ideal but functional)
-			// TODO: Implement proper secret storage for CLI
-			return this.platformServices.configuration.set(`secret:${key}`, value)
-		}
+		return this.setToStorage(key, value, "secrets")
 	}
 
 	private getAllSecretState(): SecretState {
@@ -315,8 +334,8 @@ export class ContextProxy {
 		this.secretCache = {}
 
 		await Promise.all([
-			...GLOBAL_STATE_KEYS.map((key) => this.originalContext.globalState.update(key, undefined)),
-			...SECRET_STATE_KEYS.map((key) => this.originalContext.secrets.delete(key)),
+			...GLOBAL_STATE_KEYS.map((key) => this.setToStorage(key, undefined)),
+			...SECRET_STATE_KEYS.map((key) => this.setToStorage(key, undefined, "secrets")),
 		])
 
 		await this.initialize()
