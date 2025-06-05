@@ -4,12 +4,17 @@ import { BatchProcessor } from "./commands/batch"
 import { showHelp } from "./commands/help"
 import { SessionCommands } from "./commands/session-commands"
 import { registerMcpCommands } from "./commands/mcp-commands"
+import { registerExamplesCommands } from "./commands/ExamplesCommand"
 import { showBanner } from "./utils/banner"
 import { validateCliAdapterOptions } from "../core/adapters/cli/index"
 import { CliConfigManager } from "./config/CliConfigManager"
 import { validateBrowserViewport, validateTimeout } from "./utils/browser-config"
 import { isValidFormat, getAvailableFormatsWithDescriptions } from "./utils/format-detection"
 import { PlatformServiceFactory, PlatformContext } from "../core/adapters/PlatformServiceFactory"
+import { PerformanceMonitoringService } from "./optimization/PerformanceMonitoringService"
+import { StartupOptimizer } from "./optimization/StartupOptimizer"
+import { MemoryOptimizer } from "./optimization/MemoryOptimizer"
+import { PerformanceConfigManager } from "./config/performance-config"
 import chalk from "chalk"
 import * as fs from "fs"
 
@@ -161,6 +166,23 @@ program
 	.option("--no-mcp-auto-connect", "Do not automatically connect to enabled MCP servers")
 	.option("--mcp-log-level <level>", "MCP logging level (error, warn, info, debug)", validateMcpLogLevel)
 	.action(async (options: CliOptions) => {
+		// Initialize performance monitoring and optimization
+		const performanceMonitor = new PerformanceMonitoringService()
+		const performanceConfig = new PerformanceConfigManager("standard")
+		const startupOptimizer = new StartupOptimizer(performanceMonitor)
+		const memoryOptimizer = new MemoryOptimizer(undefined, performanceMonitor)
+
+		// Start performance monitoring
+		const cliStartupTimer = performanceMonitor.startTimer("cli-startup")
+		memoryOptimizer.startMonitoring()
+
+		// Optimize startup
+		try {
+			await startupOptimizer.optimizeStartup()
+		} catch (error) {
+			console.warn("Startup optimization failed:", error)
+		}
+
 		// Initialize platform services for CLI context
 		await PlatformServiceFactory.initialize(PlatformContext.CLI, "roo-cline", options.config)
 
@@ -306,6 +328,23 @@ program
 				const repl = new CliRepl(options, configManager)
 				await repl.start()
 			}
+
+			// Stop performance monitoring and report if verbose
+			const startupDuration = cliStartupTimer.stop()
+			memoryOptimizer.stopMonitoring()
+
+			if (options.verbose) {
+				console.log(chalk.gray(`CLI startup completed in ${Math.round(startupDuration)}ms`))
+
+				const performanceReport = performanceMonitor.generateReport()
+				if (performanceReport.summary.totalOperations > 0) {
+					console.log(
+						chalk.gray(
+							`Performance: ${performanceReport.summary.totalOperations} operations, avg ${Math.round(performanceReport.summary.averageExecutionTime)}ms`,
+						),
+					)
+				}
+			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			if (options.color) {
@@ -318,6 +357,13 @@ program
 			if (error instanceof Error && error.message.includes("Invalid")) {
 				console.error()
 				console.error("Use --help for usage information")
+			}
+
+			// Clean up performance monitoring
+			try {
+				memoryOptimizer.stopMonitoring()
+			} catch (cleanupError) {
+				// Ignore cleanup errors
 			}
 
 			process.exit(1)
@@ -441,6 +487,16 @@ try {
 	)
 }
 
+// Register examples commands
+try {
+	registerExamplesCommands(program)
+} catch (error) {
+	console.warn(
+		chalk.yellow("Warning: Examples functionality not available:"),
+		error instanceof Error ? error.message : String(error),
+	)
+}
+
 // Enhanced error handling for unknown commands
 program.on("command:*", function (operands) {
 	console.error(chalk.red(`❌ Unknown command: ${operands[0]}`))
@@ -479,6 +535,10 @@ program.on("--help", () => {
 	console.log("  $ roo-cli mcp tools                         # List available MCP tools")
 	console.log("  $ roo-cli mcp execute github-server get_repo owner=user repo=project")
 	console.log("  $ roo-cli mcp config init                   # Initialize MCP configuration")
+	console.log("  $ roo-cli examples                          # Browse usage examples")
+	console.log("  $ roo-cli examples show basic               # Show basic examples")
+	console.log("  $ roo-cli examples search 'web dev'         # Search examples")
+	console.log("  $ roo-cli examples run hello-world          # Run specific example")
 	console.log()
 	console.log("Output Format Options:")
 	console.log("  --format json         Structured JSON output")
