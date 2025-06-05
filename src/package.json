@@ -361,7 +361,7 @@
 		"publish:marketplace": "vsce publish --no-dependencies && ovsx publish --no-dependencies",
 		"watch:bundle": "pnpm bundle --watch",
 		"watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-		"build:cli": "tsc && chmod +x ./dist/cli/index.js",
+		"build:cli": "node esbuild.mjs",
 		"start:cli": "node ./dist/cli/index.js",
 		"clean": "rimraf README.md CHANGELOG.md LICENSE dist webview-ui out mock .turbo"
 	},

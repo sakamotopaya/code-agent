@@ -1,10 +1,10 @@
 import { Anthropic } from "@anthropic-ai/sdk"
-import * as vscode from "vscode"
 
 import type { ModelInfo } from "@roo-code/types"
 
 import { getCommand } from "../../utils/commands"
 import { ApiStream } from "../transform/stream"
+import { getPlatformServices, isVsCodeContext } from "../../core/adapters/PlatformServiceFactory"
 
 import type { ApiHandler, SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"
 
@@ -44,7 +44,8 @@ export class HumanRelayHandler implements ApiHandler, SingleCompletionHandler {
 		}
 
 		// Copy to clipboard
-		await vscode.env.clipboard.writeText(promptText)
+		const platformServices = await getPlatformServices()
+		await platformServices.clipboard.writeText(promptText)
 
 		// A dialog box pops up to request user action
 		const response = await showHumanRelayDialog(promptText)
@@ -84,7 +85,8 @@ export class HumanRelayHandler implements ApiHandler, SingleCompletionHandler {
 	 */
 	async completePrompt(prompt: string): Promise<string> {
 		// Copy to clipboard
-		await vscode.env.clipboard.writeText(prompt)
+		const platformServices = await getPlatformServices()
+		await platformServices.clipboard.writeText(prompt)
 
 		// A dialog box pops up to request user action
 		const response = await showHumanRelayDialog(prompt)
@@ -118,18 +120,47 @@ function getMessageContent(message: Anthropic.Messages.MessageParam): string {
  * @returns The user's input response or undefined (if canceled).
  */
 async function showHumanRelayDialog(promptText: string): Promise<string | undefined> {
-	return new Promise<string | undefined>((resolve) => {
+	if (!isVsCodeContext()) {
+		// In CLI mode, prompt user for input
+		console.log("\n📋 Prompt copied to clipboard. Please:")
+		console.log("1. Paste the prompt into your AI model interface")
+		console.log("2. Copy the AI's response")
+		console.log("3. Enter the response below")
+		console.log("\nPrompt:")
+		console.log("---")
+		console.log(promptText)
+		console.log("---\n")
+
+		const platformServices = await getPlatformServices()
+		return await platformServices.userInterface.showInputBox({
+			prompt: "Enter the AI's response",
+			placeHolder: "Paste the response here...",
+		})
+	}
+
+	// VSCode mode - use command-based dialog
+	return new Promise<string | undefined>(async (resolve) => {
 		// Create a unique request ID.
 		const requestId = Date.now().toString()
 
-		// Register a global callback function.
-		vscode.commands.executeCommand(
-			getCommand("registerHumanRelayCallback"),
-			requestId,
-			(response: string | undefined) => resolve(response),
-		)
+		try {
+			const platformServices = await getPlatformServices()
 
-		// Open the dialog box directly using the current panel.
-		vscode.commands.executeCommand(getCommand("showHumanRelayDialog"), { requestId, promptText })
+			// Register a global callback function.
+			await platformServices.commandExecutor.executeCommand(
+				getCommand("registerHumanRelayCallback"),
+				requestId,
+				(response: string | undefined) => resolve(response),
+			)
+
+			// Open the dialog box directly using the current panel.
+			await platformServices.commandExecutor.executeCommand(getCommand("showHumanRelayDialog"), {
+				requestId,
+				promptText,
+			})
+		} catch (error) {
+			console.error("Failed to show human relay dialog:", error)
+			resolve(undefined)
+		}
 	})
 }

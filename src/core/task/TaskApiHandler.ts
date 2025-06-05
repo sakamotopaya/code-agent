@@ -11,7 +11,7 @@ import { truncateConversationIfNeeded } from "../sliding-window"
 import { getMessagesSinceLastSummary } from "../condense"
 import { maybeRemoveImageBlocks } from "../../api/transform/image-cleaning"
 import { calculateApiCostAnthropic } from "../../shared/cost"
-import { TelemetryService } from "@roo-code/telemetry"
+import { ITelemetryService } from "../interfaces/ITelemetryService"
 import { type AssistantMessageContent, parseAssistantMessage, presentAssistantMessage } from "../assistant-message"
 import { formatContentBlockToMarkdown } from "../../integrations/misc/export-markdown"
 import { ClineApiReqCancelReason, ClineApiReqInfo } from "../../shared/ExtensionMessage"
@@ -41,6 +41,7 @@ export class TaskApiHandler {
 		private instanceId: string,
 		private api: ApiHandler,
 		private messaging: TaskMessaging,
+		private telemetry: ITelemetryService,
 		private providerRef?: WeakRef<ClineProvider>,
 		private onTokenUsageUpdate?: (taskId: string, tokenUsage: any) => void,
 		private onToolFailed?: (taskId: string, tool: ToolName, error: string) => void,
@@ -346,7 +347,7 @@ export class TaskApiHandler {
 					undefined,
 					abort,
 				)
-				TelemetryService.instance.captureConsecutiveMistakeError(this.taskId)
+				this.telemetry.captureConsecutiveMistakeError(this.taskId)
 			}
 		}
 
@@ -372,7 +373,7 @@ export class TaskApiHandler {
 		const finalUserContent = [...parsedUserContent, { type: "text" as const, text: environmentDetails }]
 
 		await this.messaging.addToApiConversationHistory({ role: "user", content: finalUserContent })
-		TelemetryService.instance.captureConversationMessage(this.taskId, "user")
+		this.telemetry.captureConversationMessage(this.taskId, "user")
 
 		// Update the loading message
 		const lastApiReqIndex = findLastIndex(this.messaging.messages, (m) => m.say === "api_req_started")
@@ -496,7 +497,7 @@ export class TaskApiHandler {
 				cacheReadTokens > 0 ||
 				typeof totalCost !== "undefined"
 			) {
-				TelemetryService.instance.captureLlmCompletion(this.taskId, {
+				this.telemetry.captureLlmCompletion(this.taskId, {
 					inputTokens,
 					outputTokens,
 					cacheWriteTokens,
@@ -525,7 +526,7 @@ export class TaskApiHandler {
 					content: [{ type: "text", text: assistantMessage }],
 				})
 
-				TelemetryService.instance.captureConversationMessage(this.taskId, "assistant")
+				this.telemetry.captureConversationMessage(this.taskId, "assistant")
 
 				await pWaitFor(() => this.userMessageContentReady)
 

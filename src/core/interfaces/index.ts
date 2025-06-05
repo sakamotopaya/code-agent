@@ -74,11 +74,16 @@ export type {
 	WaitCondition,
 } from "./IBrowser"
 
+export type { ITelemetryService } from "./ITelemetryService"
+export type { IStorageService } from "./IStorageService"
+
 // Import the interfaces for use in CoreInterfaces
 import type { IUserInterface } from "./IUserInterface"
 import type { IFileSystem } from "./IFileSystem"
 import type { ITerminal } from "./ITerminal"
 import type { IBrowser } from "./IBrowser"
+import type { ITelemetryService } from "./ITelemetryService"
+import type { IStorageService } from "./IStorageService"
 
 /**
  * Core abstraction interfaces that separate platform-specific functionality
@@ -97,6 +102,12 @@ export interface CoreInterfaces {
 
 	/** Browser abstraction for web automation and interaction */
 	browser: IBrowser
+
+	/** Telemetry abstraction for analytics and debugging */
+	telemetry: ITelemetryService
+
+	/** Storage abstraction for persistent data and configuration */
+	storage: IStorageService
 }
 
 /**

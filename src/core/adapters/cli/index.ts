@@ -1,14 +1,18 @@
-import { IUserInterface, IFileSystem, ITerminal, IBrowser } from "../../interfaces"
+import { IUserInterface, IFileSystem, ITerminal, IBrowser, ITelemetryService, IStorageService } from "../../interfaces"
 import { CliUserInterface } from "./CliUserInterface"
 import { CliFileSystem } from "./CliFileSystem"
 import { CliTerminal } from "./CliTerminal"
 import { CliBrowser } from "./CliBrowser"
+import { CliTelemetryService } from "./CliTelemetryService"
+import { CliStorageService } from "./CliStorageService"
 
 // Export all CLI adapters
 export { CliUserInterface } from "./CliUserInterface"
 export { CliFileSystem } from "./CliFileSystem"
 export { CliTerminal } from "./CliTerminal"
 export { CliBrowser } from "./CliBrowser"
+export { CliTelemetryService } from "./CliTelemetryService"
+export { CliStorageService } from "./CliStorageService"
 
 // Export utilities
 export { CliProgressIndicator } from "./utils/CliProgressIndicator"
@@ -37,6 +41,8 @@ export interface CliAdapters {
 	fileSystem: IFileSystem
 	terminal: ITerminal
 	browser: IBrowser
+	telemetry: ITelemetryService
+	storage: IStorageService
 }
 
 /**
@@ -74,6 +80,8 @@ export function createCliAdapters(options: CliAdapterOptions = {}): CliAdapters 
 	const fileSystem = new CliFileSystem(workspaceRoot)
 	const terminal = new CliTerminal()
 	const browser = new CliBrowser()
+	const telemetry = new CliTelemetryService({ enabled: false, verbose })
+	const storage = new CliStorageService({ verbose })
 
 	// Log adapter creation if verbose mode is enabled
 	if (verbose) {
@@ -82,6 +90,8 @@ export function createCliAdapters(options: CliAdapterOptions = {}): CliAdapters 
 		console.log(`  - FileSystem (workspace: ${workspaceRoot})`)
 		console.log(`  - Terminal`)
 		console.log(`  - Browser`)
+		console.log(`  - Telemetry (disabled by default)`)
+		console.log(`  - Storage`)
 	}
 
 	return {
@@ -89,6 +99,8 @@ export function createCliAdapters(options: CliAdapterOptions = {}): CliAdapters 
 		fileSystem,
 		terminal,
 		browser,
+		telemetry,
+		storage,
 	}
 }
 
