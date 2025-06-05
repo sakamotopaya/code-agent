@@ -44,7 +44,7 @@ export interface StorageConfig {
 }
 
 export const DEFAULT_STORAGE_CONFIG: StorageConfig = {
-	sessionDirectory: "~/.roo/sessions",
+	sessionDirectory: "~/.agentz",
 	compressionLevel: 6,
 	backupEnabled: true,
 	backupInterval: 24,

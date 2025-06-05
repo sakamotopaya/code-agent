@@ -58,6 +58,8 @@ interface CliOptions {
 	mcpAutoConnect?: boolean
 	noMcpAutoConnect?: boolean
 	mcpLogLevel?: string
+	// Session options
+	sessionDirectory?: string
 }
 
 // Validation functions
@@ -152,6 +154,7 @@ program
 	.option("--dry-run", "Show what would be executed without running commands")
 	.option("--quiet", "Suppress non-essential output")
 	.option("--generate-config <path>", "Generate default configuration file at specified path", validatePath)
+	.option("--session-directory <path>", "Directory for storing session files (default: ~/.agentz)", validatePath)
 	.option("--headless", "Run browser in headless mode (default: true)", true)
 	.option("--no-headless", "Run browser in headed mode")
 	.option("--browser-viewport <size>", "Browser viewport size (e.g., 1920x1080)", validateBrowserViewport)
@@ -214,6 +217,11 @@ program
 			}
 			if (options.mode) {
 				cliOverrides.mode = options.mode
+			}
+
+			// Apply session directory configuration override
+			if (options.sessionDirectory) {
+				cliOverrides.sessionDirectory = options.sessionDirectory
 			}
 
 			// Apply browser configuration overrides
@@ -303,11 +311,8 @@ program
 						await nonInteractiveService.executeFromStdin()
 					} else if (options.batch) {
 						// Check if batch is a file path or a direct command
-						if (
-							options.batch.includes(".") ||
-							options.batch.startsWith("/") ||
-							options.batch.startsWith("./")
-						) {
+						// First check if it exists as a file
+						if (fs.existsSync(options.batch)) {
 							await nonInteractiveService.executeFromFile(options.batch)
 						} else {
 							// Treat as direct command - use existing BatchProcessor
@@ -507,25 +512,48 @@ program.on("command:*", function (operands) {
 // Custom help event to show our enhanced help
 program.on("--help", () => {
 	console.log()
-	console.log("Examples:")
+	console.log("Interactive Mode Examples:")
 	console.log("  $ roo-cli                                    # Start interactive mode")
-	console.log("  $ roo-cli --cwd /path/to/project            # Start in specific directory")
+	console.log("  Then simply type your prompts:")
+	console.log("    🤖 Roo> Create a React todo app with TypeScript")
+	console.log("    🤖 Roo> Debug the memory leak in my auth code")
+	console.log("    🤖 Roo> Add unit tests for the Calculator class")
+	console.log("    🤖 Roo> Refactor getUserData to use async/await")
+	console.log("  Multi-line prompts (use ``` to start/end):")
+	console.log("    🤖 Roo> ```")
+	console.log("    Create a user registration form with:")
+	console.log("    - Email validation")
+	console.log("    - Password strength checker")
+	console.log("    - Error handling")
+	console.log("    ```")
+	console.log("  Built-in commands:")
+	console.log("    🤖 Roo> help      # Show help")
+	console.log("    🤖 Roo> exit      # Exit CLI")
+	console.log("    🤖 Roo> clear     # Clear screen")
+	console.log("    🤖 Roo> status    # Show task status")
+	console.log("    🤖 Roo> abort     # Abort current task")
+	console.log()
+	console.log("Batch Mode Examples:")
 	console.log('  $ roo-cli --batch "Create a hello function" # Run single task')
+	console.log('  $ echo "Fix bug in user.js" | roo-cli --stdin # Pipe input')
 	console.log("  $ roo-cli --batch commands.json             # Run batch file")
-	console.log("  $ roo-cli --stdin --yes                     # Read from stdin, auto-confirm")
-	console.log("  $ echo 'npm test' | roo-cli --stdin         # Pipe commands")
-	console.log("  $ roo-cli --batch script.yaml --parallel    # Run batch in parallel")
-	console.log("  $ roo-cli --batch tasks.txt --dry-run       # Preview batch execution")
+	console.log("  $ roo-cli --batch script.yaml --parallel    # Run in parallel")
+	console.log("  $ roo-cli --batch tasks.txt --dry-run       # Preview execution")
+	console.log()
+	console.log("Configuration Examples:")
+	console.log("  $ roo-cli config --show                     # Show current config")
+	console.log("  $ roo-cli config --generate ~/.roo-cli/config.json")
+	console.log("  $ roo-cli --cwd /path/to/project            # Start in specific directory")
 	console.log("  $ roo-cli --model gpt-4                     # Use specific model")
 	console.log("  $ roo-cli --mode debug                      # Start in debug mode")
 	console.log("  $ roo-cli --format json                     # Output as JSON")
 	console.log("  $ roo-cli --format yaml --output result.yml # Save as YAML file")
 	console.log("  $ ROO_OUTPUT_FORMAT=json roo-cli            # Use environment variable")
+	console.log()
+	console.log("Advanced Examples:")
 	console.log("  $ roo-cli --no-headless                     # Run browser in headed mode")
 	console.log("  $ roo-cli --browser-viewport 1280x720      # Set browser viewport")
 	console.log("  $ roo-cli --screenshot-output ./screenshots # Set screenshot directory")
-	console.log("  $ roo-cli config --show                     # Show current configuration")
-	console.log("  $ roo-cli config --generate ~/.roo-cli/config.json")
 	console.log("  $ roo-cli session list                      # List all sessions")
 	console.log("  $ roo-cli session save 'My Project'         # Save current session")
 	console.log("  $ roo-cli session load <session-id>         # Load a session")

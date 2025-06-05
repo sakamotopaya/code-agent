@@ -16,6 +16,7 @@ import { TerminalRegistry } from "../../integrations/terminal/TerminalRegistry"
 import { Terminal } from "../../integrations/terminal/Terminal"
 import { arePathsEqual } from "../../utils/path"
 import { formatResponse } from "../prompts/responses"
+import { PlatformServiceFactory } from "../adapters/PlatformServiceFactory"
 
 import { Task } from "../task/Task"
 
@@ -26,16 +27,15 @@ export async function getEnvironmentDetails(cline: Task, includeFileDetails: boo
 	const state = await clineProvider?.getState()
 	const { terminalOutputLineLimit = 500, maxWorkspaceFiles = 200 } = state ?? {}
 
+	// Get platform services for cross-platform compatibility
+	const platformServices = await PlatformServiceFactory.getInstance()
+	const editorProvider = platformServices.editorProvider
+
 	// It could be useful for cline to know if the user went from one or no
 	// file to another between messages, so we always include this context.
 	details += "\n\n# VSCode Visible Files"
 
-	const visibleFilePaths =
-		vscode.window.visibleTextEditors
-			?.map((editor) => editor.document?.uri?.fsPath)
-			?.filter(Boolean)
-			?.map((absolutePath) => path.relative(cline.cwd, absolutePath))
-			?.slice(0, maxWorkspaceFiles) || []
+	const visibleFilePaths = editorProvider.getVisibleFilePaths(cline.cwd, maxWorkspaceFiles)
 
 	// Filter paths through rooIgnoreController
 	const allowedVisibleFiles = cline.rooIgnoreController
@@ -51,12 +51,7 @@ export async function getEnvironmentDetails(cline: Task, includeFileDetails: boo
 	details += "\n\n# VSCode Open Tabs"
 	const { maxOpenTabsContext } = state ?? {}
 	const maxTabs = maxOpenTabsContext ?? 20
-	const openTabPaths = vscode.window.tabGroups.all
-		.flatMap((group) => group.tabs)
-		.map((tab) => (tab.input as vscode.TabInputText)?.uri?.fsPath)
-		.filter(Boolean)
-		.map((absolutePath) => path.relative(cline.cwd, absolutePath).toPosix())
-		.slice(0, maxTabs)
+	const openTabPaths = editorProvider.getOpenTabPaths(cline.cwd, maxTabs)
 
 	// Filter paths through rooIgnoreController
 	const allowedOpenTabs = cline.rooIgnoreController

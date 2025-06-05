@@ -42,6 +42,7 @@ export const cliEnvironmentConfigSchema = z.object({
 	// File paths
 	ROO_CONFIG_PATH: z.string().optional(),
 	ROO_WORKSPACE_ROOT: z.string().optional(),
+	ROO_SESSION_DIRECTORY: z.string().optional(),
 })
 
 export type CliEnvironmentConfig = z.infer<typeof cliEnvironmentConfigSchema>
@@ -71,6 +72,7 @@ export const cliConfigFileSchema = z
 		// CLI-specific settings
 		verbose: z.boolean().optional(),
 		workspaceRoot: z.string().optional(),
+		sessionDirectory: z.string().optional(),
 
 		// Extend with full provider and global settings
 	})

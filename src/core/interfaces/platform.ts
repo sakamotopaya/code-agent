@@ -2,6 +2,8 @@
  * Platform abstraction interfaces for VSCode extension and CLI environments
  */
 
+import { IEditorProvider } from "../adapters/interfaces/IEditorProvider"
+
 export interface IConfiguration {
 	/**
 	 * Get a configuration value (synchronous)
@@ -120,6 +122,7 @@ export interface IPlatformServices {
 	clipboard: IClipboard
 	commandExecutor: ICommandExecutor
 	fileSystem: IFileSystem
+	editorProvider: IEditorProvider
 }
 
 /**

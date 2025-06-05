@@ -4,6 +4,8 @@ import { VsCodeUserInterface } from "./VsCodeUserInterface"
 import { VsCodeFileSystem } from "./VsCodeFileSystem"
 import { VsCodeTerminal } from "./VsCodeTerminal"
 import { VsCodeBrowser } from "./VsCodeBrowser"
+import { VsCodeTelemetryService } from "./VsCodeTelemetryService"
+import { VsCodeStorageService } from "./VsCodeStorageService"
 
 /**
  * Factory function to create VS Code adapter implementations
@@ -17,6 +19,8 @@ export const createVsCodeAdapters: InterfaceFactory = async (): Promise<CoreInte
 		fileSystem: new VsCodeFileSystem(context),
 		terminal: new VsCodeTerminal(context),
 		browser: new VsCodeBrowser(context),
+		telemetry: new VsCodeTelemetryService(context),
+		storage: new VsCodeStorageService(context),
 	}
 }
 
@@ -31,6 +35,8 @@ export const createVsCodeAdaptersWithConfig = async (config: InterfaceConfig): P
 		fileSystem: new VsCodeFileSystem(context),
 		terminal: new VsCodeTerminal(context),
 		browser: new VsCodeBrowser(context),
+		telemetry: new VsCodeTelemetryService(context),
+		storage: new VsCodeStorageService(context),
 	}
 }
 
@@ -58,3 +64,5 @@ export { VsCodeUserInterface } from "./VsCodeUserInterface"
 export { VsCodeFileSystem } from "./VsCodeFileSystem"
 export { VsCodeTerminal } from "./VsCodeTerminal"
 export { VsCodeBrowser } from "./VsCodeBrowser"
+export { VsCodeTelemetryService } from "./VsCodeTelemetryService"
+export { VsCodeStorageService } from "./VsCodeStorageService"

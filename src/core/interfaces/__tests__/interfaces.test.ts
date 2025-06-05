@@ -8,6 +8,8 @@ import type {
 	IFileSystem,
 	ITerminal,
 	IBrowser,
+	ITelemetryService,
+	IStorageService,
 	CoreInterfaces,
 	InterfaceFactory,
 	InterfaceConfig,
@@ -314,6 +316,8 @@ describe("Core Interfaces", () => {
 				fileSystem: {} as IFileSystem,
 				terminal: {} as ITerminal,
 				browser: {} as IBrowser,
+				telemetry: {} as ITelemetryService,
+				storage: {} as IStorageService,
 			}
 
 			expect(mockCoreInterfaces).toBeDefined()
@@ -321,6 +325,8 @@ describe("Core Interfaces", () => {
 			expect(mockCoreInterfaces.fileSystem).toBeDefined()
 			expect(mockCoreInterfaces.terminal).toBeDefined()
 			expect(mockCoreInterfaces.browser).toBeDefined()
+			expect(mockCoreInterfaces.telemetry).toBeDefined()
+			expect(mockCoreInterfaces.storage).toBeDefined()
 		})
 	})
 
@@ -332,6 +338,8 @@ describe("Core Interfaces", () => {
 					fileSystem: {} as IFileSystem,
 					terminal: {} as ITerminal,
 					browser: {} as IBrowser,
+					telemetry: {} as ITelemetryService,
+					storage: {} as IStorageService,
 				}
 			}
 

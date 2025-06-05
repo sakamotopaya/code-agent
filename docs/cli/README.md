@@ -12,18 +12,65 @@ npm install -g roo-cli
 
 ### Basic Usage
 
+#### Interactive Mode (Main Usage)
+
 ```bash
 # Start interactive mode
 roo-cli
+```
 
-# Run a single task
+Once started, simply type your prompts directly and press Enter:
+
+```
+🤖 Roo> Create a React todo app with TypeScript
+🤖 Roo> Debug the memory leak in my authentication code
+🤖 Roo> Refactor this function to be more efficient
+🤖 Roo> Add unit tests for the user service
+```
+
+**Multi-line prompts:** Use ` ``` ` to start/end multi-line input:
+
+````
+🤖 Roo> ```
+Create a new user registration form
+with validation and error handling
+using React and TypeScript
+````
+
+````
+
+**Available REPL commands:**
+- `help` - Show help information
+- `exit` or `quit` - Exit the CLI
+- `clear` - Clear screen
+- `status` - Show current task status
+- `abort` - Abort current running task
+- `config show` - Show configuration
+
+#### Batch Mode (Single Tasks)
+
+```bash
+# Run a single task and exit
 roo-cli --batch "Create a hello world function"
 
 # Run with specific configuration
-roo-cli --config ./my-config.json
+roo-cli --config ./my-config.json --batch "Analyze this codebase"
 
+# Pipe input from stdin
+echo "Fix the bug in user.js" | roo-cli --stdin
+````
+
+#### Configuration
+
+```bash
 # Generate default configuration
 roo-cli --generate-config ~/.roo-cli/config.json
+
+# Show current configuration
+roo-cli config --show
+
+# Validate configuration
+roo-cli config --validate
 ```
 
 ## Documentation Structure
