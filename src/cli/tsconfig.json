@@ -7,6 +7,6 @@
 		"outDir": "../dist/cli",
 		"rootDir": ".."
 	},
-	"include": ["./**/*.ts", "../core/**/*.ts", "../utils/**/*.ts"],
+	"include": ["./**/*.ts", "../utils/**/*.ts", "../core/adapters/cli/**/*.ts"],
 	"exclude": ["node_modules", "**/*.test.ts", "__tests__"]
 }

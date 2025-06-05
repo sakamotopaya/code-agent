@@ -18,5 +18,21 @@ export { OpenRouterHandler } from "./openrouter"
 export { RequestyHandler } from "./requesty"
 export { UnboundHandler } from "./unbound"
 export { VertexHandler } from "./vertex"
-export { VsCodeLmHandler } from "./vscode-lm"
 export { XAIHandler } from "./xai"
+
+// Conditional exports for VSCode-specific providers
+let VsCodeLmHandler: any = null
+
+try {
+	// Only export VSCode LM handler if in VSCode context
+	if (typeof require !== "undefined") {
+		// Try to require vscode to check if we're in VSCode context
+		require("vscode")
+		VsCodeLmHandler = require("./vscode-lm").VsCodeLmHandler
+	}
+} catch (error) {
+	// VSCode not available (CLI mode)
+	VsCodeLmHandler = null
+}
+
+export { VsCodeLmHandler }

@@ -13,7 +13,28 @@ if (!isTestEnv) {
 		const fs = require("fs")
 		const path = require("path")
 
-		const localesDir = path.join(__dirname, "i18n", "locales")
+		// Determine locales directory based on context
+		let localesDir: string
+
+		// In CLI build, locales are at dist/i18n/locales
+		// In VSCode extension, locales are at i18n/locales relative to this file
+		const cliLocalesDir = path.join(__dirname, "..", "i18n", "locales")
+		const extensionLocalesDir = path.join(__dirname, "locales")
+
+		if (fs.existsSync(cliLocalesDir)) {
+			localesDir = cliLocalesDir
+		} else if (fs.existsSync(extensionLocalesDir)) {
+			localesDir = extensionLocalesDir
+		} else {
+			// Fallback: try to find locales directory
+			const possiblePaths = [
+				path.join(__dirname, "i18n", "locales"),
+				path.join(__dirname, "..", "..", "i18n", "locales"),
+				path.join(process.cwd(), "src", "i18n", "locales"),
+			]
+
+			localesDir = possiblePaths.find((p) => fs.existsSync(p)) || extensionLocalesDir
+		}
 
 		try {
 			// Find all language directories
