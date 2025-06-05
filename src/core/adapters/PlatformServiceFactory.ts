@@ -21,14 +21,16 @@ export class PlatformServiceFactory {
 		this.context = context
 
 		switch (context) {
-			case PlatformContext.VSCode:
+			case PlatformContext.VSCode: {
 				const { VsCodePlatformServices } = await import("./vscode/VsCodePlatformServices")
 				this.instance = new VsCodePlatformServices(extensionName)
 				break
-			case PlatformContext.CLI:
+			}
+			case PlatformContext.CLI: {
 				const { CliPlatformServices } = await import("./cli/CliPlatformServices")
 				this.instance = new CliPlatformServices(extensionName, configPath)
 				break
+			}
 			default:
 				throw new Error(`Unsupported platform context: ${context}`)
 		}
