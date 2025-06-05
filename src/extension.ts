@@ -28,6 +28,7 @@ import { CodeIndexManager } from "./services/code-index/manager"
 import { migrateSettings } from "./utils/migrateSettings"
 import { API } from "./extension/api"
 import { setVsCodeContext } from "./core/adapters/vscode"
+import { PlatformServiceFactory, PlatformContext } from "./core/adapters/PlatformServiceFactory"
 
 import {
 	handleUri,
@@ -56,6 +57,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	outputChannel = vscode.window.createOutputChannel(Package.outputChannel)
 	context.subscriptions.push(outputChannel)
 	outputChannel.appendLine(`${Package.name} extension activated - ${JSON.stringify(Package)}`)
+
+	// Initialize platform services for VSCode context
+	await PlatformServiceFactory.initialize(PlatformContext.VSCode)
 
 	// Initialize VS Code context for adapters
 	setVsCodeContext(context)

@@ -12,7 +12,6 @@ import { ClineProvider } from "../webview/ClineProvider"
 import { readTaskMessages, saveTaskMessages, taskMetadata } from "../task-persistence"
 import { ApiMessage } from "../task-persistence/apiMessages"
 import { readApiMessages, saveApiMessages } from "../task-persistence"
-import { TelemetryService } from "@roo-code/telemetry"
 import { CloudService } from "@roo-code/cloud"
 import pWaitFor from "p-wait-for"
 
