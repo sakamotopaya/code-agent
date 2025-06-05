@@ -1,4 +1,6 @@
+/* eslint-env node */
 // Mock VSCode module for CLI context
+// eslint-disable-next-line no-undef
 module.exports = {
 	workspace: {
 		getConfiguration: () => ({

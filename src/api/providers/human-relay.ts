@@ -139,28 +139,33 @@ async function showHumanRelayDialog(promptText: string): Promise<string | undefi
 	}
 
 	// VSCode mode - use command-based dialog
-	return new Promise<string | undefined>(async (resolve) => {
+	return new Promise<string | undefined>((resolve) => {
 		// Create a unique request ID.
 		const requestId = Date.now().toString()
 
-		try {
-			const platformServices = await getPlatformServices()
+		const setupPromise = async () => {
+			try {
+				const platformServices = await getPlatformServices()
 
-			// Register a global callback function.
-			await platformServices.commandExecutor.executeCommand(
-				getCommand("registerHumanRelayCallback"),
-				requestId,
-				(response: string | undefined) => resolve(response),
-			)
+				// Register a global callback function.
+				await platformServices.commandExecutor.executeCommand(
+					getCommand("registerHumanRelayCallback"),
+					requestId,
+					(response: string | undefined) => resolve(response),
+				)
 
-			// Open the dialog box directly using the current panel.
-			await platformServices.commandExecutor.executeCommand(getCommand("showHumanRelayDialog"), {
-				requestId,
-				promptText,
-			})
-		} catch (error) {
-			console.error("Failed to show human relay dialog:", error)
-			resolve(undefined)
+				// Open the dialog box directly using the current panel.
+				await platformServices.commandExecutor.executeCommand(getCommand("showHumanRelayDialog"), {
+					requestId,
+					promptText,
+				})
+			} catch (error) {
+				console.error("Failed to show human relay dialog:", error)
+				resolve(undefined)
+			}
 		}
+
+		// Call the async setup function
+		setupPromise()
 	})
 }

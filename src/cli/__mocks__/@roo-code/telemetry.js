@@ -1,3 +1,4 @@
+/* eslint-env node */
 // Mock telemetry module for CLI context
 
 class BaseTelemetryClient {
@@ -20,6 +21,7 @@ class MockTelemetryService {
 	captureSchemaValidationError() {}
 }
 
+// eslint-disable-next-line no-undef
 module.exports = {
 	BaseTelemetryClient,
 	TelemetryService: MockTelemetryService,
