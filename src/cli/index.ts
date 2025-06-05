@@ -4,6 +4,7 @@ import { BatchProcessor } from "./commands/batch"
 import { showHelp } from "./commands/help"
 import { SessionCommands } from "./commands/session-commands"
 import { registerMcpCommands } from "./commands/mcp-commands"
+import { registerExamplesCommands } from "./commands/ExamplesCommand"
 import { showBanner } from "./utils/banner"
 import { validateCliAdapterOptions } from "../core/adapters/cli"
 import { CliConfigManager } from "./config/CliConfigManager"
@@ -437,6 +438,16 @@ try {
 	)
 }
 
+// Register examples commands
+try {
+	registerExamplesCommands(program)
+} catch (error) {
+	console.warn(
+		chalk.yellow("Warning: Examples functionality not available:"),
+		error instanceof Error ? error.message : String(error),
+	)
+}
+
 // Enhanced error handling for unknown commands
 program.on("command:*", function (operands) {
 	console.error(chalk.red(`❌ Unknown command: ${operands[0]}`))
@@ -475,6 +486,10 @@ program.on("--help", () => {
 	console.log("  $ roo-cli mcp tools                         # List available MCP tools")
 	console.log("  $ roo-cli mcp execute github-server get_repo owner=user repo=project")
 	console.log("  $ roo-cli mcp config init                   # Initialize MCP configuration")
+	console.log("  $ roo-cli examples                          # Browse usage examples")
+	console.log("  $ roo-cli examples show basic               # Show basic examples")
+	console.log("  $ roo-cli examples search 'web dev'         # Search examples")
+	console.log("  $ roo-cli examples run hello-world          # Run specific example")
 	console.log()
 	console.log("Output Format Options:")
 	console.log("  --format json         Structured JSON output")
