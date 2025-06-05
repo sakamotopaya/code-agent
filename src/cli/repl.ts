@@ -38,8 +38,9 @@ export class CliRepl {
 		this.options = options
 		this.configManager = configManager
 
-		// Initialize session management
-		this.sessionManager = new SessionManager()
+		// Initialize session management with configured storage directory
+		const storageConfig = configManager ? this.getStorageConfigFromManager(configManager) : {}
+		this.sessionManager = new SessionManager(storageConfig)
 		this.currentSession = null
 
 		// Get color scheme from options
@@ -57,6 +58,18 @@ export class CliRepl {
 			historySize: 100,
 			completer: this.completer.bind(this),
 		})
+	}
+
+	private getStorageConfigFromManager(configManager: CliConfigManager): { sessionDirectory?: string } {
+		try {
+			const config = configManager.getConfiguration()
+			return {
+				sessionDirectory: (config as any).sessionDirectory,
+			}
+		} catch {
+			// Configuration not loaded yet, return empty config
+			return {}
+		}
 	}
 
 	async start(): Promise<void> {

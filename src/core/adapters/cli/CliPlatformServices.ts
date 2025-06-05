@@ -13,6 +13,8 @@ import {
 	InputBoxOptions,
 	QuickPickOptions,
 } from "../../interfaces/platform"
+import { IEditorProvider } from "../interfaces/IEditorProvider"
+import { CLIEditorProvider } from "./CLIEditorProvider"
 
 /**
  * CLI implementation of configuration interface
@@ -302,6 +304,7 @@ export class CliPlatformServices implements IPlatformServices {
 	public readonly clipboard: IClipboard
 	public readonly commandExecutor: ICommandExecutor
 	public readonly fileSystem: IFileSystem
+	public readonly editorProvider: IEditorProvider
 
 	constructor(extensionName: string = "roo-cline", configPath?: string) {
 		this.configuration = new CliConfiguration(extensionName, configPath)
@@ -309,5 +312,6 @@ export class CliPlatformServices implements IPlatformServices {
 		this.clipboard = new CliClipboard()
 		this.commandExecutor = new CliCommandExecutor()
 		this.fileSystem = new CliFileSystem()
+		this.editorProvider = new CLIEditorProvider()
 	}
 }

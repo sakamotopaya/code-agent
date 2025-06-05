@@ -12,6 +12,8 @@ import {
 	InputBoxOptions,
 	QuickPickOptions,
 } from "../../interfaces/platform"
+import { IEditorProvider } from "../interfaces/IEditorProvider"
+import { VSCodeEditorProvider } from "./VSCodeEditorProvider"
 
 /**
  * VSCode implementation of configuration interface
@@ -183,6 +185,7 @@ export class VsCodePlatformServices implements IPlatformServices {
 	public readonly clipboard: IClipboard
 	public readonly commandExecutor: ICommandExecutor
 	public readonly fileSystem: IFileSystem
+	public readonly editorProvider: IEditorProvider
 
 	constructor(extensionName: string = "roo-cline") {
 		this.configuration = new VsCodeConfiguration(extensionName)
@@ -190,6 +193,7 @@ export class VsCodePlatformServices implements IPlatformServices {
 		this.clipboard = new VsCodeClipboard()
 		this.commandExecutor = new VsCodeCommandExecutor()
 		this.fileSystem = new VsCodeFileSystem()
+		this.editorProvider = new VSCodeEditorProvider()
 	}
 
 	dispose(): void {
