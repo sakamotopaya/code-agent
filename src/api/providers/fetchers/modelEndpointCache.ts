@@ -17,13 +17,35 @@ const getCacheKey = (router: RouterName, modelId: string) => sanitize(`${router}
 
 async function writeModelEndpoints(key: string, data: ModelRecord) {
 	const filename = `${key}_endpoints.json`
-	const cacheDir = await getCacheDirectoryPath(ContextProxy.instance.globalStorageUri.fsPath)
+	let globalStoragePath: string
+
+	try {
+		// Try to use VSCode context if available
+		globalStoragePath = ContextProxy.instance.globalStorageUri.fsPath
+	} catch (error) {
+		// Fallback for CLI usage
+		const os = require("os")
+		globalStoragePath = path.join(os.homedir(), ".roo-code")
+	}
+
+	const cacheDir = await getCacheDirectoryPath(globalStoragePath)
 	await fs.writeFile(path.join(cacheDir, filename), JSON.stringify(data, null, 2))
 }
 
 async function readModelEndpoints(key: string): Promise<ModelRecord | undefined> {
 	const filename = `${key}_endpoints.json`
-	const cacheDir = await getCacheDirectoryPath(ContextProxy.instance.globalStorageUri.fsPath)
+	let globalStoragePath: string
+
+	try {
+		// Try to use VSCode context if available
+		globalStoragePath = ContextProxy.instance.globalStorageUri.fsPath
+	} catch (error) {
+		// Fallback for CLI usage
+		const os = require("os")
+		globalStoragePath = path.join(os.homedir(), ".roo-code")
+	}
+
+	const cacheDir = await getCacheDirectoryPath(globalStoragePath)
 	const filePath = path.join(cacheDir, filename)
 	const exists = await fileExistsAtPath(filePath)
 	return exists ? JSON.parse(await fs.readFile(filePath, "utf8")) : undefined

@@ -115,12 +115,21 @@ async function main() {
 	 */
 	const cliConfig = {
 		...buildOptions,
-		entryPoints: ["cli/index.ts"],
+		entryPoints: ["cli/cli-entry.ts"],
 		outfile: "dist/cli/index.js",
 		banner: {
 			js: '#!/usr/bin/env node'
 		},
-		external: ["vscode"]
+		alias: {
+			"vscode": path.resolve(__dirname, "cli/__mocks__/vscode.js"),
+			"@roo-code/telemetry": path.resolve(__dirname, "cli/__mocks__/@roo-code/telemetry.js")
+		},
+		external: [
+			"@roo-code/telemetry"
+		],
+		define: {
+			'process.env.VSCODE_CONTEXT': 'false'
+		}
 	}
 
 	const [extensionCtx, workerCtx, cliCtx] = await Promise.all([

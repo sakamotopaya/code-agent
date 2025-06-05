@@ -19,7 +19,7 @@ import {
 	type HistoryItem,
 	TelemetryEventName,
 } from "@roo-code/types"
-import { TelemetryService } from "@roo-code/telemetry"
+import { ITelemetryService } from "../interfaces/ITelemetryService"
 
 // api
 import { ApiHandler, buildApiHandler } from "../../api"
@@ -113,6 +113,7 @@ export type TaskOptions = {
 	fileSystem?: IFileSystem
 	terminal?: ITerminal
 	browser?: IBrowser
+	telemetry?: ITelemetryService
 	globalStoragePath?: string
 	workspacePath?: string
 }
@@ -171,6 +172,7 @@ export class Task extends EventEmitter<ClineEvents> {
 	private fileSystem?: IFileSystem
 	private terminal?: ITerminal
 	private browser?: IBrowser
+	private telemetryService?: ITelemetryService
 
 	// Modular components
 	private messaging: TaskMessaging
@@ -283,6 +285,46 @@ export class Task extends EventEmitter<ClineEvents> {
 		return this.browser
 	}
 
+	get telemetry(): ITelemetryService {
+		if (!this.telemetryService) {
+			// Fallback to global telemetry service for compatibility
+			try {
+				const { TelemetryService } = require("@roo-code/telemetry")
+				return TelemetryService.instance
+			} catch (error) {
+				// If telemetry package is not available, return a no-op service
+				return {
+					register: () => {},
+					setProvider: () => {},
+					updateTelemetryState: () => {},
+					captureEvent: () => {},
+					captureTaskCreated: () => {},
+					captureTaskRestarted: () => {},
+					captureTaskCompleted: () => {},
+					captureConversationMessage: () => {},
+					captureLlmCompletion: () => {},
+					captureModeSwitch: () => {},
+					captureToolUsage: () => {},
+					captureCheckpointCreated: () => {},
+					captureCheckpointDiffed: () => {},
+					captureCheckpointRestored: () => {},
+					captureContextCondensed: () => {},
+					captureSlidingWindowTruncation: () => {},
+					captureCodeActionUsed: () => {},
+					capturePromptEnhanced: () => {},
+					captureSchemaValidationError: () => {},
+					captureDiffApplicationError: () => {},
+					captureShellIntegrationError: () => {},
+					captureConsecutiveMistakeError: () => {},
+					captureTitleButtonClicked: () => {},
+					isTelemetryEnabled: () => false,
+					shutdown: async () => {},
+				} as ITelemetryService
+			}
+		}
+		return this.telemetryService
+	}
+
 	// Messaging compatibility
 	get lastMessageTs() {
 		return this.messaging.lastMessageTs
@@ -309,6 +351,7 @@ export class Task extends EventEmitter<ClineEvents> {
 		fileSystem,
 		terminal,
 		browser,
+		telemetry,
 		globalStoragePath,
 		workspacePath,
 	}: TaskOptions) {
@@ -329,6 +372,7 @@ export class Task extends EventEmitter<ClineEvents> {
 		this.fileSystem = fileSystem
 		this.terminal = terminal
 		this.browser = browser
+		this.telemetryService = telemetry
 
 		// Set up provider and storage
 		if (provider) {
@@ -385,6 +429,7 @@ export class Task extends EventEmitter<ClineEvents> {
 			this.instanceId,
 			this.api,
 			this.messaging,
+			this.telemetry,
 			this.providerRef,
 			(taskId, tokenUsage) => this.emit("taskTokenUsageUpdated", taskId, tokenUsage),
 			(taskId, tool, error) => this.emit("taskToolFailed", taskId, tool, error),
@@ -412,9 +457,9 @@ export class Task extends EventEmitter<ClineEvents> {
 		this.parentTask = parentTask
 
 		if (historyItem) {
-			TelemetryService.instance.captureTaskRestarted(this.taskId)
+			this.telemetry.captureTaskRestarted(this.taskId)
 		} else {
-			TelemetryService.instance.captureTaskCreated(this.taskId)
+			this.telemetry.captureTaskCreated(this.taskId)
 		}
 
 		this.diffStrategy = new MultiSearchReplaceDiffStrategy(this.fuzzyMatchThreshold)
@@ -662,7 +707,7 @@ export class Task extends EventEmitter<ClineEvents> {
 				)
 
 				await this.say("user_feedback", text, images)
-				TelemetryService.instance.captureConsecutiveMistakeError(this.taskId)
+				this.telemetry.captureConsecutiveMistakeError(this.taskId)
 			}
 
 			this.consecutiveMistakeCount = 0

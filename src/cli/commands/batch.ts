@@ -47,6 +47,7 @@ export class BatchProcessor {
 				fileSystem: adapters.fileSystem,
 				terminal: adapters.terminal,
 				browser: adapters.browser,
+				telemetry: adapters.telemetry,
 				workspacePath: this.options.cwd,
 				globalStoragePath: process.env.HOME ? `${process.env.HOME}/.roo-code` : "/tmp/.roo-code",
 			})

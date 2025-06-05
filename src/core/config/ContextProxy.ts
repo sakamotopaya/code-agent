@@ -1,4 +1,3 @@
-import * as vscode from "vscode"
 import { ZodError } from "zod"
 
 import {
@@ -15,9 +14,26 @@ import {
 	globalSettingsSchema,
 	isSecretStateKey,
 } from "@roo-code/types"
-import { TelemetryService } from "@roo-code/telemetry"
 
 import { logger } from "../../utils/logging"
+import { getPlatformServicesSync, isVsCodeContext } from "../adapters/PlatformServiceFactory"
+
+// Dynamic imports for VSCode-specific functionality
+function getVsCodeModule() {
+	try {
+		return require("vscode")
+	} catch {
+		return null
+	}
+}
+
+function getTelemetryService() {
+	try {
+		return require("@roo-code/telemetry").TelemetryService
+	} catch {
+		return null
+	}
+}
 
 type GlobalStateKey = keyof GlobalState
 type SecretStateKey = keyof SecretState
@@ -34,14 +50,16 @@ const globalSettingsExportSchema = globalSettingsSchema.omit({
 })
 
 export class ContextProxy {
-	private readonly originalContext: vscode.ExtensionContext
+	private readonly originalContext: any // VSCode ExtensionContext or null for CLI
+	private readonly platformServices: any
 
 	private stateCache: GlobalState
 	private secretCache: SecretState
 	private _isInitialized = false
 
-	constructor(context: vscode.ExtensionContext) {
-		this.originalContext = context
+	constructor(context?: any) {
+		this.originalContext = context || null
+		this.platformServices = isVsCodeContext() ? null : getPlatformServicesSync()
 		this.stateCache = {}
 		this.secretCache = {}
 		this._isInitialized = false
@@ -107,7 +125,14 @@ export class ContextProxy {
 	getGlobalState<K extends GlobalStateKey>(key: K, defaultValue: GlobalState[K]): GlobalState[K]
 	getGlobalState<K extends GlobalStateKey>(key: K, defaultValue?: GlobalState[K]): GlobalState[K] {
 		if (isPassThroughStateKey(key)) {
-			const value = this.originalContext.globalState.get<GlobalState[K]>(key)
+			let value: GlobalState[K] | undefined
+
+			if (isVsCodeContext() && this.originalContext) {
+				value = this.originalContext.globalState.get(key)
+			} else if (this.platformServices) {
+				// CLI mode - use platform services configuration
+				value = this.platformServices.configuration.get(key) as GlobalState[K]
+			}
 			return value === undefined || value === null ? defaultValue : value
 		}
 
@@ -115,13 +140,22 @@ export class ContextProxy {
 		return value !== undefined ? value : defaultValue
 	}
 
-	updateGlobalState<K extends GlobalStateKey>(key: K, value: GlobalState[K]) {
+	async updateGlobalState<K extends GlobalStateKey>(key: K, value: GlobalState[K]) {
 		if (isPassThroughStateKey(key)) {
-			return this.originalContext.globalState.update(key, value)
+			if (isVsCodeContext() && this.originalContext) {
+				return this.originalContext.globalState.update(key, value)
+			} else if (this.platformServices) {
+				return this.platformServices.configuration.set(key, value)
+			}
 		}
 
 		this.stateCache[key] = value
-		return this.originalContext.globalState.update(key, value)
+
+		if (isVsCodeContext() && this.originalContext) {
+			return this.originalContext.globalState.update(key, value)
+		} else if (this.platformServices) {
+			return this.platformServices.configuration.set(key, value)
+		}
 	}
 
 	private getAllGlobalState(): GlobalState {
@@ -137,14 +171,20 @@ export class ContextProxy {
 		return this.secretCache[key]
 	}
 
-	storeSecret(key: SecretStateKey, value?: string) {
+	async storeSecret(key: SecretStateKey, value?: string) {
 		// Update cache.
 		this.secretCache[key] = value
 
-		// Write directly to context.
-		return value === undefined
-			? this.originalContext.secrets.delete(key)
-			: this.originalContext.secrets.store(key, value)
+		// Write directly to context or platform storage
+		if (isVsCodeContext() && this.originalContext) {
+			return value === undefined
+				? this.originalContext.secrets.delete(key)
+				: this.originalContext.secrets.store(key, value)
+		} else if (this.platformServices) {
+			// In CLI mode, store secrets as regular config (not ideal but functional)
+			// TODO: Implement proper secret storage for CLI
+			return this.platformServices.configuration.set(`secret:${key}`, value)
+		}
 	}
 
 	private getAllSecretState(): SecretState {
@@ -162,7 +202,10 @@ export class ContextProxy {
 			return globalSettingsSchema.parse(values)
 		} catch (error) {
 			if (error instanceof ZodError) {
-				TelemetryService.instance.captureSchemaValidationError({ schemaName: "GlobalSettings", error })
+				const TelemetryService = getTelemetryService()
+				if (TelemetryService?.instance) {
+					TelemetryService.instance.captureSchemaValidationError({ schemaName: "GlobalSettings", error })
+				}
 			}
 
 			return GLOBAL_SETTINGS_KEYS.reduce((acc, key) => ({ ...acc, [key]: values[key] }), {} as GlobalSettings)
@@ -180,7 +223,10 @@ export class ContextProxy {
 			return providerSettingsSchema.parse(values)
 		} catch (error) {
 			if (error instanceof ZodError) {
-				TelemetryService.instance.captureSchemaValidationError({ schemaName: "ProviderSettings", error })
+				const TelemetryService = getTelemetryService()
+				if (TelemetryService?.instance) {
+					TelemetryService.instance.captureSchemaValidationError({ schemaName: "ProviderSettings", error })
+				}
 			}
 
 			return PROVIDER_SETTINGS_KEYS.reduce((acc, key) => ({ ...acc, [key]: values[key] }), {} as ProviderSettings)
@@ -248,7 +294,10 @@ export class ContextProxy {
 			return Object.fromEntries(Object.entries(globalSettings).filter(([_, value]) => value !== undefined))
 		} catch (error) {
 			if (error instanceof ZodError) {
-				TelemetryService.instance.captureSchemaValidationError({ schemaName: "GlobalSettings", error })
+				const TelemetryService = getTelemetryService()
+				if (TelemetryService?.instance) {
+					TelemetryService.instance.captureSchemaValidationError({ schemaName: "GlobalSettings", error })
+				}
 			}
 
 			return undefined
@@ -287,7 +336,7 @@ export class ContextProxy {
 		return this._instance
 	}
 
-	static async getInstance(context: vscode.ExtensionContext) {
+	static async getInstance(context?: any) {
 		if (this._instance && this._instance.isInitialized) {
 			return this._instance
 		}

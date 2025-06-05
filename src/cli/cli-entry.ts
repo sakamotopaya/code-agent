@@ -4,14 +4,21 @@ import { BatchProcessor } from "./commands/batch"
 import { showHelp } from "./commands/help"
 import { SessionCommands } from "./commands/session-commands"
 import { registerMcpCommands } from "./commands/mcp-commands"
+import { registerExamplesCommands } from "./commands/ExamplesCommand"
 import { showBanner } from "./utils/banner"
-import { validateCliAdapterOptions } from "../core/adapters/cli/index"
 import { CliConfigManager } from "./config/CliConfigManager"
 import { validateBrowserViewport, validateTimeout } from "./utils/browser-config"
 import { isValidFormat, getAvailableFormatsWithDescriptions } from "./utils/format-detection"
+import { PerformanceMonitoringService } from "./optimization/PerformanceMonitoringService"
+import { StartupOptimizer } from "./optimization/StartupOptimizer"
+import { MemoryOptimizer } from "./optimization/MemoryOptimizer"
+import { PerformanceConfigManager } from "./config/performance-config"
 import { PlatformServiceFactory, PlatformContext } from "../core/adapters/PlatformServiceFactory"
 import chalk from "chalk"
 import * as fs from "fs"
+
+// Set environment flag to indicate CLI context
+process.env.VSCODE_CONTEXT = "false"
 
 const packageJson = require("../package.json")
 
@@ -164,6 +171,23 @@ program
 		// Initialize platform services for CLI context
 		await PlatformServiceFactory.initialize(PlatformContext.CLI, "roo-cline", options.config)
 
+		// Initialize performance monitoring and optimization
+		const performanceMonitor = new PerformanceMonitoringService()
+		const performanceConfig = new PerformanceConfigManager("standard")
+		const startupOptimizer = new StartupOptimizer(performanceMonitor)
+		const memoryOptimizer = new MemoryOptimizer(undefined, performanceMonitor)
+
+		// Start performance monitoring
+		const cliStartupTimer = performanceMonitor.startTimer("cli-startup")
+		memoryOptimizer.startMonitoring()
+
+		// Optimize startup
+		try {
+			await startupOptimizer.optimizeStartup()
+		} catch (error) {
+			console.warn("Startup optimization failed:", error)
+		}
+
 		// Handle MCP auto-connect logic: default to true, but allow explicit override
 		if (options.mcpAutoConnect === undefined && options.noMcpAutoConnect === undefined) {
 			options.mcpAutoConnect = true // Default behavior
@@ -225,12 +249,6 @@ program
 
 			// Load configuration
 			const config = await configManager.loadConfiguration()
-
-			// Validate CLI adapter options with the loaded configuration
-			validateCliAdapterOptions({
-				workspaceRoot: options.cwd,
-				verbose: options.verbose,
-			})
 
 			// Show banner if in interactive mode
 			if (!options.batch) {
@@ -306,6 +324,23 @@ program
 				const repl = new CliRepl(options, configManager)
 				await repl.start()
 			}
+
+			// Stop performance monitoring and report if verbose
+			const startupDuration = cliStartupTimer.stop()
+			memoryOptimizer.stopMonitoring()
+
+			if (options.verbose) {
+				console.log(chalk.gray(`CLI startup completed in ${Math.round(startupDuration)}ms`))
+
+				const performanceReport = performanceMonitor.generateReport()
+				if (performanceReport.summary.totalOperations > 0) {
+					console.log(
+						chalk.gray(
+							`Performance: ${performanceReport.summary.totalOperations} operations, avg ${Math.round(performanceReport.summary.averageExecutionTime)}ms`,
+						),
+					)
+				}
+			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			if (options.color) {
@@ -318,6 +353,13 @@ program
 			if (error instanceof Error && error.message.includes("Invalid")) {
 				console.error()
 				console.error("Use --help for usage information")
+			}
+
+			// Clean up performance monitoring
+			try {
+				memoryOptimizer.stopMonitoring()
+			} catch (cleanupError) {
+				// Ignore cleanup errors
 			}
 
 			process.exit(1)
@@ -441,6 +483,16 @@ try {
 	)
 }
 
+// Register examples commands
+try {
+	registerExamplesCommands(program)
+} catch (error) {
+	console.warn(
+		chalk.yellow("Warning: Examples functionality not available:"),
+		error instanceof Error ? error.message : String(error),
+	)
+}
+
 // Enhanced error handling for unknown commands
 program.on("command:*", function (operands) {
 	console.error(chalk.red(`❌ Unknown command: ${operands[0]}`))
@@ -448,77 +500,5 @@ program.on("command:*", function (operands) {
 	process.exit(1)
 })
 
-// Custom help event to show our enhanced help
-program.on("--help", () => {
-	console.log()
-	console.log("Examples:")
-	console.log("  $ roo-cli                                    # Start interactive mode")
-	console.log("  $ roo-cli --cwd /path/to/project            # Start in specific directory")
-	console.log('  $ roo-cli --batch "Create a hello function" # Run single task')
-	console.log("  $ roo-cli --batch commands.json             # Run batch file")
-	console.log("  $ roo-cli --stdin --yes                     # Read from stdin, auto-confirm")
-	console.log("  $ echo 'npm test' | roo-cli --stdin         # Pipe commands")
-	console.log("  $ roo-cli --batch script.yaml --parallel    # Run batch in parallel")
-	console.log("  $ roo-cli --batch tasks.txt --dry-run       # Preview batch execution")
-	console.log("  $ roo-cli --model gpt-4                     # Use specific model")
-	console.log("  $ roo-cli --mode debug                      # Start in debug mode")
-	console.log("  $ roo-cli --format json                     # Output as JSON")
-	console.log("  $ roo-cli --format yaml --output result.yml # Save as YAML file")
-	console.log("  $ ROO_OUTPUT_FORMAT=json roo-cli            # Use environment variable")
-	console.log("  $ roo-cli --no-headless                     # Run browser in headed mode")
-	console.log("  $ roo-cli --browser-viewport 1280x720      # Set browser viewport")
-	console.log("  $ roo-cli --screenshot-output ./screenshots # Set screenshot directory")
-	console.log("  $ roo-cli config --show                     # Show current configuration")
-	console.log("  $ roo-cli config --generate ~/.roo-cli/config.json")
-	console.log("  $ roo-cli session list                      # List all sessions")
-	console.log("  $ roo-cli session save 'My Project'         # Save current session")
-	console.log("  $ roo-cli session load <session-id>         # Load a session")
-	console.log("  $ roo-cli session cleanup --max-age 30      # Cleanup old sessions")
-	console.log("  $ roo-cli mcp list                          # List MCP servers")
-	console.log("  $ roo-cli mcp connect github-server         # Connect to an MCP server")
-	console.log("  $ roo-cli mcp tools                         # List available MCP tools")
-	console.log("  $ roo-cli mcp execute github-server get_repo owner=user repo=project")
-	console.log("  $ roo-cli mcp config init                   # Initialize MCP configuration")
-	console.log()
-	console.log("Output Format Options:")
-	console.log("  --format json         Structured JSON output")
-	console.log("  --format plain        Human-readable plain text (default)")
-	console.log("  --format yaml         YAML configuration format")
-	console.log("  --format csv          Comma-separated values (tabular data)")
-	console.log("  --format markdown     Markdown documentation format")
-	console.log("  --output <file>       Write output to file (format auto-detected)")
-	console.log("  ROO_OUTPUT_FORMAT     Environment variable for default format")
-	console.log()
-	console.log("Non-Interactive Mode Options:")
-	console.log("  --batch <file|task>   Run batch file or single task")
-	console.log("  --stdin               Read commands from stdin")
-	console.log("  --yes                 Assume yes for all prompts")
-	console.log("  --no                  Assume no for all prompts")
-	console.log("  --timeout <ms>        Global timeout for operations")
-	console.log("  --parallel            Execute batch commands in parallel")
-	console.log("  --continue-on-error   Continue execution on command failure")
-	console.log("  --dry-run             Show what would be executed")
-	console.log("  --quiet               Suppress non-essential output")
-	console.log()
-	console.log("Browser Options:")
-	console.log("  --headless/--no-headless     Run browser in headless or headed mode")
-	console.log("  --browser-viewport <size>    Set browser viewport (e.g., 1920x1080)")
-	console.log("  --browser-timeout <ms>       Set browser timeout in milliseconds")
-	console.log("  --screenshot-output <dir>    Directory for saving screenshots")
-	console.log("  --user-agent <agent>         Custom user agent string")
-	console.log()
-	console.log("MCP (Model Context Protocol) Options:")
-	console.log("  --mcp-config <path>          Path to MCP configuration file")
-	console.log("  --mcp-server <id>            MCP server IDs to connect to (repeatable)")
-	console.log("  --mcp-timeout <ms>           Timeout for MCP operations")
-	console.log("  --mcp-retries <count>        Number of retry attempts for MCP operations")
-	console.log("  --mcp-auto-connect           Automatically connect to enabled servers")
-	console.log("  --mcp-log-level <level>      MCP logging level (error, warn, info, debug)")
-	console.log()
-	console.log("For more information, visit: https://docs.roocode.com/cli")
-})
-
 // Parse command line arguments
 program.parse()
-
-export type { CliOptions }

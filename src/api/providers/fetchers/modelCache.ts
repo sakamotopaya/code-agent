@@ -3,7 +3,6 @@ import fs from "fs/promises"
 
 import NodeCache from "node-cache"
 
-import { ContextProxy } from "../../../core/config/ContextProxy"
 import { getCacheDirectoryPath } from "../../../utils/storage"
 import { RouterName, ModelRecord } from "../../../shared/api"
 import { fileExistsAtPath } from "../../../utils/fs"
@@ -18,13 +17,37 @@ const memoryCache = new NodeCache({ stdTTL: 5 * 60, checkperiod: 5 * 60 })
 
 async function writeModels(router: RouterName, data: ModelRecord) {
 	const filename = `${router}_models.json`
-	const cacheDir = await getCacheDirectoryPath(ContextProxy.instance.globalStorageUri.fsPath)
+	let globalStoragePath: string
+
+	try {
+		// Try to use VSCode context if available
+		const { ContextProxy } = require("../../../core/config/ContextProxy")
+		globalStoragePath = ContextProxy.instance.globalStorageUri.fsPath
+	} catch (error) {
+		// Fallback for CLI usage
+		const os = require("os")
+		globalStoragePath = path.join(os.homedir(), ".roo-code")
+	}
+
+	const cacheDir = await getCacheDirectoryPath(globalStoragePath)
 	await fs.writeFile(path.join(cacheDir, filename), JSON.stringify(data))
 }
 
 async function readModels(router: RouterName): Promise<ModelRecord | undefined> {
 	const filename = `${router}_models.json`
-	const cacheDir = await getCacheDirectoryPath(ContextProxy.instance.globalStorageUri.fsPath)
+	let globalStoragePath: string
+
+	try {
+		// Try to use VSCode context if available
+		const { ContextProxy } = require("../../../core/config/ContextProxy")
+		globalStoragePath = ContextProxy.instance.globalStorageUri.fsPath
+	} catch (error) {
+		// Fallback for CLI usage
+		const os = require("os")
+		globalStoragePath = path.join(os.homedir(), ".roo-code")
+	}
+
+	const cacheDir = await getCacheDirectoryPath(globalStoragePath)
 	const filePath = path.join(cacheDir, filename)
 	const exists = await fileExistsAtPath(filePath)
 	return exists ? JSON.parse(await fs.readFile(filePath, "utf8")) : undefined
