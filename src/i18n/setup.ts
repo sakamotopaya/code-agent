@@ -71,7 +71,7 @@ if (!isTestEnv) {
 				})
 			})
 
-			console.log(`Loaded translations for languages: ${Object.keys(translations).join(", ")}`)
+			// Debug: Loaded translations (only log in verbose mode)
 		} catch (dirError) {
 			console.error(`Error processing directory ${localesDir}:`, dirError)
 		}
