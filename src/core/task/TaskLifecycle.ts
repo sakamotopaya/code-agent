@@ -75,7 +75,7 @@ export class TaskLifecycle {
 					},
 					...imageBlocks,
 				])
-				console.log(`[TaskLifecycle] initiateTaskLoop completed successfully`)
+				// Debug: TaskLifecycle completed successfully (only log in verbose mode)
 			} catch (error) {
 				console.error(`[TaskLifecycle] Error in initiateTaskLoop:`, error)
 				throw error

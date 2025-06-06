@@ -209,21 +209,21 @@ export class BatchProcessor {
 				reject(new Error(`Tool ${tool} failed: ${error}`))
 			})
 
-			console.log(chalk.gray("[BatchProcessor] Event handlers set up, waiting for task execution..."))
-			console.log(chalk.gray(`[BatchProcessor] Task ID: ${task.taskId}`))
-			console.log(chalk.gray(`[BatchProcessor] Task initialized: ${task.isInitialized}`))
-			console.log(chalk.gray(`[BatchProcessor] Task aborted: ${task.abort}`))
+			this.logDebug("[BatchProcessor] Event handlers set up, waiting for task execution...")
+			this.logDebug(`[BatchProcessor] Task ID: ${task.taskId}`)
+			this.logDebug(`[BatchProcessor] Task initialized: ${task.isInitialized}`)
+			this.logDebug(`[BatchProcessor] Task aborted: ${task.abort}`)
 
 			// Wait for the task promise and handle errors
 			taskPromise.catch((error) => {
-				console.log(chalk.red(`[BatchProcessor] Task promise rejected:`, error))
+				this.logDebug(`[BatchProcessor] Task promise rejected:`, error)
 				reject(error)
 			})
 
 			// Add a timeout to prevent hanging - increased for complex tasks
 			const timeoutMs = 60000 // 60 seconds
 			const timeout = setTimeout(() => {
-				console.log(chalk.red(`[BatchProcessor] Task execution timeout after ${timeoutMs}ms`))
+				this.logDebug(`[BatchProcessor] Task execution timeout after ${timeoutMs}ms`)
 				reject(new Error(`Task execution timeout after ${timeoutMs}ms`))
 			}, timeoutMs)
 

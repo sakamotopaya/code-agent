@@ -7,11 +7,34 @@ export class CLILogger {
 	private isVerbose: boolean
 	private isQuiet: boolean
 	private useColor: boolean
+	private showThinking: boolean
 
-	constructor(verbose: boolean = false, quiet: boolean = false, useColor: boolean = true) {
+	// State tracking for streaming content filtering
+	private inThinkingSection: boolean = false
+	private inSystemTag: boolean = false
+	private currentTagBuffer: string = ""
+	private systemTags = new Set([
+		"attempt_completion",
+		"result",
+		"read_file",
+		"write_to_file",
+		"args",
+		"path",
+		"content",
+		"line_count",
+		"tool_use",
+	])
+
+	constructor(
+		verbose: boolean = false,
+		quiet: boolean = false,
+		useColor: boolean = true,
+		showThinking: boolean = false,
+	) {
 		this.isVerbose = verbose
 		this.isQuiet = quiet
 		this.useColor = useColor
+		this.showThinking = showThinking
 	}
 
 	/**
@@ -105,12 +128,55 @@ export class CLILogger {
 	}
 
 	/**
-	 * Stream LLM output with proper formatting
+	 * Stream LLM output with state-based filtering for CLI mode
 	 */
 	streamLLMOutput(content: string): void {
-		// Don't format when streaming - just output raw content
-		// This preserves spaces and natural formatting
-		process.stdout.write(content)
+		let i = 0
+		let output = ""
+
+		while (i < content.length) {
+			const char = content[i]
+
+			// Check for start of XML tag
+			if (char === "<" && !this.inSystemTag) {
+				// Look ahead to see if this is a system tag
+				const remainingContent = content.slice(i)
+				const tagMatch = remainingContent.match(/^<(\/?[a-zA-Z_][a-zA-Z0-9_-]*)[^>]*>/)
+
+				if (tagMatch) {
+					const tagName = tagMatch[1].startsWith("/") ? tagMatch[1].slice(1) : tagMatch[1]
+					const isClosingTag = tagMatch[1].startsWith("/")
+					const isSystemTag = this.systemTags.has(tagName)
+
+					if (tagName === "thinking") {
+						if (isClosingTag) {
+							this.inThinkingSection = false
+						} else {
+							this.inThinkingSection = true
+						}
+						// Skip the entire tag
+						i += tagMatch[0].length
+						continue
+					} else if (isSystemTag) {
+						// Skip system tags entirely
+						i += tagMatch[0].length
+						continue
+					}
+				}
+			}
+
+			// Only output if we're not in a thinking section (unless thinking is enabled)
+			// and not in a system tag
+			if (!this.inThinkingSection || this.showThinking) {
+				output += char
+			}
+
+			i++
+		}
+
+		if (output) {
+			process.stdout.write(output)
+		}
 	}
 
 	/**
@@ -125,8 +191,13 @@ export class CLILogger {
 	/**
 	 * Create a new logger with different settings
 	 */
-	withSettings(verbose?: boolean, quiet?: boolean, useColor?: boolean): CLILogger {
-		return new CLILogger(verbose ?? this.isVerbose, quiet ?? this.isQuiet, useColor ?? this.useColor)
+	withSettings(verbose?: boolean, quiet?: boolean, useColor?: boolean, showThinking?: boolean): CLILogger {
+		return new CLILogger(
+			verbose ?? this.isVerbose,
+			quiet ?? this.isQuiet,
+			useColor ?? this.useColor,
+			showThinking ?? this.showThinking,
+		)
 	}
 }
 
@@ -142,8 +213,9 @@ export function initializeCLILogger(
 	verbose: boolean = false,
 	quiet: boolean = false,
 	useColor: boolean = true,
+	showThinking: boolean = false,
 ): CLILogger {
-	globalCLILogger = new CLILogger(verbose, quiet, useColor)
+	globalCLILogger = new CLILogger(verbose, quiet, useColor, showThinking)
 	return globalCLILogger
 }
 

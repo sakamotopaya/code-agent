@@ -182,7 +182,7 @@ export class TaskApiHandler {
 				}
 			}
 		} else {
-			console.log(`[TaskApiHandler.attemptApiRequest] Skipping condensing configuration in CLI mode`)
+			this.log(`[TaskApiHandler.attemptApiRequest] Skipping condensing configuration in CLI mode`)
 		}
 
 		let rateLimitDelay = 0
@@ -195,7 +195,7 @@ export class TaskApiHandler {
 			rateLimitDelay = Math.ceil(Math.max(0, rateLimit * 1000 - timeSinceLastRequest) / 1000)
 		}
 
-		console.log(`[TaskApiHandler.attemptApiRequest] Rate limit delay: ${rateLimitDelay}`)
+		this.log(`[TaskApiHandler.attemptApiRequest] Rate limit delay: ${rateLimitDelay}`)
 
 		// Only show rate limiting message if we're not retrying
 		if (rateLimitDelay > 0 && retryAttempt === 0) {
@@ -309,22 +309,22 @@ export class TaskApiHandler {
 			taskId: this.taskId,
 		}
 
-		console.log(`[TaskApiHandler] Creating API message with metadata:`, metadata)
-		console.log(`[TaskApiHandler] System prompt length: ${systemPrompt.length}`)
-		console.log(`[TaskApiHandler] Conversation history length: ${cleanConversationHistory.length}`)
-		console.log(`[TaskApiHandler] API handler model info:`, this.api.getModel()?.info)
+		this.log(`[TaskApiHandler] Creating API message with metadata:`, metadata)
+		this.log(`[TaskApiHandler] System prompt length: ${systemPrompt.length}`)
+		this.log(`[TaskApiHandler] Conversation history length: ${cleanConversationHistory.length}`)
+		this.log(`[TaskApiHandler] API handler model info:`, this.api.getModel()?.info)
 
 		const stream = this.api.createMessage(systemPrompt, cleanConversationHistory, metadata)
-		console.log(`[TaskApiHandler] API stream created successfully`)
+		this.log(`[TaskApiHandler] API stream created successfully`)
 
 		const iterator = stream[Symbol.asyncIterator]()
-		console.log(`[TaskApiHandler] Stream iterator created`)
+		this.log(`[TaskApiHandler] Stream iterator created`)
 
 		try {
 			this.isWaitingForFirstChunk = true
-			console.log(`[TaskApiHandler] Waiting for first chunk...`)
+			this.log(`[TaskApiHandler] Waiting for first chunk...`)
 			const firstChunk = await iterator.next()
-			console.log(`[TaskApiHandler] First chunk received:`, firstChunk.value?.type)
+			this.log(`[TaskApiHandler] First chunk received:`, firstChunk.value?.type)
 			yield firstChunk.value
 			this.isWaitingForFirstChunk = false
 		} catch (error) {

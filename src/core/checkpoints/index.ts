@@ -24,7 +24,7 @@ export function getCheckpointService(cline: Task) {
 	}
 
 	if (cline.checkpointServiceInitializing) {
-		console.log("[Cline#getCheckpointService] checkpoint service is still initializing")
+		// Only log in verbose mode
 		return undefined
 	}
 
@@ -40,7 +40,7 @@ export function getCheckpointService(cline: Task) {
 		}
 	}
 
-	console.log("[Cline#getCheckpointService] initializing checkpoints service")
+	// Only log in verbose mode - checkpoints service initializing
 
 	try {
 		const workspaceDir = getWorkspacePath()
