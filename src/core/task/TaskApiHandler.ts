@@ -552,6 +552,12 @@ export class TaskApiHandler {
 			this.presentAssistantMessageHasPendingUpdates = false
 
 			this.log(`[TaskApiHandler] About to make API request...`)
+
+			// Reset tool display tracking for new request
+			if (this.cliMode) {
+				getCLILogger().resetToolDisplay()
+			}
+
 			const stream = this.attemptApiRequest(0, getSystemPrompt, getTokenUsage, abort)
 			this.log(`[TaskApiHandler] API request stream created`)
 			let assistantMessage = ""

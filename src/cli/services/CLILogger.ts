@@ -13,6 +13,7 @@ export class CLILogger {
 	private inThinkingSection: boolean = false
 	private inSystemTag: boolean = false
 	private currentTagBuffer: string = ""
+	private displayedToolNames = new Set<string>() // Track which tool names we've already displayed
 	private systemTags = new Set([
 		"attempt_completion",
 		"result",
@@ -23,6 +24,27 @@ export class CLILogger {
 		"content",
 		"line_count",
 		"tool_use",
+	])
+
+	// Comprehensive list of all possible tool names
+	private toolNames = new Set([
+		"read_file",
+		"write_to_file",
+		"apply_diff",
+		"search_files",
+		"list_files",
+		"list_code_definition_names",
+		"execute_command",
+		"browser_action",
+		"insert_content",
+		"search_and_replace",
+		"ask_followup_question",
+		"attempt_completion",
+		"use_mcp_tool",
+		"access_mcp_resource",
+		"switch_mode",
+		"new_task",
+		"fetch_instructions",
 	])
 
 	constructor(
@@ -131,6 +153,11 @@ export class CLILogger {
 	 * Stream LLM output with state-based filtering for CLI mode
 	 */
 	streamLLMOutput(content: string): void {
+		// Debug output if verbose
+		if (this.isVerbose) {
+			console.error(`[CLILogger.streamLLMOutput] Processing content: ${content.substring(0, 100)}...`)
+		}
+
 		let i = 0
 		let output = ""
 
@@ -139,14 +166,22 @@ export class CLILogger {
 
 			// Check for start of XML tag
 			if (char === "<" && !this.inSystemTag) {
-				// Look ahead to see if this is a system tag
+				// Look ahead to see if this is a system tag or tool
 				const remainingContent = content.slice(i)
 				const tagMatch = remainingContent.match(/^<(\/?[a-zA-Z_][a-zA-Z0-9_-]*)[^>]*>/)
 
 				if (tagMatch) {
-					const tagName = tagMatch[1].startsWith("/") ? tagMatch[1].slice(1) : tagMatch[1]
-					const isClosingTag = tagMatch[1].startsWith("/")
+					const fullTagName = tagMatch[1] // Keep the full name with potential "/"
+					const isClosingTag = fullTagName.startsWith("/")
+					const tagName = isClosingTag ? fullTagName.slice(1) : fullTagName
 					const isSystemTag = this.systemTags.has(tagName)
+					const isToolName = this.toolNames.has(tagName)
+
+					if (this.isVerbose) {
+						console.error(
+							`[CLILogger.streamLLMOutput] Found tag: ${tagName}, isToolName: ${isToolName}, isClosingTag: ${isClosingTag}`,
+						)
+					}
 
 					if (tagName === "thinking") {
 						if (isClosingTag) {
@@ -157,8 +192,21 @@ export class CLILogger {
 						// Skip the entire tag
 						i += tagMatch[0].length
 						continue
-					} else if (isSystemTag) {
-						// Skip system tags entirely
+					} else if (isToolName && !isClosingTag && !this.displayedToolNames.has(tagName)) {
+						// Display tool name in yellow when first encountered
+						const toolDisplay = this.useColor ? chalk.yellow(`${tagName}...`) : `${tagName}...`
+						process.stdout.write(`\n${toolDisplay}\n`)
+						this.displayedToolNames.add(tagName)
+
+						if (this.isVerbose) {
+							console.error(`[CLILogger.streamLLMOutput] Displayed tool: ${tagName}`)
+						}
+
+						// Skip the tool tag
+						i += tagMatch[0].length
+						continue
+					} else if (isSystemTag || isToolName) {
+						// Skip system tags and tool tags entirely
 						i += tagMatch[0].length
 						continue
 					}
@@ -177,6 +225,13 @@ export class CLILogger {
 		if (output) {
 			process.stdout.write(output)
 		}
+	}
+
+	/**
+	 * Reset tool display tracking (call at start of new requests)
+	 */
+	resetToolDisplay(): void {
+		this.displayedToolNames.clear()
 	}
 
 	/**
