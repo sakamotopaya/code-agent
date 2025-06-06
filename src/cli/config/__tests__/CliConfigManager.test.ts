@@ -141,6 +141,63 @@ autoApprovalEnabled: false
 			expect(config.autoApprovalEnabled).toBe(false)
 		})
 
+		test("should load configuration from .agentz/agent-config.json file", async () => {
+			const configContent = {
+				apiProvider: "openai",
+				apiKey: "agentz-api-key",
+				apiModelId: "gpt-4",
+				autoApprovalEnabled: true,
+			}
+
+			mockFs.existsSync.mockImplementation((filePath) => {
+				return filePath === path.join(tempDir, ".agentz/agent-config.json")
+			})
+
+			mockFs.readFileSync.mockImplementation((filePath, options) => {
+				if (filePath === path.join(tempDir, ".agentz/agent-config.json")) {
+					return JSON.stringify(configContent) as any
+				}
+				throw new Error("File not found")
+			})
+
+			configManager = new CliConfigManager({ cwd: tempDir })
+			const config = await configManager.loadConfiguration()
+
+			expect(config.apiKey).toBe("agentz-api-key")
+			expect(config.apiProvider).toBe("openai")
+			expect(config.apiModelId).toBe("gpt-4")
+			expect(config.autoApprovalEnabled).toBe(true)
+		})
+
+		test("should use configurable user config directory", async () => {
+			const configContent = {
+				apiProvider: "anthropic",
+				apiKey: "custom-dir-api-key",
+				apiModelId: "claude-3-opus",
+			}
+
+			mockFs.existsSync.mockImplementation((filePath) => {
+				return filePath === "/home/user/.custom-config/config.json"
+			})
+
+			mockFs.readFileSync.mockImplementation((filePath, options) => {
+				if (filePath === "/home/user/.custom-config/config.json") {
+					return JSON.stringify(configContent) as any
+				}
+				throw new Error("File not found")
+			})
+
+			configManager = new CliConfigManager({
+				cwd: tempDir,
+				userConfigDir: "/home/user/.custom-config",
+			})
+			const config = await configManager.loadConfiguration()
+
+			expect(config.apiKey).toBe("custom-dir-api-key")
+			expect(config.apiProvider).toBe("anthropic")
+			expect(config.apiModelId).toBe("claude-3-opus")
+		})
+
 		test("should prioritize CLI overrides over other sources", async () => {
 			// Set environment variable
 			process.env.ROO_API_KEY = "env-api-key"
@@ -256,13 +313,23 @@ autoApprovalEnabled: false
 	})
 
 	describe("static methods", () => {
-		test("getDefaultUserConfigDir should return correct path", () => {
+		test("getDefaultUserConfigDir should return correct path with default", () => {
 			const result = CliConfigManager.getDefaultUserConfigDir()
+			expect(result).toBe("/home/user/.agentz")
+		})
+
+		test("getDefaultUserConfigDir should return correct path with custom dir", () => {
+			const result = CliConfigManager.getDefaultUserConfigDir(".roo-cli")
 			expect(result).toBe("/home/user/.roo-cli")
 		})
 
-		test("getDefaultUserConfigPath should return correct path", () => {
+		test("getDefaultUserConfigPath should return correct path with default", () => {
 			const result = CliConfigManager.getDefaultUserConfigPath()
+			expect(result).toBe("/home/user/.agentz/config.json")
+		})
+
+		test("getDefaultUserConfigPath should return correct path with custom dir", () => {
+			const result = CliConfigManager.getDefaultUserConfigPath(".roo-cli")
 			expect(result).toBe("/home/user/.roo-cli/config.json")
 		})
 	})
@@ -275,13 +342,11 @@ autoApprovalEnabled: false
 
 			// Setup user config file
 			mockFs.existsSync.mockImplementation((filePath) => {
-				return (
-					filePath === "/home/user/.roo-cli/config.json" || filePath === path.join(tempDir, ".roo-cli.json")
-				)
+				return filePath === "/home/user/.agentz/config.json" || filePath === path.join(tempDir, ".roo-cli.json")
 			})
 
 			mockFs.readFileSync.mockImplementation((filePath, options) => {
-				if (filePath === "/home/user/.roo-cli/config.json") {
+				if (filePath === "/home/user/.agentz/config.json") {
 					return JSON.stringify({
 						apiKey: "user-key",
 						autoApprovalEnabled: true,
@@ -299,13 +364,11 @@ autoApprovalEnabled: false
 			configManager = new CliConfigManager({ cwd: tempDir })
 			const config = await configManager.loadConfiguration()
 
-			// Environment should override user config
+			// Environment should override project config (documented priority)
 			expect(config.apiModelId).toBe("env-model")
+			expect(config.apiKey).toBe("env-key")
 
-			// Project config should override user config
-			expect(config.apiKey).toBe("project-key")
-
-			// User config should be used when not overridden
+			// User config should be used when not overridden by environment or project
 			expect(config.autoApprovalEnabled).toBe(true)
 		})
 	})

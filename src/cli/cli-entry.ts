@@ -298,14 +298,17 @@ program
 					if (options.stdin) {
 						await nonInteractiveService.executeFromStdin()
 					} else if (options.batch) {
+						console.log(`[cli-entry] Batch option provided: "${options.batch}"`)
 						// Check if batch is a file path or a direct command
-						if (
-							options.batch.includes(".") ||
-							options.batch.startsWith("/") ||
-							options.batch.startsWith("./")
-						) {
+						// First check if it exists as a file
+						const fileExists = fs.existsSync(options.batch)
+						console.log(`[cli-entry] File exists check for "${options.batch}": ${fileExists}`)
+
+						if (fileExists) {
+							console.log("[cli-entry] Treating as file path, using NonInteractiveModeService")
 							await nonInteractiveService.executeFromFile(options.batch)
 						} else {
+							console.log("[cli-entry] Treating as direct command, using BatchProcessor")
 							// Treat as direct command - use existing BatchProcessor
 							const batchProcessor = new BatchProcessor(options, configManager)
 							await batchProcessor.run(options.batch)

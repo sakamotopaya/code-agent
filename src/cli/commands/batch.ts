@@ -24,24 +24,30 @@ export class BatchProcessor {
 
 	async run(taskDescription: string): Promise<void> {
 		try {
-			if (this.options.verbose) {
-				console.log(chalk.blue("Starting batch mode..."))
-				console.log(chalk.gray(`Working directory: ${this.options.cwd}`))
-				console.log(chalk.gray(`Task: ${taskDescription}`))
-			}
+			console.log(chalk.blue("[BatchProcessor] Starting batch mode..."))
+			console.log(chalk.gray(`[BatchProcessor] Working directory: ${this.options.cwd}`))
+			console.log(chalk.gray(`[BatchProcessor] Task: ${taskDescription}`))
 
 			// Create CLI adapters
+			console.log(chalk.gray("[BatchProcessor] Creating CLI adapters..."))
 			const adapters = createCliAdapters({
 				workspaceRoot: this.options.cwd,
 				isInteractive: false,
 				verbose: this.options.verbose,
 			})
+			console.log(chalk.gray("[BatchProcessor] CLI adapters created"))
 
 			// Load configuration
+			console.log(chalk.gray("[BatchProcessor] Loading configuration..."))
+			//const { apiConfiguration } = await this.loadConfiguration()
 			const { apiConfiguration } = await this.loadConfiguration()
+			console.log(chalk.gray("[BatchProcessor] Configuration loaded"))
 
 			// Create and execute task
-			const task = new Task({
+			console.log(chalk.gray("[BatchProcessor] Creating task..."))
+
+			// Use Task.create() to get both the instance and the promise
+			const [task, taskPromise] = Task.create({
 				apiConfiguration,
 				task: taskDescription,
 				fileSystem: adapters.fileSystem,
@@ -49,19 +55,16 @@ export class BatchProcessor {
 				browser: adapters.browser,
 				telemetry: adapters.telemetry,
 				workspacePath: this.options.cwd,
-				globalStoragePath: process.env.HOME ? `${process.env.HOME}/.roo-code` : "/tmp/.roo-code",
+				globalStoragePath: process.env.HOME ? `${process.env.HOME}/.agentz` : "/tmp/.agentz",
+				startTask: true,
 			})
 
-			if (this.options.verbose) {
-				console.log(chalk.blue("Task created, starting execution..."))
-			}
+			console.log(chalk.blue("[BatchProcessor] Task created, starting execution..."))
 
-			// Execute the task
-			await this.executeTask(task)
+			// Execute the task with proper promise handling
+			await this.executeTask(task, taskPromise)
 
-			if (this.options.verbose) {
-				console.log(chalk.green("Task completed successfully"))
-			}
+			console.log(chalk.green("[BatchProcessor] Task completed successfully"))
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			if (this.options.color) {
@@ -161,24 +164,62 @@ export class BatchProcessor {
 		}
 	}
 
-	private async executeTask(task: Task): Promise<void> {
+	private async executeTask(task: Task, taskPromise: Promise<void>): Promise<void> {
 		return new Promise((resolve, reject) => {
+			console.log(chalk.gray("[BatchProcessor] Setting up task event handlers..."))
+
 			// Set up event handlers
-			task.on("taskCompleted", () => {
+			task.on("taskCompleted", (taskId: string, tokenUsage: any, toolUsage: any) => {
+				console.log(chalk.green(`[BatchProcessor] Task completed: ${taskId}`))
+				console.log(chalk.gray(`[BatchProcessor] Token usage:`, tokenUsage))
+				console.log(chalk.gray(`[BatchProcessor] Tool usage:`, toolUsage))
 				resolve()
 			})
 
 			task.on("taskAborted", () => {
+				console.log(chalk.red("[BatchProcessor] Task was aborted"))
 				reject(new Error("Task was aborted"))
+			})
+
+			task.on("taskStarted", () => {
+				console.log(chalk.blue("[BatchProcessor] Task started"))
+			})
+
+			task.on("taskPaused", () => {
+				console.log(chalk.yellow("[BatchProcessor] Task paused"))
+			})
+
+			task.on("taskUnpaused", () => {
+				console.log(chalk.blue("[BatchProcessor] Task unpaused"))
 			})
 
 			// Handle tool failures
 			task.on("taskToolFailed", (taskId: string, tool: string, error: string) => {
+				console.log(chalk.red(`[BatchProcessor] Tool ${tool} failed: ${error}`))
 				reject(new Error(`Tool ${tool} failed: ${error}`))
 			})
 
-			// Start the task - this should be done automatically if startTask is true (default)
-			// The task should start automatically based on the constructor options
+			console.log(chalk.gray("[BatchProcessor] Event handlers set up, waiting for task execution..."))
+			console.log(chalk.gray(`[BatchProcessor] Task ID: ${task.taskId}`))
+			console.log(chalk.gray(`[BatchProcessor] Task initialized: ${task.isInitialized}`))
+			console.log(chalk.gray(`[BatchProcessor] Task aborted: ${task.abort}`))
+
+			// Wait for the task promise and handle errors
+			taskPromise.catch((error) => {
+				console.log(chalk.red(`[BatchProcessor] Task promise rejected:`, error))
+				reject(error)
+			})
+
+			// Add a timeout to prevent hanging - increased for complex tasks
+			const timeoutMs = 60000 // 60 seconds
+			const timeout = setTimeout(() => {
+				console.log(chalk.red(`[BatchProcessor] Task execution timeout after ${timeoutMs}ms`))
+				reject(new Error(`Task execution timeout after ${timeoutMs}ms`))
+			}, timeoutMs)
+
+			// Clear timeout when task completes
+			task.on("taskCompleted", () => clearTimeout(timeout))
+			task.on("taskAborted", () => clearTimeout(timeout))
 		})
 	}
 }
