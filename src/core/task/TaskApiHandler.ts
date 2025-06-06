@@ -45,7 +45,14 @@ export class TaskApiHandler {
 		private providerRef?: WeakRef<ClineProvider>,
 		private onTokenUsageUpdate?: (taskId: string, tokenUsage: any) => void,
 		private onToolFailed?: (taskId: string, tool: ToolName, error: string) => void,
-	) {}
+		private cliMode: boolean = false,
+		private cliApiConfiguration?: any,
+	) {
+		// Detect CLI mode if no provider is available
+		if (!providerRef) {
+			this.cliMode = true
+		}
+	}
 
 	async *attemptApiRequest(
 		retryAttempt: number = 0,
@@ -53,35 +60,120 @@ export class TaskApiHandler {
 		getTokenUsage: () => any,
 		abort?: boolean,
 	): ApiStream {
-		const state = await this.providerRef?.deref()?.getState()
-		const {
-			apiConfiguration,
+		console.log(
+			`[TaskApiHandler.attemptApiRequest] Starting API request for task ${this.taskId}.${this.instanceId}, retry attempt: ${retryAttempt}`,
+		)
+
+		let state: any = null
+		let apiConfiguration: any = null
+		let autoApprovalEnabled: boolean = false
+		let alwaysApproveResubmit: boolean = false
+		let requestDelaySeconds: number = 0
+		let mode: string = "code"
+		let autoCondenseContext: boolean = true
+		let autoCondenseContextPercent: number = 100
+
+		if (this.cliMode) {
+			console.log(`[TaskApiHandler.attemptApiRequest] Running in CLI mode, using default configuration`)
+			// For CLI mode, use sensible defaults
+			apiConfiguration = this.cliApiConfiguration
+			autoApprovalEnabled = true // Auto-approve in CLI mode
+			alwaysApproveResubmit = true // Auto-retry in CLI mode
+			requestDelaySeconds = 0
+			mode = "code"
+			autoCondenseContext = true
+			autoCondenseContextPercent = 100
+		} else {
+			const providerRef = this.providerRef?.deref()
+			console.log(`[TaskApiHandler.attemptApiRequest] Provider ref available: ${!!providerRef}`)
+
+			state = await providerRef?.getState()
+			console.log(`[TaskApiHandler.attemptApiRequest] Provider state retrieved:`, {
+				hasState: !!state,
+				apiConfiguration: !!state?.apiConfiguration,
+				mode: state?.mode,
+				autoApprovalEnabled: state?.autoApprovalEnabled,
+				alwaysApproveResubmit: state?.alwaysApproveResubmit,
+			})
+
+			const stateValues = state ?? {}
+			apiConfiguration = stateValues.apiConfiguration
+			autoApprovalEnabled = stateValues.autoApprovalEnabled ?? false
+			alwaysApproveResubmit = stateValues.alwaysApproveResubmit ?? false
+			requestDelaySeconds = stateValues.requestDelaySeconds ?? 0
+			mode = stateValues.mode ?? "code"
+			autoCondenseContext = stateValues.autoCondenseContext ?? true
+			autoCondenseContextPercent = stateValues.autoCondenseContextPercent ?? 100
+		}
+
+		console.log(`[TaskApiHandler.attemptApiRequest] Configuration values:`, {
+			cliMode: this.cliMode,
+			hasApiConfiguration: !!apiConfiguration,
+			apiProvider: apiConfiguration?.apiProvider,
 			autoApprovalEnabled,
 			alwaysApproveResubmit,
 			requestDelaySeconds,
 			mode,
-			autoCondenseContext = true,
-			autoCondenseContextPercent = 100,
-		} = state ?? {}
+			autoCondenseContext,
+			autoCondenseContextPercent,
+		})
 
-		// Get condensing configuration for automatic triggers
-		const customCondensingPrompt = state?.customCondensingPrompt
-		const condensingApiConfigId = state?.condensingApiConfigId
-		const listApiConfigMeta = state?.listApiConfigMeta
-
-		// Determine API handler to use for condensing
+		// Get condensing configuration for automatic triggers (only in VS Code mode)
+		let customCondensingPrompt: string | undefined
+		let condensingApiConfigId: string | undefined
+		let listApiConfigMeta: any[] | undefined
 		let condensingApiHandler: ApiHandler | undefined
-		if (condensingApiConfigId && listApiConfigMeta && Array.isArray(listApiConfigMeta)) {
-			const matchingConfig = listApiConfigMeta.find((config: any) => config.id === condensingApiConfigId)
-			if (matchingConfig) {
-				const profile = await this.providerRef?.deref()?.providerSettingsManager.getProfile({
-					id: condensingApiConfigId,
-				})
-				if (profile && profile.apiProvider) {
-					const { buildApiHandler } = await import("../../api")
-					condensingApiHandler = buildApiHandler(profile)
+
+		if (!this.cliMode && state) {
+			customCondensingPrompt = state.customCondensingPrompt
+			condensingApiConfigId = state.condensingApiConfigId
+			listApiConfigMeta = state.listApiConfigMeta
+
+			console.log(`[TaskApiHandler.attemptApiRequest] Condensing configuration:`, {
+				hasCustomCondensingPrompt: !!customCondensingPrompt,
+				condensingApiConfigId,
+				hasListApiConfigMeta: !!listApiConfigMeta,
+				listApiConfigMetaLength: Array.isArray(listApiConfigMeta) ? listApiConfigMeta.length : 0,
+			})
+
+			// Determine API handler to use for condensing
+			if (condensingApiConfigId && listApiConfigMeta && Array.isArray(listApiConfigMeta)) {
+				console.log(
+					`[TaskApiHandler.attemptApiRequest] Looking for condensing config with ID: ${condensingApiConfigId}`,
+				)
+				const matchingConfig = listApiConfigMeta.find((config: any) => config.id === condensingApiConfigId)
+				console.log(`[TaskApiHandler.attemptApiRequest] Matching config found: ${!!matchingConfig}`)
+
+				if (matchingConfig) {
+					console.log(`[TaskApiHandler.attemptApiRequest] Getting profile for condensing config`)
+					const profile = await this.providerRef?.deref()?.providerSettingsManager.getProfile({
+						id: condensingApiConfigId,
+					})
+					console.log(`[TaskApiHandler.attemptApiRequest] Profile retrieved:`, {
+						hasProfile: !!profile,
+						apiProvider: profile?.apiProvider,
+					})
+
+					if (profile && profile.apiProvider) {
+						console.log(`[TaskApiHandler.attemptApiRequest] Building condensing API handler`)
+						try {
+							const { buildApiHandler } = await import("../../api")
+							console.log(`[TaskApiHandler.attemptApiRequest] buildApiHandler imported successfully`)
+							condensingApiHandler = buildApiHandler(profile)
+							console.log(
+								`[TaskApiHandler.attemptApiRequest] Condensing API handler created: ${!!condensingApiHandler}`,
+							)
+						} catch (error) {
+							console.error(
+								`[TaskApiHandler.attemptApiRequest] Failed to build condensing API handler:`,
+								error,
+							)
+						}
+					}
 				}
 			}
+		} else {
+			console.log(`[TaskApiHandler.attemptApiRequest] Skipping condensing configuration in CLI mode`)
 		}
 
 		let rateLimitDelay = 0
@@ -94,8 +186,11 @@ export class TaskApiHandler {
 			rateLimitDelay = Math.ceil(Math.max(0, rateLimit * 1000 - timeSinceLastRequest) / 1000)
 		}
 
+		console.log(`[TaskApiHandler.attemptApiRequest] Rate limit delay: ${rateLimitDelay}`)
+
 		// Only show rate limiting message if we're not retrying
 		if (rateLimitDelay > 0 && retryAttempt === 0) {
+			console.log(`[TaskApiHandler.attemptApiRequest] Applying rate limit delay`)
 			for (let i = rateLimitDelay; i > 0; i--) {
 				const delayMessage = `Rate limiting for ${i} seconds...`
 				await this.messaging.say(
@@ -116,8 +211,13 @@ export class TaskApiHandler {
 		// Update last request time before making the request
 		this.lastApiRequestTime = Date.now()
 
+		console.log(`[TaskApiHandler.attemptApiRequest] Getting system prompt...`)
 		const systemPrompt = await getSystemPrompt()
+		console.log(`[TaskApiHandler.attemptApiRequest] System prompt retrieved, length: ${systemPrompt.length}`)
+
+		console.log(`[TaskApiHandler.attemptApiRequest] Getting token usage...`)
 		const { contextTokens } = getTokenUsage()
+		console.log(`[TaskApiHandler.attemptApiRequest] Token usage retrieved, contextTokens: ${contextTokens}`)
 
 		if (contextTokens) {
 			const DEFAULT_THINKING_MODEL_MAX_TOKENS = 16_384
@@ -200,12 +300,22 @@ export class TaskApiHandler {
 			taskId: this.taskId,
 		}
 
+		console.log(`[TaskApiHandler] Creating API message with metadata:`, metadata)
+		console.log(`[TaskApiHandler] System prompt length: ${systemPrompt.length}`)
+		console.log(`[TaskApiHandler] Conversation history length: ${cleanConversationHistory.length}`)
+		console.log(`[TaskApiHandler] API handler model info:`, this.api.getModel()?.info)
+
 		const stream = this.api.createMessage(systemPrompt, cleanConversationHistory, metadata)
+		console.log(`[TaskApiHandler] API stream created successfully`)
+
 		const iterator = stream[Symbol.asyncIterator]()
+		console.log(`[TaskApiHandler] Stream iterator created`)
 
 		try {
 			this.isWaitingForFirstChunk = true
+			console.log(`[TaskApiHandler] Waiting for first chunk...`)
 			const firstChunk = await iterator.next()
+			console.log(`[TaskApiHandler] First chunk received:`, firstChunk.value?.type)
 			yield firstChunk.value
 			this.isWaitingForFirstChunk = false
 		} catch (error) {
@@ -315,8 +425,16 @@ export class TaskApiHandler {
 		consecutiveMistakeLimit?: number,
 		onMistakeLimitReached?: () => Promise<{ response: string; text?: string; images?: string[] }>,
 		onTaskCompleted?: (taskId: string, tokenUsage: any, toolUsage: any) => void,
+		executeTools?: (taskApiHandler: TaskApiHandler) => Promise<void>,
 	): Promise<boolean> {
+		console.log(`[TaskApiHandler] Starting recursivelyMakeClineRequests for task ${this.taskId}.${this.instanceId}`)
+		console.log(`[TaskApiHandler] User content length: ${userContent.length}`)
+		console.log(`[TaskApiHandler] Include file details: ${includeFileDetails}`)
+		console.log(`[TaskApiHandler] Abort: ${abort}`)
+		console.log(`[TaskApiHandler] Consecutive mistake count: ${consecutiveMistakeCount}`)
+
 		if (abort) {
+			console.log(`[TaskApiHandler] Task aborted, throwing error`)
 			throw new Error(`[RooCode#recursivelyMakeRooRequests] task ${this.taskId}.${this.instanceId} aborted`)
 		}
 
@@ -424,17 +542,22 @@ export class TaskApiHandler {
 			this.presentAssistantMessageLocked = false
 			this.presentAssistantMessageHasPendingUpdates = false
 
+			console.log(`[TaskApiHandler] About to make API request...`)
 			const stream = this.attemptApiRequest(0, getSystemPrompt, getTokenUsage, abort)
+			console.log(`[TaskApiHandler] API request stream created`)
 			let assistantMessage = ""
 			let reasoningMessage = ""
 			this.isStreaming = true
 
 			try {
+				console.log(`[TaskApiHandler] Starting to iterate over stream...`)
 				for await (const chunk of stream) {
+					console.log(`[TaskApiHandler] Received chunk type: ${chunk?.type}`)
 					if (!chunk) continue
 
 					switch (chunk.type) {
 						case "reasoning":
+							console.log(`[TaskApiHandler] Processing reasoning chunk`)
 							reasoningMessage += chunk.text
 							await this.messaging.say(
 								"reasoning",
@@ -449,6 +572,7 @@ export class TaskApiHandler {
 							)
 							break
 						case "usage":
+							console.log(`[TaskApiHandler] Processing usage chunk`)
 							inputTokens += chunk.inputTokens
 							outputTokens += chunk.outputTokens
 							cacheWriteTokens += chunk.cacheWriteTokens ?? 0
@@ -456,28 +580,34 @@ export class TaskApiHandler {
 							totalCost = chunk.totalCost
 							break
 						case "text": {
+							console.log(`[TaskApiHandler] Processing text chunk: ${chunk.text?.substring(0, 100)}...`)
 							assistantMessage += chunk.text
 							const prevLength = this.assistantMessageContent.length
 							this.assistantMessageContent = parseAssistantMessage(assistantMessage)
+							console.log(
+								`[TaskApiHandler] Assistant message content updated, length: ${this.assistantMessageContent.length}`,
+							)
 
 							if (this.assistantMessageContent.length > prevLength) {
 								this.userMessageContentReady = false
 							}
 
-							// Present content to user
-							// presentAssistantMessage(this) // This would need to be refactored
+							// Content stored, continue processing - tool execution happens below
 							break
 						}
 					}
 
 					if (abort) {
+						console.log(`[TaskApiHandler] Breaking due to abort`)
 						break
 					}
 
 					if (this.didRejectTool || this.didAlreadyUseTool) {
+						console.log(`[TaskApiHandler] Breaking due to tool rejection or already used`)
 						break
 					}
 				}
+				console.log(`[TaskApiHandler] Finished iterating over stream`)
 			} catch (error) {
 				if (!abort) {
 					updateApiReqMsg(
@@ -528,6 +658,30 @@ export class TaskApiHandler {
 
 				this.telemetry.captureConversationMessage(this.taskId, "assistant")
 
+				// Execute tools if executeTools function is provided
+				console.log(`[TaskApiHandler] executeTools function provided: ${!!executeTools}`)
+				console.log(
+					`[TaskApiHandler] assistantMessageContent:`,
+					JSON.stringify(this.assistantMessageContent, null, 2),
+				)
+
+				if (executeTools) {
+					console.log(
+						`[TaskApiHandler] Executing tools for ${this.assistantMessageContent.length} assistant message blocks`,
+					)
+					try {
+						await executeTools(this)
+						console.log(`[TaskApiHandler] executeTools completed successfully`)
+					} catch (error) {
+						console.error(`[TaskApiHandler] executeTools failed:`, error)
+						this.userMessageContentReady = true
+					}
+				} else {
+					console.log(`[TaskApiHandler] No executeTools function provided, auto-completing`)
+					this.userMessageContentReady = true
+				}
+
+				// Wait for userMessageContentReady to be set by tool execution
 				await pWaitFor(() => this.userMessageContentReady)
 
 				const didToolUse = this.assistantMessageContent.some((block) => block.type === "tool_use")
@@ -539,9 +693,40 @@ export class TaskApiHandler {
 					})
 				}
 
-				// Recursive call would go here
-				// const recDidEndLoop = await this.recursivelyMakeClineRequests(this.userMessageContent, ...)
-				// didEndLoop = recDidEndLoop
+				// Check if task should be completed
+				const didUseAttemptCompletion = this.assistantMessageContent.some(
+					(block) => block.type === "tool_use" && block.name === "attempt_completion",
+				)
+
+				if (didUseAttemptCompletion) {
+					console.log(
+						`[TaskApiHandler] Task completed with attempt_completion, calling onTaskCompleted callback`,
+					)
+					didEndLoop = true
+				}
+
+				// If userMessageContent has content, make recursive call
+				if (this.userMessageContent.length > 0 && !didEndLoop) {
+					console.log(
+						`[TaskApiHandler] Making recursive call with ${this.userMessageContent.length} user message blocks`,
+					)
+
+					// Make recursive call
+					return await this.recursivelyMakeClineRequests(
+						this.userMessageContent,
+						false, // Don't include file details on recursive calls
+						getSystemPrompt,
+						getTokenUsage,
+						getEnvironmentDetails,
+						processUserContentMentions,
+						abort,
+						consecutiveMistakeCount,
+						consecutiveMistakeLimit,
+						onMistakeLimitReached,
+						onTaskCompleted,
+						executeTools,
+					)
+				}
 			} else {
 				await this.messaging.say(
 					"error",
@@ -561,8 +746,31 @@ export class TaskApiHandler {
 				})
 			}
 
+			// Check if task should be completed
+			const didUseAttemptCompletion = this.assistantMessageContent.some(
+				(block) => block.type === "tool_use" && block.name === "attempt_completion",
+			)
+
+			if (didUseAttemptCompletion || didEndLoop) {
+				console.log(`[TaskApiHandler] Task completed, calling onTaskCompleted callback`)
+				// Emit task completion
+				if (onTaskCompleted) {
+					const tokenUsage = getTokenUsage()
+					const toolUsage = {} // TODO: implement proper tool usage tracking
+					onTaskCompleted(this.taskId, tokenUsage, toolUsage)
+				}
+				return true
+			}
+
 			return didEndLoop
 		} catch (error) {
+			console.error(`[TaskApiHandler] Error in recursivelyMakeClineRequests:`, error)
+			// Still call completion on error to prevent hanging
+			if (onTaskCompleted) {
+				const tokenUsage = getTokenUsage()
+				const toolUsage = {}
+				onTaskCompleted(this.taskId, tokenUsage, toolUsage)
+			}
 			return true
 		}
 	}

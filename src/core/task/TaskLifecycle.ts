@@ -25,26 +25,45 @@ export class TaskLifecycle {
 		images?: string[],
 		initiateTaskLoop?: (userContent: Anthropic.Messages.ContentBlockParam[]) => Promise<void>,
 	): Promise<void> {
+		console.log(`[TaskLifecycle] Starting task ${this.taskId}.${this.instanceId}`)
+		console.log(`[TaskLifecycle] Task description: ${task}`)
+		console.log(`[TaskLifecycle] Images: ${images?.length || 0}`)
+		console.log(`[TaskLifecycle] Has initiateTaskLoop: ${!!initiateTaskLoop}`)
+
 		// Clear conversation history for new task
 		this.messaging.setMessages([])
 		this.messaging.setApiHistory([])
 
+		console.log(`[TaskLifecycle] Cleared conversation history`)
+
 		await this.messaging.say("text", task, images)
+
+		console.log(`[TaskLifecycle] Said initial message`)
 
 		let imageBlocks: Anthropic.ImageBlockParam[] = formatResponse.imageBlocks(images)
 
 		console.log(`[subtasks] task ${this.taskId}.${this.instanceId} starting`)
 
 		this.onTaskStarted?.()
+		console.log(`[TaskLifecycle] Called onTaskStarted callback`)
 
 		if (initiateTaskLoop) {
-			await initiateTaskLoop([
-				{
-					type: "text",
-					text: `<task>\n${task}\n</task>`,
-				},
-				...imageBlocks,
-			])
+			console.log(`[TaskLifecycle] Calling initiateTaskLoop...`)
+			try {
+				await initiateTaskLoop([
+					{
+						type: "text",
+						text: `<task>\n${task}\n</task>`,
+					},
+					...imageBlocks,
+				])
+				console.log(`[TaskLifecycle] initiateTaskLoop completed successfully`)
+			} catch (error) {
+				console.error(`[TaskLifecycle] Error in initiateTaskLoop:`, error)
+				throw error
+			}
+		} else {
+			console.log(`[TaskLifecycle] No initiateTaskLoop provided`)
 		}
 	}
 

@@ -433,6 +433,8 @@ export class Task extends EventEmitter<ClineEvents> {
 			this.providerRef,
 			(taskId, tokenUsage) => this.emit("taskTokenUsageUpdated", taskId, tokenUsage),
 			(taskId, tool, error) => this.emit("taskToolFailed", taskId, tool, error),
+			!provider, // cliMode - true if no provider
+			apiConfiguration, // cliApiConfiguration
 		)
 
 		// For backward compatibility with VS Code extension
@@ -611,6 +613,85 @@ export class Task extends EventEmitter<ClineEvents> {
 		return formatResponse.toolError(formatResponse.missingToolParameterError(paramName))
 	}
 
+	// CLI-specific tool execution method
+	async executeCliTool(toolName: string, params: any): Promise<string> {
+		console.log(`[Task] Executing CLI tool: ${toolName}`)
+
+		// Import tools as needed
+		switch (toolName) {
+			case "write_to_file": {
+				const { writeToFileTool } = await import("../tools/writeToFileTool")
+				const result = await this.executeToolWithCLIInterface(writeToFileTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
+			case "read_file": {
+				const { readFileTool } = await import("../tools/readFileTool")
+				const result = await this.executeToolWithCLIInterface(readFileTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
+			case "list_files": {
+				const { listFilesTool } = await import("../tools/listFilesTool")
+				const result = await this.executeToolWithCLIInterface(listFilesTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
+			case "attempt_completion": {
+				const { attemptCompletionTool } = await import("../tools/attemptCompletionTool")
+				const result = await this.executeToolWithCLIInterface(attemptCompletionTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
+			default:
+				throw new Error(`Tool ${toolName} not implemented for CLI mode`)
+		}
+	}
+
+	// Helper method to execute tools with CLI-compatible interface
+	async executeToolWithCLIInterface(toolFn: Function, block: any): Promise<string> {
+		let toolResult = ""
+
+		// CLI-compatible interfaces
+		const askApproval = async () => true // Auto-approve in CLI
+		const handleError = async (action: string, error: Error) => {
+			throw error
+		}
+		const pushToolResult = (result: any) => {
+			if (typeof result === "string") {
+				toolResult = result
+			} else {
+				toolResult = JSON.stringify(result)
+			}
+		}
+		const removeClosingTag = (tag: string, text?: string) => text || ""
+
+		// Execute the tool
+		await toolFn(this, block, askApproval, handleError, pushToolResult, removeClosingTag)
+
+		return toolResult
+	}
+
 	// Delegate lifecycle methods
 	private async startTask(task?: string, images?: string[]): Promise<void> {
 		await this.lifecycle.startTask(task, images, (userContent) => this.initiateTaskLoop(userContent))
@@ -666,21 +747,44 @@ export class Task extends EventEmitter<ClineEvents> {
 
 	// Task Loop
 	private async initiateTaskLoop(userContent: Anthropic.Messages.ContentBlockParam[]): Promise<void> {
-		getCheckpointService(this)
+		console.log(`[Task] Initiating task loop for task ${this.taskId}.${this.instanceId}`)
+		console.log(`[Task] User content length: ${userContent.length}`)
+		console.log(`[Task] User content:`, JSON.stringify(userContent, null, 2))
 
-		let nextUserContent = userContent
-		let includeFileDetails = true
+		try {
+			getCheckpointService(this)
+			console.log(`[Task] Checkpoint service initialized`)
 
-		while (!this.abort) {
-			const didEndLoop = await this.recursivelyMakeClineRequests(nextUserContent, includeFileDetails)
-			includeFileDetails = false
+			let nextUserContent = userContent
+			let includeFileDetails = true
+			let loopCount = 0
 
-			if (didEndLoop) {
-				break
-			} else {
-				nextUserContent = [{ type: "text", text: formatResponse.noToolsUsed() }]
-				this.consecutiveMistakeCount++
+			console.log(`[Task] Starting main task loop`)
+			while (!this.abort) {
+				loopCount++
+				console.log(`[Task] Loop iteration ${loopCount}, abort=${this.abort}`)
+
+				const didEndLoop = await this.recursivelyMakeClineRequests(nextUserContent, includeFileDetails)
+				console.log(`[Task] Loop iteration ${loopCount} completed, didEndLoop=${didEndLoop}`)
+
+				includeFileDetails = false
+
+				if (didEndLoop) {
+					console.log(`[Task] Task loop ended successfully after ${loopCount} iterations`)
+					break
+				} else {
+					console.log(`[Task] Continuing loop, mistake count: ${this.consecutiveMistakeCount}`)
+					nextUserContent = [{ type: "text", text: formatResponse.noToolsUsed() }]
+					this.consecutiveMistakeCount++
+				}
 			}
+
+			if (this.abort) {
+				console.log(`[Task] Task loop aborted after ${loopCount} iterations`)
+			}
+		} catch (error) {
+			console.error(`[Task] Error in task loop:`, error)
+			throw error
 		}
 	}
 
@@ -742,32 +846,103 @@ export class Task extends EventEmitter<ClineEvents> {
 			this.consecutiveMistakeLimit,
 			() => this.ask("mistake_limit_reached", t("common:errors.mistake_limit_guidance")),
 			(taskId, tokenUsage, toolUsage) => this.emit("taskCompleted", taskId, tokenUsage, toolUsage),
+			async (taskApiHandler) => {
+				console.log(`[Task] CLI tool execution function called`)
+
+				// CLI-specific tool execution
+				const assistantContent = taskApiHandler.streamingState.assistantMessageContent
+				console.log(`[Task] CLI tool execution for ${assistantContent.length} assistant message blocks`)
+				console.log(`[Task] Assistant content:`, JSON.stringify(assistantContent, null, 2))
+
+				for (const block of assistantContent) {
+					console.log(`[Task] Processing block type: ${block.type}`)
+
+					if (block.type === "tool_use") {
+						console.log(
+							`[Task] Executing tool: ${block.name} with params:`,
+							JSON.stringify(block.params, null, 2),
+						)
+
+						try {
+							// Import and execute the specific tool
+							const toolResult = await this.executeCliTool(block.name, block.params)
+							console.log(`[Task] Tool ${block.name} completed with result:`, toolResult)
+
+							// Add tool result to user message content
+							taskApiHandler.streamingState.userMessageContent.push({
+								type: "text",
+								text: `[${block.name}] Result: ${toolResult || "(tool completed successfully)"}`,
+							})
+
+							// Mark that we used a tool
+							taskApiHandler.setStreamingState({ didAlreadyUseTool: true })
+						} catch (error) {
+							console.error(`[Task] Tool execution failed for ${block.name}:`, error)
+							taskApiHandler.streamingState.userMessageContent.push({
+								type: "text",
+								text: `[${block.name}] Error: ${error.message}`,
+							})
+							taskApiHandler.setStreamingState({ didRejectTool: true })
+						}
+
+						// Only execute one tool per message
+						break
+					}
+				}
+
+				console.log(`[Task] CLI tool execution completed, marking userMessageContentReady`)
+				// Mark user message content as ready
+				taskApiHandler.setStreamingState({ userMessageContentReady: true })
+				console.log(`[Task] CLI tool execution function finished`)
+			},
 		)
 	}
 
 	private async getSystemPrompt(): Promise<string> {
-		const { mcpEnabled } = (await this.providerRef?.deref()?.getState()) ?? {}
+		console.log(`[Task] Getting system prompt for task ${this.taskId}.${this.instanceId}`)
+
+		// Check if we're in CLI mode (no provider)
+		const provider = this.providerRef?.deref()
+		const isCliMode = !provider
+
+		console.log(`[Task] CLI mode: ${isCliMode}`)
+
 		let mcpHub: any | undefined
-		if (mcpEnabled ?? true) {
-			const provider = this.providerRef?.deref()
-			if (!provider) {
-				throw new Error("Provider reference lost during view transition")
+		let state: any = {}
+
+		if (!isCliMode) {
+			// VSCode mode - use provider
+			try {
+				state = (await provider.getState()) ?? {}
+				const { mcpEnabled } = state
+
+				if (mcpEnabled ?? true) {
+					const { McpServerManager } = await import("../../services/mcp/McpServerManager")
+					mcpHub = await McpServerManager.getInstance(provider.context, provider)
+
+					if (mcpHub) {
+						await pWaitFor(() => !mcpHub!.isConnecting, { timeout: 10_000 }).catch(() => {
+							console.error("MCP servers failed to connect in time")
+						})
+					}
+				}
+			} catch (error) {
+				console.warn(`[Task] Failed to get provider state:`, error)
 			}
-
-			const { McpServerManager } = await import("../../services/mcp/McpServerManager")
-			mcpHub = await McpServerManager.getInstance(provider.context, provider)
-
-			if (!mcpHub) {
-				throw new Error("Failed to get MCP hub from server manager")
+		} else {
+			// CLI mode - use defaults
+			console.log(`[Task] Using default CLI settings`)
+			state = {
+				mcpEnabled: false, // Disable MCP in CLI for now
+				browserViewportSize: "900x600",
+				mode: "code",
+				customModes: [],
+				customModePrompts: {},
+				customInstructions: "",
 			}
-
-			await pWaitFor(() => !mcpHub!.isConnecting, { timeout: 10_000 }).catch(() => {
-				console.error("MCP servers failed to connect in time")
-			})
 		}
 
 		const rooIgnoreInstructions = this.rooIgnoreController?.getInstructions()
-		const state = await this.providerRef?.deref()?.getState()
 
 		const {
 			browserViewportSize,
@@ -783,9 +958,24 @@ export class Task extends EventEmitter<ClineEvents> {
 			maxReadFileLine,
 		} = state ?? {}
 
-		const provider = this.providerRef?.deref()
-		if (!provider) {
+		// Use the provider we already got above, or null for CLI mode
+		if (!isCliMode && !provider) {
 			throw new Error("Provider not available")
+		}
+
+		if (isCliMode) {
+			// Return a simple CLI-compatible system prompt
+			return `You are Roo, a highly skilled software engineer with extensive knowledge in many programming languages, frameworks, design patterns, and best practices.
+
+You have access to tools that let you execute CLI commands on the user's computer, list files, view source code definitions, regex search, read and write files, and ask follow-up questions. These tools help you effectively accomplish a wide range of tasks, such as writing code, making edits or improvements to existing files, understanding the current state of a project, performing system operations, and much more.
+
+# Tool Use Guidelines
+
+1. Choose the most appropriate tool based on the task and the tool descriptions provided.
+2. Use one tool at a time per message to accomplish the task iteratively.
+3. Always wait for user confirmation after each tool use before proceeding.
+
+Your goal is to try to accomplish the user's task effectively using the available tools.`
 		}
 
 		return SYSTEM_PROMPT(
