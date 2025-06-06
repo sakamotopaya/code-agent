@@ -7,7 +7,7 @@ import { registerMcpCommands } from "./commands/mcp-commands"
 import { registerExamplesCommands } from "./commands/ExamplesCommand"
 import { showBanner } from "./utils/banner"
 import { CliConfigManager } from "./config/CliConfigManager"
-import { getCLILogger } from "./services/CLILogger"
+import { getCLILogger, initializeCLILogger } from "./services/CLILogger"
 import { validateBrowserViewport, validateTimeout } from "./utils/browser-config"
 import { isValidFormat, getAvailableFormatsWithDescriptions } from "./utils/format-detection"
 import { PerformanceMonitoringService } from "./optimization/PerformanceMonitoringService"
@@ -47,6 +47,7 @@ interface CliOptions {
 	continueOnError?: boolean
 	dryRun?: boolean
 	quiet?: boolean
+	thinking?: boolean
 	// Browser options
 	headless: boolean
 	browserViewport?: string
@@ -154,6 +155,7 @@ program
 	.option("--continue-on-error", "Continue execution on command failure")
 	.option("--dry-run", "Show what would be executed without running commands")
 	.option("--quiet", "Suppress non-essential output")
+	.option("--thinking", "Show thinking sections in LLM output", false)
 	.option("--generate-config <path>", "Generate default configuration file at specified path", validatePath)
 	.option("--headless", "Run browser in headless mode (default: true)", true)
 	.option("--no-headless", "Run browser in headed mode")
@@ -169,6 +171,9 @@ program
 	.option("--no-mcp-auto-connect", "Do not automatically connect to enabled MCP servers")
 	.option("--mcp-log-level <level>", "MCP logging level (error, warn, info, debug)", validateMcpLogLevel)
 	.action(async (options: CliOptions) => {
+		// Initialize CLI logger with options
+		initializeCLILogger(options.verbose, options.quiet, options.color, options.thinking)
+
 		// Initialize platform services for CLI context
 		await PlatformServiceFactory.initialize(PlatformContext.CLI, "roo-cline", options.config)
 
@@ -299,17 +304,17 @@ program
 					if (options.stdin) {
 						await nonInteractiveService.executeFromStdin()
 					} else if (options.batch) {
-						console.log(`[cli-entry] Batch option provided: "${options.batch}"`)
+						getCLILogger().debug(`[cli-entry] Batch option provided: "${options.batch}"`)
 						// Check if batch is a file path or a direct command
 						// First check if it exists as a file
 						const fileExists = fs.existsSync(options.batch)
-						console.log(`[cli-entry] File exists check for "${options.batch}": ${fileExists}`)
+						getCLILogger().debug(`[cli-entry] File exists check for "${options.batch}": ${fileExists}`)
 
 						if (fileExists) {
-							console.log("[cli-entry] Treating as file path, using NonInteractiveModeService")
+							getCLILogger().debug("[cli-entry] Treating as file path, using NonInteractiveModeService")
 							await nonInteractiveService.executeFromFile(options.batch)
 						} else {
-							console.log("[cli-entry] Treating as direct command, using BatchProcessor")
+							getCLILogger().debug("[cli-entry] Treating as direct command, using BatchProcessor")
 							// Treat as direct command - use existing BatchProcessor
 							const batchProcessor = new BatchProcessor(options, configManager)
 							await batchProcessor.run(options.batch)

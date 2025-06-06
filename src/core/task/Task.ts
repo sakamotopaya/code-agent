@@ -1051,7 +1051,7 @@ export class Task extends EventEmitter<ClineEvents> {
 
 							try {
 								const toolResult = await this.executeCliTool(toolUse.name, toolUse.params)
-								console.log(`[Task] Parsed tool ${toolUse.name} completed with result:`, toolResult)
+								// Debug: Tool completed (only log in verbose mode)
 
 								taskApiHandler.streamingState.userMessageContent.push({
 									type: "text",
@@ -1078,38 +1078,38 @@ export class Task extends EventEmitter<ClineEvents> {
 
 				// If no tools were executed, add default response
 				if (!executedTool) {
-					console.log(`[Task] No tools executed, adding default response`)
+					// Debug: No tools executed (only log in verbose mode)
 					taskApiHandler.streamingState.userMessageContent.push({
 						type: "text",
 						text: "Message received. Continue with the task.",
 					})
 				}
 
-				console.log(`[Task] CLI tool execution completed, marking userMessageContentReady`)
+				// Debug: CLI tool execution completed (only log in verbose mode)
 				// Mark user message content as ready
 				taskApiHandler.setStreamingState({ userMessageContentReady: true })
 
 				// Set task completion flag if attempt_completion was found
 				if (foundAttemptCompletion) {
-					console.log(`[Task] Setting task as completed due to attempt_completion`)
+					// Debug: Setting task as completed (only log in verbose mode)
 					// Mark that the task should complete by setting userMessageContent to empty
 					// This will cause the recursion to return true and end the loop
 					taskApiHandler.streamingState.userMessageContent = []
 				}
 
-				console.log(`[Task] CLI tool execution function finished`)
+				// Debug: CLI tool execution function finished (only log in verbose mode)
 			},
 		)
 	}
 
 	private async getSystemPrompt(): Promise<string> {
-		console.log(`[Task] Getting system prompt for task ${this.taskId}.${this.instanceId}`)
+		// Debug: Getting system prompt (only log in verbose mode)
 
 		// Check if we're in CLI mode (no provider)
 		const provider = this.providerRef?.deref()
 		const isCliMode = !provider
 
-		console.log(`[Task] CLI mode: ${isCliMode}`)
+		// Debug: CLI mode status (only log in verbose mode)
 
 		let mcpHub: any | undefined
 		let state: any = {}
@@ -1135,7 +1135,7 @@ export class Task extends EventEmitter<ClineEvents> {
 			}
 		} else {
 			// CLI mode - use defaults
-			console.log(`[Task] Using default CLI settings`)
+			// Debug: Using default CLI settings (only log in verbose mode)
 			state = {
 				mcpEnabled: false, // Disable MCP in CLI for now
 				browserViewportSize: "900x600",
