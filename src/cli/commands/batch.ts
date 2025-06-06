@@ -4,6 +4,7 @@ import { Task } from "../../core/task/Task"
 import { defaultModeSlug } from "../../shared/modes"
 import type { ProviderSettings, RooCodeSettings } from "@roo-code/types"
 import { CliConfigManager } from "../config/CliConfigManager"
+import { getCLILogger } from "../services/CLILogger"
 
 interface BatchOptions extends CliAdapterOptions {
 	cwd: string
@@ -22,29 +23,41 @@ export class BatchProcessor {
 		this.configManager = configManager
 	}
 
+	private logDebug(message: string, ...args: any[]): void {
+		getCLILogger().debug(message, ...args)
+	}
+
+	private logInfo(message: string, ...args: any[]): void {
+		getCLILogger().info(message, ...args)
+	}
+
+	private logError(message: string, ...args: any[]): void {
+		getCLILogger().error(message, ...args)
+	}
+
 	async run(taskDescription: string): Promise<void> {
 		try {
-			console.log(chalk.blue("[BatchProcessor] Starting batch mode..."))
-			console.log(chalk.gray(`[BatchProcessor] Working directory: ${this.options.cwd}`))
-			console.log(chalk.gray(`[BatchProcessor] Task: ${taskDescription}`))
+			this.logDebug("[BatchProcessor] Starting batch mode...")
+			this.logDebug(`[BatchProcessor] Working directory: ${this.options.cwd}`)
+			this.logDebug(`[BatchProcessor] Task: ${taskDescription}`)
 
 			// Create CLI adapters
-			console.log(chalk.gray("[BatchProcessor] Creating CLI adapters..."))
+			this.logDebug("[BatchProcessor] Creating CLI adapters...")
 			const adapters = createCliAdapters({
 				workspaceRoot: this.options.cwd,
 				isInteractive: false,
 				verbose: this.options.verbose,
 			})
-			console.log(chalk.gray("[BatchProcessor] CLI adapters created"))
+			this.logDebug("[BatchProcessor] CLI adapters created")
 
 			// Load configuration
-			console.log(chalk.gray("[BatchProcessor] Loading configuration..."))
+			this.logDebug("[BatchProcessor] Loading configuration...")
 			//const { apiConfiguration } = await this.loadConfiguration()
 			const { apiConfiguration } = await this.loadConfiguration()
-			console.log(chalk.gray("[BatchProcessor] Configuration loaded"))
+			this.logDebug("[BatchProcessor] Configuration loaded")
 
 			// Create and execute task
-			console.log(chalk.gray("[BatchProcessor] Creating task..."))
+			this.logDebug("[BatchProcessor] Creating task...")
 
 			// Use Task.create() to get both the instance and the promise
 			const [task, taskPromise] = Task.create({
@@ -57,21 +70,18 @@ export class BatchProcessor {
 				workspacePath: this.options.cwd,
 				globalStoragePath: process.env.HOME ? `${process.env.HOME}/.agentz` : "/tmp/.agentz",
 				startTask: true,
+				verbose: this.options.verbose,
 			})
 
-			console.log(chalk.blue("[BatchProcessor] Task created, starting execution..."))
+			this.logDebug("[BatchProcessor] Task created, starting execution...")
 
 			// Execute the task with proper promise handling
 			await this.executeTask(task, taskPromise)
 
-			console.log(chalk.green("[BatchProcessor] Task completed successfully"))
+			this.logDebug("[BatchProcessor] Task completed successfully")
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
-			if (this.options.color) {
-				console.error(chalk.red("Batch execution failed:"), message)
-			} else {
-				console.error("Batch execution failed:", message)
-			}
+			this.logError("Batch execution failed:", message)
 			process.exit(1)
 		}
 	}
@@ -166,36 +176,36 @@ export class BatchProcessor {
 
 	private async executeTask(task: Task, taskPromise: Promise<void>): Promise<void> {
 		return new Promise((resolve, reject) => {
-			console.log(chalk.gray("[BatchProcessor] Setting up task event handlers..."))
+			this.logDebug("[BatchProcessor] Setting up task event handlers...")
 
 			// Set up event handlers
 			task.on("taskCompleted", (taskId: string, tokenUsage: any, toolUsage: any) => {
-				console.log(chalk.green(`[BatchProcessor] Task completed: ${taskId}`))
-				console.log(chalk.gray(`[BatchProcessor] Token usage:`, tokenUsage))
-				console.log(chalk.gray(`[BatchProcessor] Tool usage:`, toolUsage))
+				this.logDebug(`[BatchProcessor] Task completed: ${taskId}`)
+				this.logDebug(`[BatchProcessor] Token usage:`, tokenUsage)
+				this.logDebug(`[BatchProcessor] Tool usage:`, toolUsage)
 				resolve()
 			})
 
 			task.on("taskAborted", () => {
-				console.log(chalk.red("[BatchProcessor] Task was aborted"))
+				this.logDebug("[BatchProcessor] Task was aborted")
 				reject(new Error("Task was aborted"))
 			})
 
 			task.on("taskStarted", () => {
-				console.log(chalk.blue("[BatchProcessor] Task started"))
+				this.logDebug("[BatchProcessor] Task started")
 			})
 
 			task.on("taskPaused", () => {
-				console.log(chalk.yellow("[BatchProcessor] Task paused"))
+				this.logDebug("[BatchProcessor] Task paused")
 			})
 
 			task.on("taskUnpaused", () => {
-				console.log(chalk.blue("[BatchProcessor] Task unpaused"))
+				this.logDebug("[BatchProcessor] Task unpaused")
 			})
 
 			// Handle tool failures
 			task.on("taskToolFailed", (taskId: string, tool: string, error: string) => {
-				console.log(chalk.red(`[BatchProcessor] Tool ${tool} failed: ${error}`))
+				this.logDebug(`[BatchProcessor] Tool ${tool} failed: ${error}`)
 				reject(new Error(`Tool ${tool} failed: ${error}`))
 			})
 

@@ -17,6 +17,7 @@ import { formatContentBlockToMarkdown } from "../../integrations/misc/export-mar
 import { ClineApiReqCancelReason, ClineApiReqInfo } from "../../shared/ExtensionMessage"
 import { findLastIndex } from "../../shared/array"
 import { formatResponse } from "../prompts/responses"
+import { getCLILogger } from "../../cli/services/CLILogger"
 
 /**
  * Handles API requests and streaming for the Task class
@@ -54,13 +55,21 @@ export class TaskApiHandler {
 		}
 	}
 
+	private log(message: string, ...args: any[]): void {
+		if (this.cliMode) {
+			getCLILogger().debug(message, ...args)
+		} else {
+			console.log(message, ...args)
+		}
+	}
+
 	async *attemptApiRequest(
 		retryAttempt: number = 0,
 		getSystemPrompt: () => Promise<string>,
 		getTokenUsage: () => any,
 		abort?: boolean,
 	): ApiStream {
-		console.log(
+		this.log(
 			`[TaskApiHandler.attemptApiRequest] Starting API request for task ${this.taskId}.${this.instanceId}, retry attempt: ${retryAttempt}`,
 		)
 
@@ -74,7 +83,7 @@ export class TaskApiHandler {
 		let autoCondenseContextPercent: number = 100
 
 		if (this.cliMode) {
-			console.log(`[TaskApiHandler.attemptApiRequest] Running in CLI mode, using default configuration`)
+			this.log(`[TaskApiHandler.attemptApiRequest] Running in CLI mode, using default configuration`)
 			// For CLI mode, use sensible defaults
 			apiConfiguration = this.cliApiConfiguration
 			autoApprovalEnabled = true // Auto-approve in CLI mode
@@ -85,10 +94,10 @@ export class TaskApiHandler {
 			autoCondenseContextPercent = 100
 		} else {
 			const providerRef = this.providerRef?.deref()
-			console.log(`[TaskApiHandler.attemptApiRequest] Provider ref available: ${!!providerRef}`)
+			this.log(`[TaskApiHandler.attemptApiRequest] Provider ref available: ${!!providerRef}`)
 
 			state = await providerRef?.getState()
-			console.log(`[TaskApiHandler.attemptApiRequest] Provider state retrieved:`, {
+			this.log(`[TaskApiHandler.attemptApiRequest] Provider state retrieved:`, {
 				hasState: !!state,
 				apiConfiguration: !!state?.apiConfiguration,
 				mode: state?.mode,
@@ -106,7 +115,7 @@ export class TaskApiHandler {
 			autoCondenseContextPercent = stateValues.autoCondenseContextPercent ?? 100
 		}
 
-		console.log(`[TaskApiHandler.attemptApiRequest] Configuration values:`, {
+		this.log(`[TaskApiHandler.attemptApiRequest] Configuration values:`, {
 			cliMode: this.cliMode,
 			hasApiConfiguration: !!apiConfiguration,
 			apiProvider: apiConfiguration?.apiProvider,
@@ -129,7 +138,7 @@ export class TaskApiHandler {
 			condensingApiConfigId = state.condensingApiConfigId
 			listApiConfigMeta = state.listApiConfigMeta
 
-			console.log(`[TaskApiHandler.attemptApiRequest] Condensing configuration:`, {
+			this.log(`[TaskApiHandler.attemptApiRequest] Condensing configuration:`, {
 				hasCustomCondensingPrompt: !!customCondensingPrompt,
 				condensingApiConfigId,
 				hasListApiConfigMeta: !!listApiConfigMeta,
@@ -211,13 +220,13 @@ export class TaskApiHandler {
 		// Update last request time before making the request
 		this.lastApiRequestTime = Date.now()
 
-		console.log(`[TaskApiHandler.attemptApiRequest] Getting system prompt...`)
+		this.log(`[TaskApiHandler.attemptApiRequest] Getting system prompt...`)
 		const systemPrompt = await getSystemPrompt()
-		console.log(`[TaskApiHandler.attemptApiRequest] System prompt retrieved, length: ${systemPrompt.length}`)
+		this.log(`[TaskApiHandler.attemptApiRequest] System prompt retrieved, length: ${systemPrompt.length}`)
 
-		console.log(`[TaskApiHandler.attemptApiRequest] Getting token usage...`)
+		this.log(`[TaskApiHandler.attemptApiRequest] Getting token usage...`)
 		const { contextTokens } = getTokenUsage()
-		console.log(`[TaskApiHandler.attemptApiRequest] Token usage retrieved, contextTokens: ${contextTokens}`)
+		this.log(`[TaskApiHandler.attemptApiRequest] Token usage retrieved, contextTokens: ${contextTokens}`)
 
 		if (contextTokens) {
 			const DEFAULT_THINKING_MODEL_MAX_TOKENS = 16_384
@@ -427,14 +436,14 @@ export class TaskApiHandler {
 		onTaskCompleted?: (taskId: string, tokenUsage: any, toolUsage: any) => void,
 		executeTools?: (taskApiHandler: TaskApiHandler) => Promise<void>,
 	): Promise<boolean> {
-		console.log(`[TaskApiHandler] Starting recursivelyMakeClineRequests for task ${this.taskId}.${this.instanceId}`)
-		console.log(`[TaskApiHandler] User content length: ${userContent.length}`)
-		console.log(`[TaskApiHandler] Include file details: ${includeFileDetails}`)
-		console.log(`[TaskApiHandler] Abort: ${abort}`)
-		console.log(`[TaskApiHandler] Consecutive mistake count: ${consecutiveMistakeCount}`)
+		this.log(`[TaskApiHandler] Starting recursivelyMakeClineRequests for task ${this.taskId}.${this.instanceId}`)
+		this.log(`[TaskApiHandler] User content length: ${userContent.length}`)
+		this.log(`[TaskApiHandler] Include file details: ${includeFileDetails}`)
+		this.log(`[TaskApiHandler] Abort: ${abort}`)
+		this.log(`[TaskApiHandler] Consecutive mistake count: ${consecutiveMistakeCount}`)
 
 		if (abort) {
-			console.log(`[TaskApiHandler] Task aborted, throwing error`)
+			this.log(`[TaskApiHandler] Task aborted, throwing error`)
 			throw new Error(`[RooCode#recursivelyMakeRooRequests] task ${this.taskId}.${this.instanceId} aborted`)
 		}
 
@@ -542,22 +551,22 @@ export class TaskApiHandler {
 			this.presentAssistantMessageLocked = false
 			this.presentAssistantMessageHasPendingUpdates = false
 
-			console.log(`[TaskApiHandler] About to make API request...`)
+			this.log(`[TaskApiHandler] About to make API request...`)
 			const stream = this.attemptApiRequest(0, getSystemPrompt, getTokenUsage, abort)
-			console.log(`[TaskApiHandler] API request stream created`)
+			this.log(`[TaskApiHandler] API request stream created`)
 			let assistantMessage = ""
 			let reasoningMessage = ""
 			this.isStreaming = true
 
 			try {
-				console.log(`[TaskApiHandler] Starting to iterate over stream...`)
+				this.log(`[TaskApiHandler] Starting to iterate over stream...`)
 				for await (const chunk of stream) {
-					console.log(`[TaskApiHandler] Received chunk type: ${chunk?.type}`)
+					this.log(`[TaskApiHandler] Received chunk type: ${chunk?.type}`)
 					if (!chunk) continue
 
 					switch (chunk.type) {
 						case "reasoning":
-							console.log(`[TaskApiHandler] Processing reasoning chunk`)
+							this.log(`[TaskApiHandler] Processing reasoning chunk`)
 							reasoningMessage += chunk.text
 							await this.messaging.say(
 								"reasoning",
@@ -572,7 +581,7 @@ export class TaskApiHandler {
 							)
 							break
 						case "usage":
-							console.log(`[TaskApiHandler] Processing usage chunk`)
+							this.log(`[TaskApiHandler] Processing usage chunk`)
 							inputTokens += chunk.inputTokens
 							outputTokens += chunk.outputTokens
 							cacheWriteTokens += chunk.cacheWriteTokens ?? 0
@@ -580,13 +589,18 @@ export class TaskApiHandler {
 							totalCost = chunk.totalCost
 							break
 						case "text": {
-							console.log(`[TaskApiHandler] Processing text chunk: ${chunk.text?.substring(0, 100)}...`)
+							this.log(`[TaskApiHandler] Processing text chunk: ${chunk.text?.substring(0, 100)}...`)
 							assistantMessage += chunk.text
 							const prevLength = this.assistantMessageContent.length
 							this.assistantMessageContent = parseAssistantMessage(assistantMessage)
-							console.log(
+							this.log(
 								`[TaskApiHandler] Assistant message content updated, length: ${this.assistantMessageContent.length}`,
 							)
+
+							// Stream LLM output to terminal in CLI mode
+							if (this.cliMode && chunk.text) {
+								getCLILogger().streamLLMOutput(chunk.text)
+							}
 
 							if (this.assistantMessageContent.length > prevLength) {
 								this.userMessageContentReady = false
@@ -598,16 +612,16 @@ export class TaskApiHandler {
 					}
 
 					if (abort) {
-						console.log(`[TaskApiHandler] Breaking due to abort`)
+						this.log(`[TaskApiHandler] Breaking due to abort`)
 						break
 					}
 
 					if (this.didRejectTool || this.didAlreadyUseTool) {
-						console.log(`[TaskApiHandler] Breaking due to tool rejection or already used`)
+						this.log(`[TaskApiHandler] Breaking due to tool rejection or already used`)
 						break
 					}
 				}
-				console.log(`[TaskApiHandler] Finished iterating over stream`)
+				this.log(`[TaskApiHandler] Finished iterating over stream`)
 			} catch (error) {
 				if (!abort) {
 					updateApiReqMsg(
@@ -659,25 +673,25 @@ export class TaskApiHandler {
 				this.telemetry.captureConversationMessage(this.taskId, "assistant")
 
 				// Execute tools if executeTools function is provided
-				console.log(`[TaskApiHandler] executeTools function provided: ${!!executeTools}`)
-				console.log(
+				this.log(`[TaskApiHandler] executeTools function provided: ${!!executeTools}`)
+				this.log(
 					`[TaskApiHandler] assistantMessageContent:`,
 					JSON.stringify(this.assistantMessageContent, null, 2),
 				)
 
 				if (executeTools) {
-					console.log(
+					this.log(
 						`[TaskApiHandler] Executing tools for ${this.assistantMessageContent.length} assistant message blocks`,
 					)
 					try {
 						await executeTools(this)
-						console.log(`[TaskApiHandler] executeTools completed successfully`)
+						this.log(`[TaskApiHandler] executeTools completed successfully`)
 					} catch (error) {
-						console.error(`[TaskApiHandler] executeTools failed:`, error)
+						this.log(`[TaskApiHandler] executeTools failed:`, error)
 						this.userMessageContentReady = true
 					}
 				} else {
-					console.log(`[TaskApiHandler] No executeTools function provided, auto-completing`)
+					this.log(`[TaskApiHandler] No executeTools function provided, auto-completing`)
 					this.userMessageContentReady = true
 				}
 
@@ -694,12 +708,19 @@ export class TaskApiHandler {
 				}
 
 				// Check if task should be completed
-				const didUseAttemptCompletion = this.assistantMessageContent.some(
-					(block) => block.type === "tool_use" && block.name === "attempt_completion",
-				)
+				const didUseAttemptCompletion = this.assistantMessageContent.some((block) => {
+					if (block.type === "tool_use" && block.name === "attempt_completion") {
+						return true
+					}
+					// Also check in text content for CLI mode
+					if (block.type === "text" && block.content.includes("<tool_name>attempt_completion</tool_name>")) {
+						return true
+					}
+					return false
+				})
 
 				if (didUseAttemptCompletion) {
-					console.log(
+					this.log(
 						`[TaskApiHandler] Task completed with attempt_completion, calling onTaskCompleted callback`,
 					)
 					didEndLoop = true
@@ -707,7 +728,7 @@ export class TaskApiHandler {
 
 				// If userMessageContent has content, make recursive call
 				if (this.userMessageContent.length > 0 && !didEndLoop) {
-					console.log(
+					this.log(
 						`[TaskApiHandler] Making recursive call with ${this.userMessageContent.length} user message blocks`,
 					)
 
@@ -747,12 +768,19 @@ export class TaskApiHandler {
 			}
 
 			// Check if task should be completed
-			const didUseAttemptCompletion = this.assistantMessageContent.some(
-				(block) => block.type === "tool_use" && block.name === "attempt_completion",
-			)
+			const didUseAttemptCompletion = this.assistantMessageContent.some((block) => {
+				if (block.type === "tool_use" && block.name === "attempt_completion") {
+					return true
+				}
+				// Also check in text content for CLI mode
+				if (block.type === "text" && block.content.includes("<tool_name>attempt_completion</tool_name>")) {
+					return true
+				}
+				return false
+			})
 
 			if (didUseAttemptCompletion || didEndLoop) {
-				console.log(`[TaskApiHandler] Task completed, calling onTaskCompleted callback`)
+				this.log(`[TaskApiHandler] Task completed, calling onTaskCompleted callback`)
 				// Emit task completion
 				if (onTaskCompleted) {
 					const tokenUsage = getTokenUsage()
@@ -764,7 +792,7 @@ export class TaskApiHandler {
 
 			return didEndLoop
 		} catch (error) {
-			console.error(`[TaskApiHandler] Error in recursivelyMakeClineRequests:`, error)
+			this.log(`[TaskApiHandler] Error in recursivelyMakeClineRequests:`, error)
 			// Still call completion on error to prevent hanging
 			if (onTaskCompleted) {
 				const tokenUsage = getTokenUsage()
