@@ -78,6 +78,7 @@ import { IBrowser } from "../interfaces/IBrowser"
 import { TaskMessaging } from "./TaskMessaging"
 import { TaskLifecycle } from "./TaskLifecycle"
 import { TaskApiHandler } from "./TaskApiHandler"
+import { getCLILogger } from "../../cli/services/CLILogger"
 
 export type ClineEvents = {
 	message: [{ action: "created" | "updated"; message: ClineMessage }]
@@ -116,6 +117,7 @@ export type TaskOptions = {
 	telemetry?: ITelemetryService
 	globalStoragePath?: string
 	workspacePath?: string
+	verbose?: boolean
 }
 
 export class Task extends EventEmitter<ClineEvents> {
@@ -173,11 +175,49 @@ export class Task extends EventEmitter<ClineEvents> {
 	private terminal?: ITerminal
 	private browser?: IBrowser
 	private telemetryService?: ITelemetryService
+	private verbose: boolean = false
 
 	// Modular components
 	private messaging: TaskMessaging
 	private lifecycle: TaskLifecycle
 	private apiHandler: TaskApiHandler
+
+	// Logging methods
+	private logDebug(message: string, ...args: any[]): void {
+		if (this.isCliMode()) {
+			getCLILogger().debug(message, ...args)
+		} else if (this.verbose) {
+			console.log(message, ...args)
+		}
+	}
+
+	private logInfo(message: string, ...args: any[]): void {
+		if (this.isCliMode()) {
+			getCLILogger().info(message, ...args)
+		} else {
+			console.log(message, ...args)
+		}
+	}
+
+	private logError(message: string, ...args: any[]): void {
+		if (this.isCliMode()) {
+			getCLILogger().error(message, ...args)
+		} else {
+			console.error(message, ...args)
+		}
+	}
+
+	private logWarn(message: string, ...args: any[]): void {
+		if (this.isCliMode()) {
+			getCLILogger().warn(message, ...args)
+		} else {
+			console.warn(message, ...args)
+		}
+	}
+
+	private isCliMode(): boolean {
+		return !this.providerRef
+	}
 
 	// Compatibility properties - delegated to modular components
 	get isWaitingForFirstChunk() {
@@ -354,6 +394,7 @@ export class Task extends EventEmitter<ClineEvents> {
 		telemetry,
 		globalStoragePath,
 		workspacePath,
+		verbose = false,
 	}: TaskOptions) {
 		super()
 
@@ -373,6 +414,7 @@ export class Task extends EventEmitter<ClineEvents> {
 		this.terminal = terminal
 		this.browser = browser
 		this.telemetryService = telemetry
+		this.verbose = verbose
 
 		// Set up provider and storage
 		if (provider) {
@@ -399,6 +441,7 @@ export class Task extends EventEmitter<ClineEvents> {
 			() => this.emit("taskStarted"),
 			() => this.emit("taskAborted"),
 			() => this.emit("taskUnpaused"),
+			this.isCliMode(),
 		)
 
 		// Initialize other components
@@ -615,7 +658,7 @@ export class Task extends EventEmitter<ClineEvents> {
 
 	// CLI-specific tool execution method
 	async executeCliTool(toolName: string, params: any): Promise<string> {
-		console.log(`[Task] Executing CLI tool: ${toolName}`)
+		this.logDebug(`[Task] Executing CLI tool: ${toolName}`)
 
 		// Import tools as needed
 		switch (toolName) {
@@ -715,6 +758,59 @@ export class Task extends EventEmitter<ClineEvents> {
 		return toolResult
 	}
 
+	// Parse tool uses from text content for CLI mode
+	private parseToolUsesFromText(content: string): Array<{ name: string; params: any }> {
+		const toolUses: Array<{ name: string; params: any }> = []
+
+		// Look for tool_use tags in the content
+		const toolUseRegex = /<tool_use>\s*<tool_name>([^<]+)<\/tool_name>(.*?)<\/tool_use>/gs
+		let match
+
+		while ((match = toolUseRegex.exec(content)) !== null) {
+			const toolName = match[1].trim()
+			const paramsContent = match[2]
+
+			// Parse parameters
+			const params: any = {}
+			const paramRegex =
+				/<parameter_name>([^<]+)<\/parameter_name>\s*<parameter_name>value<\/parameter_name>([^<]*?)(?=<parameter_name>|<\/tool_use>|$)/gs
+			let paramMatch
+
+			while ((paramMatch = paramRegex.exec(paramsContent)) !== null) {
+				const paramName = paramMatch[1].trim()
+				const paramValue = paramMatch[2].trim()
+				params[paramName] = paramValue
+			}
+
+			// Also try the standard format with parameter values
+			const standardParamRegex =
+				/<parameter_name>([^<]+)<\/parameter_name>\s*<parameter_name>value<\/parameter_name>([^<]*?)(?=<parameter_name>|<\/tool_use>|$)/gs
+			let standardMatch
+
+			while ((standardMatch = standardParamRegex.exec(paramsContent)) !== null) {
+				const paramName = standardMatch[1].trim()
+				const paramValue = standardMatch[2].trim()
+				params[paramName] = paramValue
+			}
+
+			// Try simpler format: <parameter_name>param</parameter_name><parameter_name>value</parameter_name>content
+			const simpleParamRegex =
+				/<parameter_name>([^<]+)<\/parameter_name>\s*<parameter_name>value<\/parameter_name>\s*([^<]*?)(?=<parameter_name>|<\/tool_use>|$)/gs
+			let simpleMatch
+
+			while ((simpleMatch = simpleParamRegex.exec(paramsContent)) !== null) {
+				const paramName = simpleMatch[1].trim()
+				const paramValue = simpleMatch[2].trim()
+				params[paramName] = paramValue
+			}
+
+			this.logDebug(`[Task] Parsed tool: ${toolName} with params:`, params)
+			toolUses.push({ name: toolName, params })
+		}
+
+		return toolUses
+	}
+
 	// Delegate lifecycle methods
 	private async startTask(task?: string, images?: string[]): Promise<void> {
 		await this.lifecycle.startTask(task, images, (userContent) => this.initiateTaskLoop(userContent))
@@ -770,40 +866,40 @@ export class Task extends EventEmitter<ClineEvents> {
 
 	// Task Loop
 	private async initiateTaskLoop(userContent: Anthropic.Messages.ContentBlockParam[]): Promise<void> {
-		console.log(`[Task] Initiating task loop for task ${this.taskId}.${this.instanceId}`)
-		console.log(`[Task] User content length: ${userContent.length}`)
-		console.log(`[Task] User content:`, JSON.stringify(userContent, null, 2))
+		this.logDebug(`[Task] Initiating task loop for task ${this.taskId}.${this.instanceId}`)
+		this.logDebug(`[Task] User content length: ${userContent.length}`)
+		this.logDebug(`[Task] User content:`, JSON.stringify(userContent, null, 2))
 
 		try {
 			getCheckpointService(this)
-			console.log(`[Task] Checkpoint service initialized`)
+			this.logDebug(`[Task] Checkpoint service initialized`)
 
 			let nextUserContent = userContent
 			let includeFileDetails = true
 			let loopCount = 0
 
-			console.log(`[Task] Starting main task loop`)
+			this.logDebug(`[Task] Starting main task loop`)
 			while (!this.abort) {
 				loopCount++
-				console.log(`[Task] Loop iteration ${loopCount}, abort=${this.abort}`)
+				this.logDebug(`[Task] Loop iteration ${loopCount}, abort=${this.abort}`)
 
 				const didEndLoop = await this.recursivelyMakeClineRequests(nextUserContent, includeFileDetails)
-				console.log(`[Task] Loop iteration ${loopCount} completed, didEndLoop=${didEndLoop}`)
+				this.logDebug(`[Task] Loop iteration ${loopCount} completed, didEndLoop=${didEndLoop}`)
 
 				includeFileDetails = false
 
 				if (didEndLoop) {
-					console.log(`[Task] Task loop ended successfully after ${loopCount} iterations`)
+					this.logDebug(`[Task] Task loop ended successfully after ${loopCount} iterations`)
 					break
 				} else {
-					console.log(`[Task] Continuing loop, mistake count: ${this.consecutiveMistakeCount}`)
+					this.logDebug(`[Task] Continuing loop, mistake count: ${this.consecutiveMistakeCount}`)
 					nextUserContent = [{ type: "text", text: formatResponse.noToolsUsed() }]
 					this.consecutiveMistakeCount++
 				}
 			}
 
 			if (this.abort) {
-				console.log(`[Task] Task loop aborted after ${loopCount} iterations`)
+				this.logDebug(`[Task] Task loop aborted after ${loopCount} iterations`)
 			}
 		} catch (error) {
 			console.error(`[Task] Error in task loop:`, error)
@@ -870,52 +966,137 @@ export class Task extends EventEmitter<ClineEvents> {
 			() => this.ask("mistake_limit_reached", t("common:errors.mistake_limit_guidance")),
 			(taskId, tokenUsage, toolUsage) => this.emit("taskCompleted", taskId, tokenUsage, toolUsage),
 			async (taskApiHandler) => {
-				console.log(`[Task] CLI tool execution function called`)
+				this.logDebug(`[Task] CLI tool execution function called`)
 
 				// CLI-specific tool execution
 				const assistantContent = taskApiHandler.streamingState.assistantMessageContent
-				console.log(`[Task] CLI tool execution for ${assistantContent.length} assistant message blocks`)
-				console.log(`[Task] Assistant content:`, JSON.stringify(assistantContent, null, 2))
+				this.logDebug(`[Task] CLI tool execution for ${assistantContent.length} assistant message blocks`)
+				this.logDebug(`[Task] Assistant content:`, JSON.stringify(assistantContent, null, 2))
+
+				// Check for attempt_completion to detect task completion
+				let foundAttemptCompletion = false
+				let executedTool = false
 
 				for (const block of assistantContent) {
-					console.log(`[Task] Processing block type: ${block.type}`)
+					this.logDebug(`[Task] Processing block type: ${block.type}`)
 
 					if (block.type === "tool_use") {
-						console.log(
+						this.logDebug(
 							`[Task] Executing tool: ${block.name} with params:`,
 							JSON.stringify(block.params, null, 2),
 						)
 
+						// Check for attempt_completion
+						if (block.name === "attempt_completion") {
+							foundAttemptCompletion = true
+							this.logDebug(`[Task] Found attempt_completion tool, task should complete`)
+
+							// Add completion result to user message content
+							const result = block.params?.result || "Task completed"
+							taskApiHandler.streamingState.userMessageContent.push({
+								type: "text",
+								text: `Task completed: ${result}`,
+							})
+							executedTool = true
+							break
+						}
+
 						try {
 							// Import and execute the specific tool
 							const toolResult = await this.executeCliTool(block.name, block.params)
-							console.log(`[Task] Tool ${block.name} completed with result:`, toolResult)
+							this.logDebug(`[Task] Tool ${block.name} completed with result:`, toolResult)
 
 							// Add tool result to user message content
 							taskApiHandler.streamingState.userMessageContent.push({
 								type: "text",
-								text: `[${block.name}] Result: ${toolResult || "(tool completed successfully)"}`,
+								text: `<tool_result>\n${toolResult || "(tool completed successfully)"}\n</tool_result>`,
 							})
 
+							executedTool = true
 							// Mark that we used a tool
 							taskApiHandler.setStreamingState({ didAlreadyUseTool: true })
 						} catch (error) {
 							console.error(`[Task] Tool execution failed for ${block.name}:`, error)
 							taskApiHandler.streamingState.userMessageContent.push({
 								type: "text",
-								text: `[${block.name}] Error: ${error.message}`,
+								text: `<tool_result>\nError: ${error.message}\n</tool_result>`,
 							})
 							taskApiHandler.setStreamingState({ didRejectTool: true })
+							executedTool = true
 						}
 
 						// Only execute one tool per message
 						break
+					} else if (block.type === "text") {
+						// Parse text content to extract tool uses manually for CLI mode
+						const toolUses = this.parseToolUsesFromText(block.content)
+						this.logDebug(`[Task] Parsed ${toolUses.length} tool uses from text content`)
+
+						for (const toolUse of toolUses) {
+							this.logDebug(`[Task] Executing parsed tool: ${toolUse.name}`)
+
+							// Check for attempt_completion
+							if (toolUse.name === "attempt_completion") {
+								foundAttemptCompletion = true
+								this.logDebug(`[Task] Found attempt_completion in text, task should complete`)
+
+								const result = toolUse.params?.result || "Task completed"
+								taskApiHandler.streamingState.userMessageContent.push({
+									type: "text",
+									text: `Task completed: ${result}`,
+								})
+								executedTool = true
+								break
+							}
+
+							try {
+								const toolResult = await this.executeCliTool(toolUse.name, toolUse.params)
+								console.log(`[Task] Parsed tool ${toolUse.name} completed with result:`, toolResult)
+
+								taskApiHandler.streamingState.userMessageContent.push({
+									type: "text",
+									text: `<tool_result>\n${toolResult || "(tool completed successfully)"}\n</tool_result>`,
+								})
+
+								executedTool = true
+								taskApiHandler.setStreamingState({ didAlreadyUseTool: true })
+							} catch (error) {
+								console.error(`[Task] Parsed tool execution failed for ${toolUse.name}:`, error)
+								taskApiHandler.streamingState.userMessageContent.push({
+									type: "text",
+									text: `<tool_result>\nError: ${error.message}\n</tool_result>`,
+								})
+								taskApiHandler.setStreamingState({ didRejectTool: true })
+								executedTool = true
+							}
+							break // Only execute one tool per message
+						}
+
+						if (executedTool) break
 					}
+				}
+
+				// If no tools were executed, add default response
+				if (!executedTool) {
+					console.log(`[Task] No tools executed, adding default response`)
+					taskApiHandler.streamingState.userMessageContent.push({
+						type: "text",
+						text: "Message received. Continue with the task.",
+					})
 				}
 
 				console.log(`[Task] CLI tool execution completed, marking userMessageContentReady`)
 				// Mark user message content as ready
 				taskApiHandler.setStreamingState({ userMessageContentReady: true })
+
+				// Set task completion flag if attempt_completion was found
+				if (foundAttemptCompletion) {
+					console.log(`[Task] Setting task as completed due to attempt_completion`)
+					// Mark that the task should complete by setting userMessageContent to empty
+					// This will cause the recursion to return true and end the loop
+					taskApiHandler.streamingState.userMessageContent = []
+				}
+
 				console.log(`[Task] CLI tool execution function finished`)
 			},
 		)
@@ -987,18 +1168,58 @@ export class Task extends EventEmitter<ClineEvents> {
 		}
 
 		if (isCliMode) {
-			// Return a simple CLI-compatible system prompt
-			return `You are Roo, a highly skilled software engineer with extensive knowledge in many programming languages, frameworks, design patterns, and best practices.
+			// Generate CLI-specific system prompt using the same components as VSCode extension
+			const {
+				getRulesSection,
+				getSystemInfoSection,
+				getObjectiveSection,
+				getSharedToolUseSection,
+				getToolUseGuidelinesSection,
+				getCapabilitiesSection,
+				markdownFormattingSection,
+			} = await import("../prompts/sections")
 
-You have access to tools that let you execute CLI commands on the user's computer, list files, view source code definitions, regex search, read and write files, and ask follow-up questions. These tools help you effectively accomplish a wide range of tasks, such as writing code, making edits or improvements to existing files, understanding the current state of a project, performing system operations, and much more.
+			const { getToolDescriptionsForMode } = await import("../prompts/tools")
+			const { getModeSelection } = await import("../../shared/modes")
+			const { modes } = await import("../../shared/modes")
 
-# Tool Use Guidelines
+			// Get mode configuration
+			const mode = "code"
+			const modeConfig = modes.find((m) => m.slug === mode) || modes[0]
+			const { roleDefinition } = getModeSelection(mode, undefined, [])
 
-1. Choose the most appropriate tool based on the task and the tool descriptions provided.
-2. Use one tool at a time per message to accomplish the task iteratively.
-3. Always wait for user confirmation after each tool use before proceeding.
+			// Build the same comprehensive prompt as VSCode extension
+			const systemPrompt = `${roleDefinition}
 
-Your goal is to try to accomplish the user's task effectively using the available tools.`
+${markdownFormattingSection()}
+
+${getSharedToolUseSection()}
+
+${getToolDescriptionsForMode(
+	mode,
+	this.workspacePath,
+	false, // supportsComputerUse - disable browser tool in CLI
+	undefined, // codeIndexManager - CLI doesn't need code indexing
+	undefined, // diffStrategy
+	"900x600", // browserViewportSize
+	undefined, // mcpHub - disable MCP in CLI
+	[], // customModeConfigs
+	{}, // experiments
+	true, // partialReadsEnabled
+	{}, // settings
+)}
+
+${getToolUseGuidelinesSection()}
+
+${getCapabilitiesSection(this.workspacePath, false, undefined, undefined, undefined)}
+
+${getRulesSection(this.workspacePath, false, undefined)}
+
+${getSystemInfoSection(this.workspacePath)}
+
+${getObjectiveSection()}`
+
+			return systemPrompt
 		}
 
 		return SYSTEM_PROMPT(

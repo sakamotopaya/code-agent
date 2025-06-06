@@ -15,6 +15,7 @@ import { PerformanceMonitoringService } from "./optimization/PerformanceMonitori
 import { StartupOptimizer } from "./optimization/StartupOptimizer"
 import { MemoryOptimizer } from "./optimization/MemoryOptimizer"
 import { PerformanceConfigManager } from "./config/performance-config"
+import { initializeCLILogger, getCLILogger } from "./services/CLILogger"
 import chalk from "chalk"
 import * as fs from "fs"
 
@@ -169,6 +170,9 @@ program
 	.option("--no-mcp-auto-connect", "Do not automatically connect to enabled MCP servers")
 	.option("--mcp-log-level <level>", "MCP logging level (error, warn, info, debug)", validateMcpLogLevel)
 	.action(async (options: CliOptions) => {
+		// Initialize CLI logger first
+		const logger = initializeCLILogger(options.verbose, options.quiet, options.color)
+
 		// Initialize performance monitoring and optimization
 		const performanceMonitor = new PerformanceMonitoringService()
 		const performanceConfig = new PerformanceConfigManager("standard")
@@ -183,7 +187,7 @@ program
 		try {
 			await startupOptimizer.optimizeStartup()
 		} catch (error) {
-			console.warn("Startup optimization failed:", error)
+			logger.warn("Startup optimization failed:", error)
 		}
 
 		// Initialize platform services for CLI context
@@ -203,8 +207,8 @@ program
 			if (options.generateConfig) {
 				const configManager = new CliConfigManager({ verbose: options.verbose })
 				await configManager.generateDefaultConfig(options.generateConfig)
-				console.log(chalk.green(`✓ Generated default configuration at: ${options.generateConfig}`))
-				console.log(chalk.gray("Edit the file to customize your settings."))
+				logger.success(`Generated default configuration at: ${options.generateConfig}`)
+				logger.info("Edit the file to customize your settings.")
 				return
 			}
 
@@ -262,31 +266,30 @@ program
 				verbose: options.verbose,
 			})
 
-			// Show banner if in interactive mode
-			if (!options.batch) {
+			// Show banner if in interactive mode and not quiet
+			if (!options.batch && !options.quiet) {
 				showBanner()
 			}
 
 			// Log configuration details if verbose
 			if (options.verbose) {
-				console.log(chalk.gray("Configuration loaded:"))
-				console.log(chalk.gray(`  Working Directory: ${options.cwd}`))
+				logger.debug("Configuration loaded:")
+				logger.debug(`  Working Directory: ${options.cwd}`)
 				if (options.config) {
-					console.log(chalk.gray(`  Config File: ${options.config}`))
+					logger.debug(`  Config File: ${options.config}`)
 				}
 				if (options.model) {
-					console.log(chalk.gray(`  Model Override: ${options.model}`))
+					logger.debug(`  Model Override: ${options.model}`)
 				}
 				if (options.mode) {
-					console.log(chalk.gray(`  Mode Override: ${options.mode}`))
+					logger.debug(`  Mode Override: ${options.mode}`)
 				}
 				if (options.format) {
-					console.log(chalk.gray(`  Output Format: ${options.format}`))
+					logger.debug(`  Output Format: ${options.format}`)
 				}
 				if (options.output) {
-					console.log(chalk.gray(`  Output File: ${options.output}`))
+					logger.debug(`  Output File: ${options.output}`)
 				}
-				console.log()
 			}
 
 			// Pass configuration to processors
@@ -308,20 +311,20 @@ program
 
 				try {
 					if (options.stdin) {
-						console.log("Executing from stdin...")
+						logger.info("Executing from stdin...")
 						await nonInteractiveService.executeFromStdin()
 					} else if (options.batch) {
-						console.log(`Batch option provided: "${options.batch}"`)
+						logger.debug(`Batch option provided: "${options.batch}"`)
 						// Check if batch is a file path or a direct command
 						// First check if it exists as a file
 						const fileExists = fs.existsSync(options.batch)
-						console.log(`File exists check for "${options.batch}": ${fileExists}`)
+						logger.debug(`File exists check for "${options.batch}": ${fileExists}`)
 
 						if (fileExists) {
-							console.log("Treating as file path, using NonInteractiveModeService")
+							logger.debug("Treating as file path, using NonInteractiveModeService")
 							await nonInteractiveService.executeFromFile(options.batch)
 						} else {
-							console.log("Treating as direct command, using BatchProcessor")
+							logger.debug("Treating as direct command, using BatchProcessor")
 							// Treat as direct command - use existing BatchProcessor
 							const batchProcessor = new BatchProcessor(options, configManager)
 							await batchProcessor.run(options.batch)
@@ -329,11 +332,7 @@ program
 					}
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error)
-					if (options.color) {
-						console.error(chalk.red("❌ Non-interactive execution failed:"), message)
-					} else {
-						console.error("Non-interactive execution failed:", message)
-					}
+					logger.error("Non-interactive execution failed:", message)
 					process.exit(1)
 				}
 			} else {
@@ -346,29 +345,22 @@ program
 			memoryOptimizer.stopMonitoring()
 
 			if (options.verbose) {
-				console.log(chalk.gray(`CLI startup completed in ${Math.round(startupDuration)}ms`))
+				logger.debug(`CLI startup completed in ${Math.round(startupDuration)}ms`)
 
 				const performanceReport = performanceMonitor.generateReport()
 				if (performanceReport.summary.totalOperations > 0) {
-					console.log(
-						chalk.gray(
-							`Performance: ${performanceReport.summary.totalOperations} operations, avg ${Math.round(performanceReport.summary.averageExecutionTime)}ms`,
-						),
+					logger.debug(
+						`Performance: ${performanceReport.summary.totalOperations} operations, avg ${Math.round(performanceReport.summary.averageExecutionTime)}ms`,
 					)
 				}
 			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
-			if (options.color) {
-				console.error(chalk.red("❌ Error:"), message)
-			} else {
-				console.error("Error:", message)
-			}
+			logger.error(message)
 
 			// Show help for validation errors
 			if (error instanceof Error && error.message.includes("Invalid")) {
-				console.error()
-				console.error("Use --help for usage information")
+				logger.error("Use --help for usage information")
 			}
 
 			// Clean up performance monitoring
