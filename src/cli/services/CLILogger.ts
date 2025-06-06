@@ -11,8 +11,6 @@ export class CLILogger {
 
 	// State tracking for streaming content filtering
 	private inThinkingSection: boolean = false
-	private inSystemTag: boolean = false
-	private currentTagBuffer: string = ""
 	private displayedToolNames = new Set<string>() // Track which tool names we've already displayed
 	private systemTags = new Set([
 		"attempt_completion",
@@ -165,7 +163,7 @@ export class CLILogger {
 			const char = content[i]
 
 			// Check for start of XML tag
-			if (char === "<" && !this.inSystemTag) {
+			if (char === "<") {
 				// Look ahead to see if this is a system tag or tool
 				const remainingContent = content.slice(i)
 				const tagMatch = remainingContent.match(/^<(\/?[a-zA-Z_][a-zA-Z0-9_-]*)[^>]*>/)
