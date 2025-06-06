@@ -669,7 +669,19 @@ export class Task extends EventEmitter<ClineEvents> {
 	}
 
 	// Helper method to execute tools with CLI-compatible interface
-	async executeToolWithCLIInterface(toolFn: Function, block: any): Promise<string> {
+	async executeToolWithCLIInterface(
+		toolFn: (
+			task: Task,
+			block: any,
+			askApproval: import("../../shared/tools").AskApproval,
+			handleError: import("../../shared/tools").HandleError,
+			pushToolResult: import("../../shared/tools").PushToolResult,
+			removeClosingTag: import("../../shared/tools").RemoveClosingTag,
+			toolDescription: import("../../shared/tools").ToolDescription,
+			askFinishSubTaskApproval: import("../../shared/tools").AskFinishSubTaskApproval,
+		) => Promise<void>,
+		block: any,
+	): Promise<string> {
 		let toolResult = ""
 
 		// CLI-compatible interfaces
@@ -685,9 +697,20 @@ export class Task extends EventEmitter<ClineEvents> {
 			}
 		}
 		const removeClosingTag = (tag: string, text?: string) => text || ""
+		const toolDescription = () => `Tool: ${block.name}`
+		const askFinishSubTaskApproval = async () => true // Auto-approve in CLI
 
 		// Execute the tool
-		await toolFn(this, block, askApproval, handleError, pushToolResult, removeClosingTag)
+		await toolFn(
+			this,
+			block,
+			askApproval,
+			handleError,
+			pushToolResult,
+			removeClosingTag,
+			toolDescription,
+			askFinishSubTaskApproval,
+		)
 
 		return toolResult
 	}
