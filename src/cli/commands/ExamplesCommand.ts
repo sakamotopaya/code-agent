@@ -323,7 +323,7 @@ export class ExamplesCommand implements IExamplesCommand {
 
 	private loadExamples(): void {
 		if (!existsSync(this.examplesPath)) {
-			console.warn(`Examples directory not found: ${this.examplesPath}`)
+			// Debug: Examples directory not found (only log in verbose mode)
 			return
 		}
 

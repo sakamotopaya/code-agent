@@ -38,6 +38,13 @@ export class StartupOptimizer {
 		this.startupTimer = performance.now()
 
 		try {
+			// Skip optimization in bundled CLI context
+			if (process.env.VSCODE_CONTEXT === "false" || this.isBundledContext()) {
+				const totalTime = timer.stop()
+				this.performanceMonitor.recordMetric("startup.total", totalTime, "ms")
+				return this.getStartupMetrics()
+			}
+
 			// Preload critical modules
 			await this.preloadCriticalModules()
 
@@ -57,7 +64,29 @@ export class StartupOptimizer {
 		}
 	}
 
+	private isBundledContext(): boolean {
+		// Check if we're in a bundled context by looking for typical bundling characteristics
+		try {
+			// In bundled contexts, __filename and __dirname might not be available
+			// or the file structure is flattened
+			return (
+				typeof __filename === "undefined" ||
+				typeof __dirname === "undefined" ||
+				!require.resolve ||
+				process.argv[1]?.includes("dist/cli/index.js")
+			)
+		} catch {
+			return true
+		}
+	}
+
 	private async preloadCriticalModules(): Promise<void> {
+		// Skip module preloading in bundled CLI context
+		if (process.env.VSCODE_CONTEXT === "false") {
+			// In CLI context, modules are already bundled - skip preloading
+			return
+		}
+
 		const criticalModules = [
 			"./services/CLIUIService",
 			"./parsers/ArgumentParser",
@@ -94,6 +123,12 @@ export class StartupOptimizer {
 	}
 
 	private setupLazyLoading(): void {
+		// Skip lazy loading setup in bundled CLI context
+		if (process.env.VSCODE_CONTEXT === "false") {
+			// In CLI context, modules are already bundled - skip lazy loading
+			return
+		}
+
 		const lazyModules = {
 			browser: () => import("../services/CLIBrowserService"),
 			mcp: () => import("../services/CLIMcpService"),

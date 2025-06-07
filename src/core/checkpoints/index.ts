@@ -24,14 +24,18 @@ export function getCheckpointService(cline: Task) {
 	}
 
 	if (cline.checkpointServiceInitializing) {
-		console.log("[Cline#getCheckpointService] checkpoint service is still initializing")
+		// Only log in verbose mode
 		return undefined
 	}
 
 	const provider = cline.providerRef?.deref()
 
 	const log = (message: string) => {
-		console.log(message)
+		// Only log in verbose mode in CLI context
+		const isCliMode = !provider // In CLI mode, provider is undefined
+		if (!isCliMode) {
+			console.log(message)
+		}
 
 		try {
 			provider?.log(message)
@@ -40,7 +44,7 @@ export function getCheckpointService(cline: Task) {
 		}
 	}
 
-	console.log("[Cline#getCheckpointService] initializing checkpoints service")
+	// Only log in verbose mode - checkpoints service initializing
 
 	try {
 		const workspaceDir = getWorkspacePath()

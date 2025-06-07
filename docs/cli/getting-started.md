@@ -78,14 +78,40 @@ Try these commands:
 roo> help
 
 # Show current configuration
-roo> config
-
-# Run a simple task
-roo> "Create a simple hello world function in Python"
+roo> config show
 
 # Exit interactive mode
 roo> exit
 ```
+
+### Sending Prompts in Interactive Mode
+
+In interactive mode, simply type your task directly and press Enter:
+
+```bash
+# Simple prompts - just type naturally
+roo> Create a simple hello world function in Python
+roo> Fix the bug in my authentication code
+roo> Add unit tests for the Calculator class
+roo> Refactor the getUserData function to use async/await
+```
+
+### Multi-line Prompts
+
+For longer, complex prompts, use triple backticks:
+
+````bash
+roo> ```
+Create a React component that:
+- Displays a list of users
+- Has search functionality
+- Includes pagination
+- Uses TypeScript interfaces
+````
+
+`````
+
+The CLI will wait for you to type the closing ```` ``` ```` before processing your request.
 
 ### Batch Mode
 
@@ -100,7 +126,7 @@ roo-cli --batch "Analyze this directory structure" --format json
 
 # Run in specific directory
 roo-cli --cwd /path/to/project --batch "Add unit tests to this project"
-```
+`````
 
 ## Step 3: Working with Files
 
