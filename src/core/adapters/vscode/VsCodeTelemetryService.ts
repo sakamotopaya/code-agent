@@ -35,10 +35,15 @@ export class VsCodeTelemetryService implements ITelemetryService {
 		// Send to registered clients
 		for (const client of this.clients) {
 			try {
-				// Use the client's event capture if available
-				if (typeof client === "object" && "captureEvent" in client) {
-					;(client as any).captureEvent(eventName, properties)
-				}
+				// Use the client's capture method from TelemetryClient interface
+				client
+					.capture({
+						event: eventName,
+						properties,
+					})
+					.catch((error) => {
+						console.warn("Failed to send telemetry event:", error)
+					})
 			} catch (error) {
 				console.warn("Failed to send telemetry event:", error)
 			}
