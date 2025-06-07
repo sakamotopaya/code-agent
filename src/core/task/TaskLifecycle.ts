@@ -6,6 +6,7 @@ import { formatResponse } from "../prompts/responses"
 import { findToolName } from "../../integrations/misc/export-markdown"
 import { ApiMessage } from "../task-persistence/apiMessages"
 import { TaskMessaging } from "./TaskMessaging"
+import { getCLILogger } from "../../cli/services/CLILogger"
 
 /**
  * Handles task lifecycle operations like start, resume, abort
@@ -18,33 +19,69 @@ export class TaskLifecycle {
 		private onTaskStarted?: () => void,
 		private onTaskAborted?: () => void,
 		private onTaskUnpaused?: () => void,
+		private isCliMode: boolean = false,
 	) {}
+
+	private log(message: string, ...args: any[]): void {
+		if (this.isCliMode) {
+			getCLILogger().debug(message, ...args)
+		} else {
+			console.log(message, ...args)
+		}
+	}
+
+	private logError(message: string, ...args: any[]): void {
+		if (this.isCliMode) {
+			getCLILogger().error(message, ...args)
+		} else {
+			console.error(message, ...args)
+		}
+	}
 
 	async startTask(
 		task?: string,
 		images?: string[],
 		initiateTaskLoop?: (userContent: Anthropic.Messages.ContentBlockParam[]) => Promise<void>,
 	): Promise<void> {
+		this.log(`[TaskLifecycle] Starting task ${this.taskId}.${this.instanceId}`)
+		this.log(`[TaskLifecycle] Task description: ${task}`)
+		this.log(`[TaskLifecycle] Images: ${images?.length || 0}`)
+		this.log(`[TaskLifecycle] Has initiateTaskLoop: ${!!initiateTaskLoop}`)
+
 		// Clear conversation history for new task
 		this.messaging.setMessages([])
 		this.messaging.setApiHistory([])
 
+		this.log(`[TaskLifecycle] Cleared conversation history`)
+
 		await this.messaging.say("text", task, images)
+
+		this.log(`[TaskLifecycle] Said initial message`)
 
 		let imageBlocks: Anthropic.ImageBlockParam[] = formatResponse.imageBlocks(images)
 
-		console.log(`[subtasks] task ${this.taskId}.${this.instanceId} starting`)
+		this.log(`[subtasks] task ${this.taskId}.${this.instanceId} starting`)
 
 		this.onTaskStarted?.()
+		this.log(`[TaskLifecycle] Called onTaskStarted callback`)
 
 		if (initiateTaskLoop) {
-			await initiateTaskLoop([
-				{
-					type: "text",
-					text: `<task>\n${task}\n</task>`,
-				},
-				...imageBlocks,
-			])
+			this.log(`[TaskLifecycle] Calling initiateTaskLoop...`)
+			try {
+				await initiateTaskLoop([
+					{
+						type: "text",
+						text: `<task>\n${task}\n</task>`,
+					},
+					...imageBlocks,
+				])
+				// Debug: TaskLifecycle completed successfully (only log in verbose mode)
+			} catch (error) {
+				console.error(`[TaskLifecycle] Error in initiateTaskLoop:`, error)
+				throw error
+			}
+		} else {
+			console.log(`[TaskLifecycle] No initiateTaskLoop provided`)
 		}
 	}
 
@@ -292,7 +329,7 @@ export class TaskLifecycle {
 	}
 
 	async abortTask(): Promise<void> {
-		console.log(`[subtasks] aborting task ${this.taskId}.${this.instanceId}`)
+		this.log(`[subtasks] aborting task ${this.taskId}.${this.instanceId}`)
 		this.onTaskAborted?.()
 	}
 }

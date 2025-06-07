@@ -42,6 +42,7 @@ export const cliEnvironmentConfigSchema = z.object({
 	// File paths
 	ROO_CONFIG_PATH: z.string().optional(),
 	ROO_WORKSPACE_ROOT: z.string().optional(),
+	ROO_SESSION_DIRECTORY: z.string().optional(),
 })
 
 export type CliEnvironmentConfig = z.infer<typeof cliEnvironmentConfigSchema>
@@ -71,6 +72,7 @@ export const cliConfigFileSchema = z
 		// CLI-specific settings
 		verbose: z.boolean().optional(),
 		workspaceRoot: z.string().optional(),
+		sessionDirectory: z.string().optional(),
 
 		// Extend with full provider and global settings
 	})
@@ -83,7 +85,7 @@ export type CliConfigFile = z.infer<typeof cliConfigFileSchema>
  * Configuration source priority (highest to lowest):
  * 1. CLI arguments
  * 2. Environment variables
- * 3. Project-level config file (.roo-cli.json/yaml)
+ * 3. Project-level config file (.roo-cli.json/yaml, .agentz/agent-config.json)
  * 4. User-level config file (~/.roo-cli/config.json/yaml)
  * 5. VSCode settings (if available)
  * 6. Default values
@@ -98,6 +100,7 @@ export interface CliConfigOptions {
 	cwd?: string
 	configPath?: string
 	verbose?: boolean
+	userConfigDir?: string
 	// CLI argument overrides
 	cliOverrides?: Partial<RooCodeSettings>
 }
@@ -111,6 +114,7 @@ export class CliConfigManager {
 		this.options = {
 			cwd: process.cwd(),
 			verbose: false,
+			userConfigDir: path.join(os.homedir(), ".agentz"), // Default to CLI mode
 			...options,
 		}
 	}
@@ -209,7 +213,7 @@ export class CliConfigManager {
 	}
 
 	private async loadUserConfigFile(): Promise<void> {
-		const userConfigDir = path.join(os.homedir(), ".roo-cli")
+		const userConfigDir = this.options.userConfigDir!
 		const configFiles = ["config.json", "config.yaml", "config.yml"]
 
 		for (const fileName of configFiles) {
@@ -235,7 +239,13 @@ export class CliConfigManager {
 		}
 
 		// Look for project-level config files
-		const configFiles = [".roo-cli.json", ".roo-cli.yaml", ".roo-cli.yml", "roo-cli.config.json"]
+		const configFiles = [
+			".roo-cli.json",
+			".roo-cli.yaml",
+			".roo-cli.yml",
+			"roo-cli.config.json",
+			".agentz/agent-config.json",
+		]
 
 		for (const fileName of configFiles) {
 			const filePath = path.join(this.options.cwd, fileName)
@@ -304,7 +314,7 @@ export class CliConfigManager {
 				mappedConfig.requestDelaySeconds = envConfig.ROO_REQUEST_DELAY
 
 			if (Object.keys(mappedConfig).length > 0) {
-				this.addConfigSource("environment", 5, mappedConfig)
+				this.addConfigSource("environment", 8, mappedConfig)
 
 				if (this.options.verbose) {
 					console.log("Loaded configuration from environment variables")
@@ -432,14 +442,14 @@ export class CliConfigManager {
 	/**
 	 * Get the default user config directory
 	 */
-	public static getDefaultUserConfigDir(): string {
-		return path.join(os.homedir(), ".roo-cli")
+	public static getDefaultUserConfigDir(userConfigDirName: string = ".agentz"): string {
+		return path.join(os.homedir(), userConfigDirName)
 	}
 
 	/**
 	 * Get the default user config file path
 	 */
-	public static getDefaultUserConfigPath(): string {
-		return path.join(this.getDefaultUserConfigDir(), "config.json")
+	public static getDefaultUserConfigPath(userConfigDirName: string = ".agentz"): string {
+		return path.join(this.getDefaultUserConfigDir(userConfigDirName), "config.json")
 	}
 }
