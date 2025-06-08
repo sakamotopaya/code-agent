@@ -12,6 +12,13 @@ interface BatchOptions extends CliAdapterOptions {
 	verbose: boolean
 	color: boolean
 	colorScheme?: string
+	// MCP options
+	mcpConfig?: string
+	mcpServer?: string[]
+	mcpTimeout?: number
+	mcpRetries?: number
+	mcpAutoConnect?: boolean
+	noMcpAutoConnect?: boolean
 }
 
 export class BatchProcessor {
@@ -71,6 +78,11 @@ export class BatchProcessor {
 				globalStoragePath: process.env.HOME ? `${process.env.HOME}/.agentz` : "/tmp/.agentz",
 				startTask: true,
 				verbose: this.options.verbose,
+				// MCP configuration options
+				mcpConfigPath: this.options.mcpConfig,
+				mcpAutoConnect: this.options.mcpAutoConnect !== false && !this.options.noMcpAutoConnect,
+				mcpTimeout: this.options.mcpTimeout,
+				mcpRetries: this.options.mcpRetries,
 			})
 
 			this.logDebug("[BatchProcessor] Task created, starting execution...")

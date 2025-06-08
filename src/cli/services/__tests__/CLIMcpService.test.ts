@@ -110,7 +110,7 @@ describe("CLIMcpService", () => {
 			await service.loadServerConfigs()
 
 			// Should try home directory config
-			expect(mockFs.readFile).toHaveBeenCalledWith(path.join(os.homedir(), ".roo", "mcp-config.json"), "utf-8")
+			expect(mockFs.readFile).toHaveBeenCalledWith(path.join(os.homedir(), ".agentz", "mcp-config.json"), "utf-8")
 		})
 		it("should preserve zero values and not replace them with defaults", async () => {
 			const mockConfig = {

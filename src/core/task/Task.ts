@@ -39,6 +39,8 @@ import { RepoPerTaskCheckpointService } from "../../services/checkpoints"
 
 // integrations
 import { DiffViewProvider } from "../../integrations/editor/DiffViewProvider"
+import { IDiffViewProvider } from "../interfaces/IDiffViewProvider"
+import { CLIDiffViewProvider } from "../adapters/cli/CLIDiffViewProvider"
 import { RooTerminalProcess } from "../../integrations/terminal/types"
 import { TerminalRegistry } from "../../integrations/terminal/TerminalRegistry"
 
@@ -52,6 +54,8 @@ import { SYSTEM_PROMPT } from "../prompts/system"
 // core modules
 import { ToolRepetitionDetector } from "../tools/ToolRepetitionDetector"
 import { FileContextTracker } from "../context-tracking/FileContextTracker"
+import { CLIFileContextTracker } from "../adapters/cli/CLIFileContextTracker"
+import { IFileContextTracker } from "../interfaces/IFileContextTracker"
 import { RooIgnoreController } from "../ignore/RooIgnoreController"
 import { ClineProvider } from "../webview/ClineProvider"
 import { MultiSearchReplaceDiffStrategy } from "../diff/strategies/multi-search-replace"
@@ -118,6 +122,11 @@ export type TaskOptions = {
 	globalStoragePath?: string
 	workspacePath?: string
 	verbose?: boolean
+	// MCP configuration options
+	mcpConfigPath?: string
+	mcpAutoConnect?: boolean
+	mcpTimeout?: number
+	mcpRetries?: number
 }
 
 export class Task extends EventEmitter<ClineEvents> {
@@ -145,7 +154,7 @@ export class Task extends EventEmitter<ClineEvents> {
 
 	toolRepetitionDetector: ToolRepetitionDetector
 	rooIgnoreController?: RooIgnoreController
-	fileContextTracker: FileContextTracker
+	fileContextTracker: IFileContextTracker
 	urlContentFetcher: UrlContentFetcher
 	terminalProcess?: RooTerminalProcess
 
@@ -153,7 +162,7 @@ export class Task extends EventEmitter<ClineEvents> {
 	browserSession: BrowserSession
 
 	// Editing
-	diffViewProvider: DiffViewProvider
+	diffViewProvider: IDiffViewProvider
 	diffStrategy?: DiffStrategy
 	diffEnabled: boolean = false
 	fuzzyMatchThreshold: number
@@ -176,6 +185,12 @@ export class Task extends EventEmitter<ClineEvents> {
 	private browser?: IBrowser
 	private telemetryService?: ITelemetryService
 	private verbose: boolean = false
+
+	// MCP configuration
+	private mcpConfigPath?: string
+	private mcpAutoConnect: boolean = true
+	private mcpTimeout?: number
+	private mcpRetries?: number
 
 	// Modular components
 	private messaging: TaskMessaging
@@ -395,6 +410,10 @@ export class Task extends EventEmitter<ClineEvents> {
 		globalStoragePath,
 		workspacePath,
 		verbose = false,
+		mcpConfigPath,
+		mcpAutoConnect = true,
+		mcpTimeout,
+		mcpRetries,
 	}: TaskOptions) {
 		super()
 
@@ -415,6 +434,12 @@ export class Task extends EventEmitter<ClineEvents> {
 		this.browser = browser
 		this.telemetryService = telemetry
 		this.verbose = verbose
+
+		// Store MCP configuration
+		this.mcpConfigPath = mcpConfigPath
+		this.mcpAutoConnect = mcpAutoConnect
+		this.mcpTimeout = mcpTimeout
+		this.mcpRetries = mcpRetries
 
 		// Set up provider and storage
 		if (provider) {
@@ -445,22 +470,18 @@ export class Task extends EventEmitter<ClineEvents> {
 		)
 
 		// Initialize other components
-		// Only initialize RooIgnoreController if we have a provider (VS Code mode)
-		if (provider) {
-			this.rooIgnoreController = new RooIgnoreController(this.workspacePath)
-			this.rooIgnoreController.initialize().catch((error) => {
-				console.error("Failed to initialize RooIgnoreController:", error)
-			})
-		}
+		// Initialize RooIgnoreController in both VS Code and CLI modes
+		// Enable file watcher only in VSCode mode (when provider exists)
+		this.rooIgnoreController = new RooIgnoreController(this.workspacePath, !!provider)
+		this.rooIgnoreController.initialize().catch((error) => {
+			console.error("Failed to initialize RooIgnoreController:", error)
+		})
 
 		if (provider) {
 			this.fileContextTracker = new FileContextTracker(provider, this.taskId)
 		} else {
-			// For CLI usage, create a minimal FileContextTracker implementation
-			this.fileContextTracker = {
-				dispose: () => {},
-				// Add other required methods as needed
-			} as any
+			// For CLI usage, use the CLI implementation
+			this.fileContextTracker = new CLIFileContextTracker(this.taskId)
 		}
 
 		this.apiConfiguration = apiConfiguration
@@ -486,11 +507,10 @@ export class Task extends EventEmitter<ClineEvents> {
 			this.browserSession = new BrowserSession(provider.context)
 			this.diffViewProvider = new DiffViewProvider(this.workspacePath)
 		} else {
-			// For CLI usage, create minimal implementations
-			// TODO: Implement CLI-compatible versions
+			// For CLI usage, create CLI-compatible implementations
 			this.urlContentFetcher = new UrlContentFetcher(null as any)
 			this.browserSession = new BrowserSession(null as any)
-			this.diffViewProvider = new DiffViewProvider(this.workspacePath)
+			this.diffViewProvider = new CLIDiffViewProvider(this.workspacePath)
 		}
 
 		this.diffEnabled = enableDiff
@@ -1134,15 +1154,85 @@ export class Task extends EventEmitter<ClineEvents> {
 				console.warn(`[Task] Failed to get provider state:`, error)
 			}
 		} else {
-			// CLI mode - use defaults
+			// CLI mode - use defaults and enable MCP
 			// Debug: Using default CLI settings (only log in verbose mode)
 			state = {
-				mcpEnabled: false, // Disable MCP in CLI for now
+				mcpEnabled: true, // Enable MCP in CLI mode
 				browserViewportSize: "900x600",
 				mode: "code",
 				customModes: [],
 				customModePrompts: {},
 				customInstructions: "",
+			}
+
+			// Initialize MCP service for CLI mode
+			try {
+				const { CLIMcpService } = await import("../../cli/services/CLIMcpService")
+				const cliMcpService = new CLIMcpService(this.mcpConfigPath)
+
+				// Load and connect to configured servers
+				const serverConfigs = await cliMcpService.loadServerConfigs()
+				console.log(`CLI MCP: Found ${serverConfigs.length} server configurations`)
+
+				if (this.mcpAutoConnect && serverConfigs.length > 0) {
+					for (const config of serverConfigs) {
+						try {
+							console.log(`CLI MCP: Connecting to server ${config.name}...`)
+							await cliMcpService.connectToServer(config)
+							console.log(`CLI MCP: Successfully connected to ${config.name}`)
+						} catch (error) {
+							console.warn(`CLI MCP: Failed to connect to server ${config.name}:`, error)
+						}
+					}
+				} else if (!this.mcpAutoConnect) {
+					console.log("CLI MCP: Auto-connect disabled, servers loaded but not connected")
+				}
+
+				// Create a compatible interface for getMcpServersSection
+				mcpHub = {
+					getServers: () => {
+						return cliMcpService.getConnectedServers().map((conn) => ({
+							name: conn.config.name,
+							status: conn.status,
+							config: JSON.stringify(conn.config),
+							tools: [], // Will be populated later
+							resources: [],
+							resourceTemplates: [],
+						}))
+					},
+					isConnecting: false,
+				}
+
+				// Populate tools and resources for each server
+				const servers = mcpHub.getServers()
+				for (const server of servers) {
+					try {
+						const connection = cliMcpService
+							.getConnectedServers()
+							.find((conn) => conn.config.name === server.name)
+						if (connection?.client) {
+							// Get tools
+							const toolsResult = await connection.client.listTools()
+							server.tools = toolsResult.tools.map((tool: any) => ({
+								name: tool.name,
+								description: tool.description,
+								inputSchema: tool.inputSchema,
+							}))
+
+							// Get resources
+							const resourcesResult = await connection.client.listResources()
+							server.resources = resourcesResult.resources.map((resource: any) => ({
+								uri: resource.uri,
+								name: resource.name,
+								description: resource.description,
+							}))
+						}
+					} catch (error) {
+						console.warn(`Failed to get capabilities for ${server.name}:`, error)
+					}
+				}
+			} catch (error) {
+				console.warn(`[Task] Failed to initialize CLI MCP service:`, error)
 			}
 		}
 
@@ -1174,6 +1264,7 @@ export class Task extends EventEmitter<ClineEvents> {
 				getSystemInfoSection,
 				getObjectiveSection,
 				getSharedToolUseSection,
+				getMcpServersSection,
 				getToolUseGuidelinesSection,
 				getCapabilitiesSection,
 				markdownFormattingSection,
@@ -1187,6 +1278,11 @@ export class Task extends EventEmitter<ClineEvents> {
 			const mode = "code"
 			const modeConfig = modes.find((m) => m.slug === mode) || modes[0]
 			const { roleDefinition } = getModeSelection(mode, undefined, [])
+
+			// Check if this mode supports MCP
+			const enableMcpServerCreation = modeConfig.groups.some(
+				(groupEntry) => (typeof groupEntry === "string" ? groupEntry : groupEntry[0]) === "mcp",
+			)
 
 			// Build the same comprehensive prompt as VSCode extension
 			const systemPrompt = `${roleDefinition}
@@ -1202,12 +1298,14 @@ ${getToolDescriptionsForMode(
 	undefined, // codeIndexManager - CLI doesn't need code indexing
 	undefined, // diffStrategy
 	"900x600", // browserViewportSize
-	undefined, // mcpHub - disable MCP in CLI
+	mcpHub, // mcpHub - now enabled in CLI
 	[], // customModeConfigs
 	{}, // experiments
 	true, // partialReadsEnabled
 	{}, // settings
 )}
+
+${await getMcpServersSection(mcpHub, undefined, enableMcpServerCreation)}
 
 ${getToolUseGuidelinesSection()}
 

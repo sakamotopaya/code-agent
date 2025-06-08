@@ -75,7 +75,7 @@ export class FileWatcher implements IFileWatcher {
 		ignoreInstance?: Ignore,
 		ignoreController?: RooIgnoreController,
 	) {
-		this.ignoreController = ignoreController || new RooIgnoreController(workspacePath)
+		this.ignoreController = ignoreController || new RooIgnoreController(workspacePath, false)
 		if (ignoreInstance) {
 			this.ignoreInstance = ignoreInstance
 		}

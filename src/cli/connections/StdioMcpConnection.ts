@@ -62,8 +62,7 @@ export class StdioMcpConnection implements McpConnection {
 			// Set up error handlers
 			this.setupErrorHandlers()
 
-			// Start transport and connect client
-			await this.transport.start()
+			// Connect client (this automatically starts the transport)
 			await this.client.connect(this.transport)
 
 			this.status = "connected"

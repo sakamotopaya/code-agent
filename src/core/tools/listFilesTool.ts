@@ -56,7 +56,17 @@ export async function listFilesTool(
 
 			const absolutePath = path.resolve(cline.cwd, relDirPath)
 			const [files, didHitLimit] = await listFiles(absolutePath, recursive, 200)
-			const { showRooIgnoredFiles = true } = (await cline.providerRef?.deref()?.getState()) ?? {}
+			// Get state from provider in VSCode mode, use defaults in CLI mode
+			let showRooIgnoredFiles = true
+			if (cline.providerRef) {
+				try {
+					const state = await cline.providerRef.deref()?.getState()
+					showRooIgnoredFiles = state?.showRooIgnoredFiles ?? true
+				} catch (error) {
+					// Use default if state access fails (likely CLI mode)
+					showRooIgnoredFiles = true
+				}
+			}
 
 			const result = formatResponse.formatFilesList(
 				absolutePath,

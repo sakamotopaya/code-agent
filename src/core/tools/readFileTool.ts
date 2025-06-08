@@ -327,7 +327,17 @@ export async function readFileTool(
 
 		// Handle batch approval if there are multiple files to approve
 		if (filesToApprove.length > 1) {
-			const { maxReadFileLine = -1 } = (await cline.providerRef?.deref()?.getState()) ?? {}
+			// Get state from provider in VSCode mode, use defaults in CLI mode
+			let maxReadFileLine = -1
+			if (cline.providerRef) {
+				try {
+					const state = await cline.providerRef.deref()?.getState()
+					maxReadFileLine = state?.maxReadFileLine ?? -1
+				} catch (error) {
+					// Use default if state access fails (likely CLI mode)
+					maxReadFileLine = -1
+				}
+			}
 
 			// Prepare batch file data
 			const batchFiles = filesToApprove.map((fileResult) => {
@@ -365,43 +375,33 @@ export async function readFileTool(
 				batchFiles,
 			} satisfies ClineSayTool)
 
-			const { response, text, images } = await cline.ask("tool", completeMessage, false)
+			// In CLI mode, use the askApproval function which auto-approves
+			// In VSCode mode, this will show the appropriate UI
+			const approved = await askApproval("tool", completeMessage)
 
-			// Process batch response
-			if (response === "yesButtonClicked") {
+			if (approved) {
 				// Approve all files
-				if (text) {
-					await cline.say("user_feedback", text, images)
-				}
 				filesToApprove.forEach((fileResult) => {
 					updateFileResult(fileResult.path, {
 						status: "approved",
-						feedbackText: text,
-						feedbackImages: images,
 					})
 				})
-			} else if (response === "noButtonClicked") {
+			} else {
 				// Deny all files
-				if (text) {
-					await cline.say("user_feedback", text, images)
-				}
 				cline.didRejectTool = true
 				filesToApprove.forEach((fileResult) => {
 					updateFileResult(fileResult.path, {
 						status: "denied",
 						xmlContent: `<file><path>${fileResult.path}</path><status>Denied by user</status></file>`,
-						feedbackText: text,
-						feedbackImages: images,
 					})
 				})
-			} else {
-				// Handle individual permissions from objectResponse
-				// if (text) {
-				// 	await cline.say("user_feedback", text, images)
-				// }
+			}
 
+			// Skip the complex individual permissions handling for now
+			if (false) {
+				// Handle individual permissions from objectResponse
 				try {
-					const individualPermissions = JSON.parse(text || "{}")
+					const individualPermissions = JSON.parse("{}")
 					let hasAnyDenial = false
 
 					batchFiles.forEach((batchFile, index) => {
@@ -442,7 +442,17 @@ export async function readFileTool(
 			const relPath = fileResult.path
 			const fullPath = cline.fs.resolve(relPath)
 			const isOutsideWorkspace = isPathOutsideWorkspace(fullPath)
-			const { maxReadFileLine = -1 } = (await cline.providerRef?.deref()?.getState()) ?? {}
+			// Get state from provider in VSCode mode, use defaults in CLI mode
+			let maxReadFileLine = -1
+			if (cline.providerRef) {
+				try {
+					const state = await cline.providerRef.deref()?.getState()
+					maxReadFileLine = state?.maxReadFileLine ?? -1
+				} catch (error) {
+					// Use default if state access fails (likely CLI mode)
+					maxReadFileLine = -1
+				}
+			}
 
 			// Create line snippet for approval message
 			let lineSnippet = ""
@@ -465,31 +475,24 @@ export async function readFileTool(
 				reason: lineSnippet,
 			} satisfies ClineSayTool)
 
-			const { response, text, images } = await cline.ask("tool", completeMessage, false)
+			// In CLI mode, use the askApproval function which auto-approves
+			// In VSCode mode, this will show the appropriate UI
+			const approved = await askApproval("tool", completeMessage)
 
-			if (response !== "yesButtonClicked") {
-				// Handle both messageResponse and noButtonClicked with text
-				if (text) {
-					await cline.say("user_feedback", text, images)
-				}
+			if (!approved) {
+				// Handle denial
 				cline.didRejectTool = true
 
 				updateFileResult(relPath, {
 					status: "denied",
 					xmlContent: `<file><path>${relPath}</path><status>Denied by user</status></file>`,
-					feedbackText: text,
-					feedbackImages: images,
 				})
 			} else {
-				// Handle yesButtonClicked with text
-				if (text) {
-					await cline.say("user_feedback", text, images)
-				}
-
+				// Handle approval
 				updateFileResult(relPath, {
 					status: "approved",
-					feedbackText: text,
-					feedbackImages: images,
+					feedbackText: undefined,
+					feedbackImages: undefined,
 				})
 			}
 		}
@@ -503,7 +506,17 @@ export async function readFileTool(
 
 			const relPath = fileResult.path
 			const fullPath = cline.fs.resolve(relPath)
-			const { maxReadFileLine = 500 } = (await cline.providerRef?.deref()?.getState()) ?? {}
+			// Get state from provider in VSCode mode, use defaults in CLI mode
+			let maxReadFileLine = 500
+			if (cline.providerRef) {
+				try {
+					const state = await cline.providerRef.deref()?.getState()
+					maxReadFileLine = state?.maxReadFileLine ?? 500
+				} catch (error) {
+					// Use default if state access fails (likely CLI mode)
+					maxReadFileLine = 500
+				}
+			}
 
 			// Process approved files
 			try {

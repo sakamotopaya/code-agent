@@ -266,21 +266,66 @@ export class CLIMcpService implements ICLIMcpService {
 
 		try {
 			const configContent = await fs.readFile(resolvedPath, "utf-8")
-			const configFile: McpConfigFile = JSON.parse(configContent)
+			const configData = JSON.parse(configContent)
 
-			// Update defaults
-			this.defaults = { ...DEFAULT_MCP_CONFIG, ...configFile.defaults }
+			// Handle both CLI format (McpConfigFile) and Roo Code format (mcpServers object)
+			let servers: any[] = []
 
-			return configFile.servers.map((server) => ({
-				...server,
-				timeout: server.timeout ?? this.defaults.timeout,
-				retryAttempts: server.retryAttempts ?? this.defaults.retryAttempts,
-				retryDelay: server.retryDelay ?? this.defaults.retryDelay,
-				healthCheckInterval: server.healthCheckInterval ?? this.defaults.healthCheckInterval,
-			}))
+			if (configData.mcpServers) {
+				// Roo Code format: convert mcpServers object to array
+				console.log(`Loading Roo Code MCP configuration from: ${resolvedPath}`)
+				servers = Object.entries(configData.mcpServers).map(([id, config]: [string, any]) => ({
+					id,
+					name: config.name || id,
+					description: config.description || `MCP Server: ${id}`,
+					type: config.type || config.transportType || "stdio",
+					enabled: config.enabled !== false && !config.disabled,
+					command: config.command,
+					args: config.args || [],
+					cwd: config.cwd || process.cwd(),
+					env: config.env || {},
+					url: config.url,
+					headers: config.headers || {},
+					timeout: config.timeout,
+					retryAttempts: config.retryAttempts,
+					retryDelay: config.retryDelay,
+					healthCheckInterval: config.healthCheckInterval,
+					alwaysAllow: config.alwaysAllow || [],
+					autoApprove: config.autoApprove || [],
+				}))
+
+				// Update defaults from Roo format if available, otherwise use CLI defaults
+				if (configData.defaults) {
+					this.defaults = { ...DEFAULT_MCP_CONFIG, ...configData.defaults }
+				}
+			} else if (configData.servers) {
+				// CLI format: use servers array directly
+				console.log(`Loading CLI MCP configuration from: ${resolvedPath}`)
+				servers = configData.servers
+				this.defaults = { ...DEFAULT_MCP_CONFIG, ...configData.defaults }
+			} else {
+				// Empty or invalid configuration
+				console.log(`No MCP servers found in configuration: ${resolvedPath}`)
+				return []
+			}
+
+			// Apply defaults and filter enabled servers
+			const configuredServers = servers
+				.map((server) => ({
+					...server,
+					timeout: server.timeout ?? this.defaults.timeout,
+					retryAttempts: server.retryAttempts ?? this.defaults.retryAttempts,
+					retryDelay: server.retryDelay ?? this.defaults.retryDelay,
+					healthCheckInterval: server.healthCheckInterval ?? this.defaults.healthCheckInterval,
+				}))
+				.filter((server) => server.enabled !== false)
+
+			console.log(`Found ${configuredServers.length} enabled MCP servers`)
+			return configuredServers
 		} catch (error) {
 			if (error.code === "ENOENT") {
 				// Config file doesn't exist, return empty array
+				console.log(`No MCP configuration file found at: ${resolvedPath}`)
 				return []
 			}
 			throw new McpConfigurationError(`Failed to load configuration: ${error.message}`, resolvedPath)
@@ -352,15 +397,30 @@ export class CLIMcpService implements ICLIMcpService {
 			return path.resolve(configPath)
 		}
 
-		// Try current directory first
-		const localPath = path.join(process.cwd(), MCP_CONFIG_FILENAME)
-		try {
-			await fs.access(localPath)
-			return localPath
-		} catch {
-			// Fall back to home directory
-			return path.join(os.homedir(), ".roo", MCP_CONFIG_FILENAME)
+		// Priority order for configuration files:
+		const configPaths = [
+			// 1. Local CLI config
+			path.join(process.cwd(), MCP_CONFIG_FILENAME),
+			// 2. Project Roo config
+			path.join(process.cwd(), ".agentz", "mcp_settings.json"),
+			// 3. Global Roo config
+			path.join(os.homedir(), ".agentz", "mcp_settings.json"),
+			// 4. Global CLI config
+			path.join(os.homedir(), ".agentz", MCP_CONFIG_FILENAME),
+		]
+
+		// Try each path in order
+		for (const configPath of configPaths) {
+			try {
+				await fs.access(configPath)
+				return configPath
+			} catch {
+				// Continue to next path
+			}
 		}
+
+		// If no config found, return the global CLI config path (will be created if needed)
+		return path.join(os.homedir(), ".agentz", MCP_CONFIG_FILENAME)
 	}
 
 	private startHealthCheck(serverId: string, interval: number): void {
