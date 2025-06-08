@@ -30,6 +30,18 @@ export default [
 		},
 	},
 	{
+		files: ["test-run-output/**/*.js"],
+		languageOptions: {
+			globals: {
+				require: "readonly",
+				console: "readonly",
+				process: "readonly",
+				__dirname: "readonly",
+				module: "readonly",
+			},
+		},
+	},
+	{
 		ignores: ["webview-ui", "out"],
 	},
 ]
