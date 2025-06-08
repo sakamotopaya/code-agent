@@ -397,27 +397,28 @@ export async function readFileTool(
 				})
 			}
 
-			// Skip the complex individual permissions handling for now
-			if (false) {
-				// Handle individual permissions from objectResponse
-				try {
-					const individualPermissions = JSON.parse("{}")
-					let hasAnyDenial = false
+			// TODO: Skip the complex individual permissions handling for now
+			// This code is temporarily disabled and should be implemented properly
+			/*
+			// Handle individual permissions from objectResponse
+			try {
+				const individualPermissions = JSON.parse("{}")
+				let hasAnyDenial = false
 
-					batchFiles.forEach((batchFile, index) => {
-						const fileResult = filesToApprove[index]
-						const approved = individualPermissions[batchFile.key] === true
+				batchFiles.forEach((batchFile, index) => {
+					const fileResult = filesToApprove[index]
+					const approved = individualPermissions[batchFile.key] === true
 
-						if (approved) {
-							updateFileResult(fileResult.path, {
-								status: "approved",
-							})
-						} else {
-							hasAnyDenial = true
-							updateFileResult(fileResult.path, {
-								status: "denied",
-								xmlContent: `<file><path>${fileResult.path}</path><status>Denied by user</status></file>`,
-							})
+					if (approved) {
+						updateFileResult(fileResult.path, {
+							status: "approved",
+						})
+					} else {
+						hasAnyDenial = true
+						updateFileResult(fileResult.path, {
+							status: "denied",
+							xmlContent: `<file><path>${fileResult.path}</path><status>Denied by user</status></file>`,
+						})
 						}
 					})
 
@@ -435,7 +436,7 @@ export async function readFileTool(
 						})
 					})
 				}
-			}
+			*/
 		} else if (filesToApprove.length === 1) {
 			// Handle single file approval (existing logic)
 			const fileResult = filesToApprove[0]
