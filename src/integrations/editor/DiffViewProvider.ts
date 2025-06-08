@@ -11,13 +11,14 @@ import { formatResponse } from "../../core/prompts/responses"
 import { diagnosticsToProblemsString, getNewDiagnostics } from "../diagnostics"
 import { ClineSayTool } from "../../shared/ExtensionMessage"
 import { Task } from "../../core/task/Task"
+import { IDiffViewProvider } from "../../core/interfaces/IDiffViewProvider"
 
 import { DecorationController } from "./DecorationController"
 
 export const DIFF_VIEW_URI_SCHEME = "cline-diff"
 
 // TODO: https://github.com/cline/cline/pull/3354
-export class DiffViewProvider {
+export class DiffViewProvider implements IDiffViewProvider {
 	// Properties to store the results of saveChanges
 	newProblemsMessage?: string
 	userEdits?: string

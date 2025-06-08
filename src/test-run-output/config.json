@@ -1,0 +1,56 @@
+{
+	"application": {
+		"name": "Sample Application",
+		"version": "1.0.0",
+		"environment": "development",
+		"debug": true
+	},
+	"server": {
+		"host": "localhost",
+		"port": 3000,
+		"timeout": 30000,
+		"maxConnections": 100
+	},
+	"database": {
+		"type": "postgresql",
+		"host": "localhost",
+		"port": 5432,
+		"name": "sample_db",
+		"username": "admin",
+		"password": "password123",
+		"ssl": false,
+		"poolSize": 10
+	},
+	"logging": {
+		"level": "info",
+		"format": "json",
+		"file": "logs/application.log",
+		"maxSize": "10MB",
+		"maxFiles": 5
+	},
+	"cache": {
+		"type": "redis",
+		"host": "localhost",
+		"port": 6379,
+		"ttl": 3600,
+		"maxMemory": "256MB"
+	},
+	"security": {
+		"jwtSecret": "your-secret-key-here",
+		"tokenExpiry": "24h",
+		"bcryptRounds": 12,
+		"corsOrigins": ["http://localhost:3000", "https://example.com"]
+	},
+	"features": {
+		"enableAnalytics": true,
+		"enableNotifications": false,
+		"enableCaching": true,
+		"maintenanceMode": false
+	},
+	"external": {
+		"apiUrl": "https://api.example.com",
+		"apiKey": "your-api-key-here",
+		"timeout": 5000,
+		"retries": 3
+	}
+}

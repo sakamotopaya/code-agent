@@ -2,6 +2,9 @@
  * Storage-related type definitions for session persistence
  */
 
+import * as os from "os"
+import * as path from "path"
+
 // Storage backend interface
 export interface ISessionStorage {
 	saveSession(session: Session): Promise<void>
@@ -44,7 +47,7 @@ export interface StorageConfig {
 }
 
 export const DEFAULT_STORAGE_CONFIG: StorageConfig = {
-	sessionDirectory: "~/.agentz",
+	sessionDirectory: path.join(os.homedir(), ".agentz"),
 	compressionLevel: 6,
 	backupEnabled: true,
 	backupInterval: 24,

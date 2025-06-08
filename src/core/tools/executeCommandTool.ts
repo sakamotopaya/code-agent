@@ -56,9 +56,23 @@ export async function executeCommandTool(
 			}
 
 			const executionId = cline.lastMessageTs?.toString() ?? Date.now().toString()
-			const clineProvider = await cline.providerRef?.deref()
-			const clineProviderState = await clineProvider?.getState()
-			const { terminalOutputLineLimit = 500, terminalShellIntegrationDisabled = false } = clineProviderState ?? {}
+			// Get state from provider in VSCode mode, use defaults in CLI mode
+			let terminalOutputLineLimit = 500
+			let terminalShellIntegrationDisabled = false
+			let clineProvider: any = null
+			if (cline.providerRef) {
+				try {
+					clineProvider = await cline.providerRef.deref()
+					const clineProviderState = await clineProvider?.getState()
+					terminalOutputLineLimit = clineProviderState?.terminalOutputLineLimit ?? 500
+					terminalShellIntegrationDisabled = clineProviderState?.terminalShellIntegrationDisabled ?? false
+				} catch (error) {
+					// Use defaults if state access fails (likely CLI mode)
+					terminalOutputLineLimit = 500
+					terminalShellIntegrationDisabled = false
+					clineProvider = null
+				}
+			}
 
 			const options: ExecuteCommandOptions = {
 				executionId,
