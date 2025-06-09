@@ -122,6 +122,8 @@ export type TaskOptions = {
 	globalStoragePath?: string
 	workspacePath?: string
 	verbose?: boolean
+	// CLI specific dependencies
+	cliUIService?: any // CLIUIService type import would create circular dependency
 	// MCP configuration options
 	mcpConfigPath?: string
 	mcpAutoConnect?: boolean
@@ -184,6 +186,7 @@ export class Task extends EventEmitter<ClineEvents> {
 	private terminal?: ITerminal
 	private browser?: IBrowser
 	private telemetryService?: ITelemetryService
+	private cliUIService?: any // CLIUIService instance for CLI mode
 	private verbose: boolean = false
 
 	// MCP configuration
@@ -411,6 +414,7 @@ export class Task extends EventEmitter<ClineEvents> {
 		globalStoragePath,
 		workspacePath,
 		verbose = false,
+		cliUIService,
 		mcpConfigPath,
 		mcpAutoConnect = true,
 		mcpTimeout,
@@ -434,6 +438,7 @@ export class Task extends EventEmitter<ClineEvents> {
 		this.terminal = terminal
 		this.browser = browser
 		this.telemetryService = telemetry
+		this.cliUIService = cliUIService
 		this.verbose = verbose
 
 		// Store MCP configuration
@@ -565,15 +570,11 @@ export class Task extends EventEmitter<ClineEvents> {
 
 	// Dispose method to clean up MCP connections and other resources
 	async dispose(): Promise<void> {
+		// Note: Don't dispose the MCP service in CLI mode since it's a shared global instance
+		// The global MCP service will be disposed when the CLI shuts down
 		if (this.cliMcpService) {
-			try {
-				this.logDebug("[Task] Disposing MCP service...")
-				await this.cliMcpService.dispose()
-				this.cliMcpService = undefined
-				this.logDebug("[Task] MCP service disposed")
-			} catch (error) {
-				this.logDebug("[Task] Error disposing MCP service:", error)
-			}
+			this.logDebug("[Task] Releasing reference to shared MCP service...")
+			this.cliMcpService = undefined
 		}
 	}
 
@@ -778,6 +779,42 @@ export class Task extends EventEmitter<ClineEvents> {
 				}
 				const result = await this.cliMcpService.accessResource(params.server_name, params.uri)
 				return JSON.stringify(result, null, 2)
+			}
+
+			case "ask_followup_question": {
+				// Use the new question handling system
+				const { TaskQuestionService } = await import("../question-handling/services/TaskQuestionService")
+				const { createCLIQuestionHandler } = await import("../question-handling/handlers/CLIQuestionHandler")
+
+				// Use the injected CLI UI service or create a fallback
+				let promptManager: any
+				if (this.cliUIService) {
+					promptManager = this.cliUIService.getPromptManager()
+				} else {
+					// Fallback: create a new CLI UI service if none was injected
+					const { CLIUIService } = await import("../../cli/services/CLIUIService")
+					const fallbackUIService = new CLIUIService(true) // Enable color by default
+					promptManager = fallbackUIService.getPromptManager()
+				}
+
+				// Create CLI question handler
+				const handler = createCLIQuestionHandler({
+					promptManager,
+					logger: this,
+				})
+
+				// Create question service
+				const questionService = new TaskQuestionService(handler, this)
+
+				// Ask the question
+				const response = await questionService.askFollowupQuestion(
+					params.question,
+					params.follow_up,
+					false, // not partial for CLI
+				)
+
+				// Return formatted response
+				return questionService.formatResponseForTool(response)
 			}
 
 			default:
@@ -1219,103 +1256,27 @@ export class Task extends EventEmitter<ClineEvents> {
 				customInstructions: "",
 			}
 
-			// Initialize MCP service for CLI mode
+			// Use global MCP service for CLI mode
 			try {
-				const { CLIMcpService } = await import("../../cli/services/CLIMcpService")
-				this.cliMcpService = new CLIMcpService(this.mcpConfigPath)
+				const { GlobalCLIMcpService } = await import("../../cli/services/GlobalCLIMcpService")
+				const globalMcpService = GlobalCLIMcpService.getInstance()
 
-				// Load and connect to configured servers
-				const serverConfigs = await this.cliMcpService.loadServerConfigs()
-				console.log(`CLI MCP: Found ${serverConfigs.length} server configurations`)
+				if (globalMcpService.isInitialized()) {
+					// Get the shared MCP service instance
+					this.cliMcpService = globalMcpService.getMcpService()
 
-				if (this.mcpAutoConnect && serverConfigs.length > 0) {
-					for (const config of serverConfigs) {
-						try {
-							console.log(`CLI MCP: Connecting to server ${config.name}...`)
-							await this.cliMcpService.connectToServer(config)
-							console.log(`CLI MCP: Successfully connected to ${config.name}`)
-						} catch (error) {
-							console.warn(`CLI MCP: Failed to connect to server ${config.name}:`, error)
-						}
+					// Create a compatible interface for getMcpServersSection
+					mcpHub = globalMcpService.createMcpHub()
+
+					// Populate tools and resources for each server
+					if (mcpHub) {
+						await globalMcpService.populateServerCapabilities(mcpHub)
 					}
-				} else if (!this.mcpAutoConnect) {
-					console.log("CLI MCP: Auto-connect disabled, servers loaded but not connected")
-				}
-
-				// Create a compatible interface for getMcpServersSection
-				mcpHub = {
-					getServers: () => {
-						return this.cliMcpService.getConnectedServers().map((conn: any) => ({
-							name: conn.config.name,
-							status: conn.status,
-							config: JSON.stringify(conn.config),
-							tools: [], // Will be populated later
-							resources: [],
-							resourceTemplates: [],
-						}))
-					},
-					isConnecting: false,
-				}
-
-				// Populate tools and resources for each server
-				const servers = mcpHub.getServers()
-				for (const server of servers) {
-					try {
-						const connection = this.cliMcpService
-							.getConnectedServers()
-							.find((conn: any) => conn.config.name === server.name)
-						if (connection?.client && connection.isCapabilityReady()) {
-							// Import MCP types for proper request format
-							const { ListToolsResultSchema, ListResourcesResultSchema } = await import(
-								"@modelcontextprotocol/sdk/types.js"
-							)
-
-							try {
-								// Get tools using correct MCP protocol method
-								const toolsResult = await connection.client.request(
-									{ method: "tools/list" },
-									ListToolsResultSchema,
-								)
-								server.tools = toolsResult.tools.map((tool: any) => ({
-									name: tool.name,
-									description: tool.description,
-									inputSchema: tool.inputSchema,
-								}))
-							} catch (error) {
-								if (error.code !== -32601) {
-									console.debug(`Error getting tools for ${server.name}:`, error)
-								}
-								// Tools not supported, use empty array
-								server.tools = []
-							}
-
-							try {
-								// Get resources using correct MCP protocol method
-								const resourcesResult = await connection.client.request(
-									{ method: "resources/list" },
-									ListResourcesResultSchema,
-								)
-								server.resources = resourcesResult.resources.map((resource: any) => ({
-									uri: resource.uri,
-									name: resource.name,
-									description: resource.description,
-								}))
-							} catch (error) {
-								if (error.code !== -32601) {
-									console.debug(`Error getting resources for ${server.name}:`, error)
-								}
-								// Resources not supported, use empty array
-								server.resources = []
-							}
-						} else if (connection && !connection.isCapabilityReady()) {
-							console.debug(`Server ${server.name} is not ready for capability discovery yet`)
-						}
-					} catch (error) {
-						console.warn(`Failed to get capabilities for ${server.name}:`, error)
-					}
+				} else {
+					this.logDebug("[Task] Global MCP service not initialized - MCP features will be unavailable")
 				}
 			} catch (error) {
-				console.warn(`[Task] Failed to initialize CLI MCP service:`, error)
+				this.logDebug(`[Task] Failed to use global MCP service:`, error)
 			}
 		}
 

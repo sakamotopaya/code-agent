@@ -16,6 +16,7 @@ import { StartupOptimizer } from "./optimization/StartupOptimizer"
 import { MemoryOptimizer } from "./optimization/MemoryOptimizer"
 import { PerformanceConfigManager } from "./config/performance-config"
 import { initializeCLILogger, getCLILogger } from "./services/CLILogger"
+import { GlobalCLIMcpService } from "./services/GlobalCLIMcpService"
 import chalk from "chalk"
 import * as fs from "fs"
 
@@ -175,12 +176,30 @@ program
 
 		// Set up graceful shutdown handlers
 		let isShuttingDown = false
-		const gracefulShutdown = (signal: string) => {
+		const gracefulShutdown = async (signal: string) => {
 			if (isShuttingDown) return
 			isShuttingDown = true
 
 			if (options.verbose) {
 				logger.debug(`Received ${signal}, initiating graceful shutdown...`)
+			}
+
+			// Dispose global MCP service
+			try {
+				const globalMcpService = GlobalCLIMcpService.getInstance()
+				if (globalMcpService.isInitialized()) {
+					if (options.verbose) {
+						logger.debug("Disposing global MCP service...")
+					}
+					await globalMcpService.dispose()
+					if (options.verbose) {
+						logger.debug("Global MCP service disposed")
+					}
+				}
+			} catch (error) {
+				if (options.verbose) {
+					logger.debug("Error disposing global MCP service:", error)
+				}
 			}
 
 			// Set a timeout for forced exit
@@ -214,6 +233,24 @@ program
 
 		// Initialize platform services for CLI context
 		await PlatformServiceFactory.initialize(PlatformContext.CLI, "roo-cline", options.config)
+
+		// Initialize global MCP service once at startup
+		if (options.mcpAutoConnect !== false) {
+			try {
+				const globalMcpService = GlobalCLIMcpService.getInstance()
+				await globalMcpService.initialize({
+					mcpConfigPath: options.mcpConfig,
+					mcpAutoConnect: options.mcpAutoConnect,
+					mcpTimeout: options.mcpTimeout,
+					mcpRetries: options.mcpRetries,
+				})
+				if (options.verbose) {
+					logger.debug("Global MCP service initialized successfully")
+				}
+			} catch (error) {
+				logger.warn("Failed to initialize global MCP service:", error)
+			}
+		}
 
 		// Handle MCP auto-connect logic: default to true, but allow explicit override
 		if (options.mcpAutoConnect === undefined && options.noMcpAutoConnect === undefined) {
@@ -358,7 +395,16 @@ program
 					process.exit(1)
 				}
 			} else {
-				const repl = new CliRepl(options, configManager)
+				// Pass MCP options to REPL
+				const replOptions = {
+					...options,
+					mcpConfig: options.mcpConfig,
+					mcpAutoConnect: options.mcpAutoConnect,
+					mcpTimeout: options.mcpTimeout,
+					mcpRetries: options.mcpRetries,
+					noMcpAutoConnect: options.noMcpAutoConnect,
+				}
+				const repl = new CliRepl(replOptions, configManager)
 				await repl.start()
 			}
 
@@ -383,7 +429,25 @@ program
 					logger.debug("Non-interactive mode completed, scheduling exit...")
 				}
 				// Schedule exit to allow any remaining async operations to complete
-				setTimeout(() => {
+				setTimeout(async () => {
+					try {
+						// Dispose global MCP service before exit
+						const globalMcpService = GlobalCLIMcpService.getInstance()
+						if (globalMcpService.isInitialized()) {
+							if (options.verbose) {
+								logger.debug("Disposing global MCP service before exit...")
+							}
+							await globalMcpService.dispose()
+							if (options.verbose) {
+								logger.debug("Global MCP service disposed")
+							}
+						}
+					} catch (error) {
+						if (options.verbose) {
+							logger.debug("Error disposing global MCP service:", error)
+						}
+					}
+
 					if (options.verbose) {
 						logger.debug("Exiting process after completion")
 					}

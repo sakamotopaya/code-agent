@@ -14,6 +14,13 @@ interface ReplOptions extends CliAdapterOptions {
 	verbose: boolean
 	color: boolean
 	colorScheme?: string
+	// MCP options
+	mcpConfig?: string
+	mcpServer?: string[]
+	mcpTimeout?: number
+	mcpRetries?: number
+	mcpAutoConnect?: boolean
+	noMcpAutoConnect?: boolean
 }
 
 interface ReplConstructorOptions {
@@ -249,6 +256,12 @@ export class CliRepl {
 				telemetry: adapters.telemetry,
 				workspacePath: this.options.cwd,
 				globalStoragePath: process.env.HOME ? `${process.env.HOME}/.roo-code` : "/tmp/.roo-code",
+				cliUIService: this.uiService,
+				// MCP configuration options (will use global service)
+				mcpConfigPath: this.options.mcpConfig,
+				mcpAutoConnect: this.options.mcpAutoConnect !== false && !this.options.noMcpAutoConnect,
+				mcpTimeout: this.options.mcpTimeout,
+				mcpRetries: this.options.mcpRetries,
 			})
 
 			// Set up task event handlers
