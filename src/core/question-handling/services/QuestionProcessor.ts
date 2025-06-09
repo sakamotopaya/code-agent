@@ -177,9 +177,12 @@ export class QuestionProcessor {
 		}
 
 		// Basic sanitization - remove control characters but preserve formatting
-		return input
-			.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "") // Remove control chars except \n, \r, \t
-			.trim()
+		return (
+			input
+				// eslint-disable-next-line no-control-regex
+				.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "") // Remove control chars except \n, \r, \t
+				.trim()
+		)
 	}
 
 	/**
