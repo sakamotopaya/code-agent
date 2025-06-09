@@ -55,16 +55,27 @@ class GlobalCLIMcpService {
 		const logger = getCLILogger()
 
 		try {
+			console.log("[GlobalCLIMcpService] DEBUG: Starting MCP service initialization...")
+			console.log("[GlobalCLIMcpService] DEBUG: Config path:", this.configPath || "undefined")
+			console.log("[GlobalCLIMcpService] DEBUG: Auto-connect:", this.mcpAutoConnect)
+
 			logger.debug("[GlobalCLIMcpService] Initializing MCP service...")
 
 			this.mcpService = new CLIMcpService(this.configPath)
 
 			// Load and connect to configured servers
+			console.log("[GlobalCLIMcpService] DEBUG: About to load server configs...")
 			const serverConfigs = await this.mcpService.loadServerConfigs()
 			console.log(`Loading Roo Code MCP configuration from: ${this.configPath || "default locations"}`)
 			console.log(`Found ${serverConfigs.length} enabled MCP servers`)
 
+			// Debug: log server details
+			serverConfigs.forEach((config) => {
+				console.log(`  - Server: ${config.name} (${config.id}) - enabled: ${config.enabled !== false}`)
+			})
+
 			if (this.mcpAutoConnect && serverConfigs.length > 0) {
+				console.log("[GlobalCLIMcpService] DEBUG: Starting server connections...")
 				for (const config of serverConfigs) {
 					try {
 						console.log(`CLI MCP: Connecting to server ${config.name}...`)
@@ -75,12 +86,17 @@ class GlobalCLIMcpService {
 					}
 				}
 			} else if (!this.mcpAutoConnect) {
+				console.log("[GlobalCLIMcpService] DEBUG: Auto-connect disabled, servers loaded but not connected")
 				logger.debug("CLI MCP: Auto-connect disabled, servers loaded but not connected")
+			} else {
+				console.log("[GlobalCLIMcpService] DEBUG: No servers to connect to")
 			}
 
 			this.initialized = true
+			console.log("[GlobalCLIMcpService] DEBUG: MCP service initialization completed successfully")
 			logger.debug("[GlobalCLIMcpService] MCP service initialized successfully")
 		} catch (error) {
+			console.error("[GlobalCLIMcpService] ERROR: Failed to initialize MCP service:", error)
 			logger.warn(`[GlobalCLIMcpService] Failed to initialize MCP service:`, error)
 			// Don't throw - allow CLI to continue without MCP
 		}

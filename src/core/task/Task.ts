@@ -50,6 +50,17 @@ import { getWorkspacePath } from "../../utils/path"
 // prompts
 import { formatResponse } from "../prompts/responses"
 import { SYSTEM_PROMPT } from "../prompts/system"
+import { getToolDescriptionsForMode } from "../prompts/tools"
+import {
+	getRulesSection,
+	getSystemInfoSection,
+	getObjectiveSection,
+	getMcpServersSection,
+	getToolUseGuidelinesSection,
+	getCapabilitiesSection,
+	getModesSection,
+	addCustomInstructions,
+} from "../prompts/sections"
 
 // core modules
 import { ToolRepetitionDetector } from "../tools/ToolRepetitionDetector"
@@ -750,6 +761,17 @@ export class Task extends EventEmitter<ClineEvents> {
 				return result
 			}
 
+			case "search_files": {
+				const { searchFilesTool } = await import("../tools/searchFilesTool")
+				const result = await this.executeToolWithCLIInterface(searchFilesTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
 			case "attempt_completion": {
 				const { attemptCompletionTool } = await import("../tools/attemptCompletionTool")
 				const result = await this.executeToolWithCLIInterface(attemptCompletionTool, {
@@ -1364,6 +1386,64 @@ ${getObjectiveSection()}`
 			return systemPrompt
 		}
 
+		// In CLI mode, provider might be undefined, so we need to handle this case
+		if (!provider) {
+			// For CLI mode, create a minimal system prompt that includes MCP server information
+			const mcpServersSection = await getMcpServersSection(
+				mcpHub,
+				this.diffEnabled ? this.diffStrategy : undefined,
+				enableMcpServerCreation,
+			)
+
+			const systemPrompt = `You are Roo, a highly skilled software engineer with extensive knowledge in many programming languages, frameworks, design patterns, and best practices. Applying the wisdom in this document (docs/prompts/development-prompt.md), you write the application code
+
+====
+
+MARKDOWN RULES
+
+ALL responses MUST show ANY \`language construct\` OR filename reference as clickable, exactly as [\`filename OR language.declaration()\`](relative/file/path.ext:line); line is required for \`syntax\` and optional for filename links. This applies to ALL markdown responses and ALSO those in <attempt_completion>
+
+====
+
+TOOL USE
+
+You have access to a set of tools that are executed upon the user's approval. You can use one tool per message, and will receive the result of that tool use in the user's response. You use tools step-by-step to accomplish a given task, with each tool use informed by the result of the previous tool use.
+
+${getToolDescriptionsForMode(
+	mode,
+	this.workspacePath,
+	(this.api.getModel().info.supportsComputerUse ?? false) && (browserToolEnabled ?? true),
+	undefined, // codeIndexManager not available in CLI mode
+	this.diffEnabled ? this.diffStrategy : undefined,
+	browserViewportSize,
+	mcpHub,
+	customModes,
+	experiments,
+	maxReadFileLine !== -1,
+	{
+		maxConcurrentFileReads,
+	},
+)}
+
+${getToolUseGuidelinesSection()}
+
+${mcpServersSection}
+
+${getCapabilitiesSection(this.workspacePath, (this.api.getModel().info.supportsComputerUse ?? false) && (browserToolEnabled ?? true), mcpHub, this.diffEnabled ? this.diffStrategy : undefined, undefined)}
+
+${await this.getCliModesSection(customModes)}
+
+${getRulesSection(this.workspacePath, (this.api.getModel().info.supportsComputerUse ?? false) && (browserToolEnabled ?? true), this.diffEnabled ? this.diffStrategy : undefined)}
+
+${getSystemInfoSection(this.workspacePath)}
+
+${getObjectiveSection()}
+
+${await addCustomInstructions("", customInstructions || "", this.workspacePath, mode, { language: language ?? "English", rooIgnoreInstructions })}`
+
+			return systemPrompt
+		}
+
 		return SYSTEM_PROMPT(
 			provider.context,
 			this.workspacePath,
@@ -1385,6 +1465,43 @@ ${getObjectiveSection()}`
 				maxConcurrentFileReads,
 			},
 		)
+	}
+
+	/**
+	 * Create a simplified modes section for CLI mode that doesn't require VSCode context
+	 */
+	private async getCliModesSection(customModes?: any[]): Promise<string> {
+		// Import modes directly instead of using VSCode context
+		const { getAllModes } = await import("../../shared/modes")
+		const allModes = getAllModes(customModes)
+
+		let modesContent = `====
+
+MODES
+
+- These are the currently available modes:
+${allModes
+	.map((mode: any) => {
+		let description: string
+		if (mode.whenToUse && mode.whenToUse.trim() !== "") {
+			// Use whenToUse as the primary description, indenting subsequent lines for readability
+			description = mode.whenToUse.replace(/\n/g, "\n    ")
+		} else {
+			// Fallback to the first sentence of roleDefinition if whenToUse is not available
+			description = mode.roleDefinition.split(".")[0]
+		}
+		return `  * "${mode.name}" mode (${mode.slug}) - ${description}`
+	})
+	.join("\n")}`
+
+		modesContent += `
+If the user asks you to create or edit a new mode for this project, you should read the instructions by using the fetch_instructions tool, like this:
+<fetch_instructions>
+<task>create_mode</task>
+</fetch_instructions>
+`
+
+		return modesContent
 	}
 
 	private async getEnvironmentDetails(includeFileDetails: boolean): Promise<string> {

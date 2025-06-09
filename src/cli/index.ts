@@ -171,8 +171,12 @@ program
 	.option("--no-mcp-auto-connect", "Do not automatically connect to enabled MCP servers")
 	.option("--mcp-log-level <level>", "MCP logging level (error, warn, info, debug)", validateMcpLogLevel)
 	.action(async (options: CliOptions) => {
+		console.log("[DEBUG] CLI: Entered main action with options:", JSON.stringify(options, null, 2))
+
 		// Initialize CLI logger first
 		const logger = initializeCLILogger(options.verbose, options.quiet, options.color)
+
+		console.log("[DEBUG] CLI: Logger initialized")
 
 		// Set up graceful shutdown handlers
 		let isShuttingDown = false
@@ -235,21 +239,35 @@ program
 		await PlatformServiceFactory.initialize(PlatformContext.CLI, "roo-cline", options.config)
 
 		// Initialize global MCP service once at startup
+		console.log(
+			"[DEBUG] CLI: MCP auto-connect check:",
+			options.mcpAutoConnect,
+			"!== false =",
+			options.mcpAutoConnect !== false,
+		)
 		if (options.mcpAutoConnect !== false) {
+			console.log("[DEBUG] CLI: About to initialize global MCP service...")
 			try {
+				const { GlobalCLIMcpService } = await import("./services/GlobalCLIMcpService")
+				console.log("[DEBUG] CLI: GlobalCLIMcpService imported successfully")
 				const globalMcpService = GlobalCLIMcpService.getInstance()
+				console.log("[DEBUG] CLI: GlobalCLIMcpService instance obtained")
 				await globalMcpService.initialize({
 					mcpConfigPath: options.mcpConfig,
 					mcpAutoConnect: options.mcpAutoConnect,
 					mcpTimeout: options.mcpTimeout,
 					mcpRetries: options.mcpRetries,
 				})
+				console.log("[DEBUG] CLI: GlobalCLIMcpService.initialize() completed")
 				if (options.verbose) {
 					logger.debug("Global MCP service initialized successfully")
 				}
 			} catch (error) {
+				console.error("[DEBUG] CLI: Failed to initialize global MCP service:", error)
 				logger.warn("Failed to initialize global MCP service:", error)
 			}
+		} else {
+			console.log("[DEBUG] CLI: MCP auto-connect disabled, skipping MCP initialization")
 		}
 
 		// Handle MCP auto-connect logic: default to true, but allow explicit override
