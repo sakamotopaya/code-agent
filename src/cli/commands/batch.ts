@@ -25,6 +25,7 @@ interface BatchOptions extends CliAdapterOptions {
 export class BatchProcessor {
 	private options: BatchOptions
 	private configManager?: CliConfigManager
+	private currentTask?: Task
 
 	constructor(options: BatchOptions, configManager?: CliConfigManager) {
 		this.options = options
@@ -43,11 +44,69 @@ export class BatchProcessor {
 		getCLILogger().error(message, ...args)
 	}
 
+	/**
+	 * Detect if this is an informational query that should complete quickly
+	 */
+	private isInformationalQuery(taskDescription: string): boolean {
+		const infoPatterns = [
+			/what.*(mcp|servers?).*(available|do you have)/i,
+			/list.*(mcp|servers?)/i,
+			/which.*(mcp|servers?)/i,
+			/show.*(mcp|servers?)/i,
+			/tell me about.*(mcp|servers?)/i,
+		]
+
+		return infoPatterns.some((pattern) => pattern.test(taskDescription))
+	}
+
+	/**
+	 * Detect when a meaningful response has been generated for information queries
+	 */
+	private detectResponseCompletion(response: string): boolean {
+		const informationIndicators = [
+			"available mcp servers",
+			"connected mcp servers",
+			"no mcp servers",
+			"i have access to",
+			"mcp servers:",
+			"the following mcp servers",
+			"these servers provide",
+			"based on the mcp servers",
+			"## connected mcp servers",
+		]
+
+		const lowerResponse = response.toLowerCase()
+		return informationIndicators.some((indicator) => lowerResponse.includes(indicator))
+	}
+
+	/**
+	 * Trigger task completion manually
+	 */
+	private completeTaskWithResponse(reason: string): void {
+		this.logDebug(`[BatchProcessor] Triggering completion: ${reason}`)
+
+		// Emit completion event that the event handlers will catch
+		if (this.currentTask) {
+			const defaultTokenUsage = {
+				totalTokensIn: 0,
+				totalTokensOut: 0,
+				totalCost: 0,
+				contextTokens: 0,
+			}
+			const defaultToolUsage = {}
+			this.currentTask.emit("taskCompleted", this.currentTask.taskId, defaultTokenUsage, defaultToolUsage)
+		}
+	}
+
 	async run(taskDescription: string): Promise<void> {
 		try {
 			this.logDebug("[BatchProcessor] Starting batch mode...")
 			this.logDebug(`[BatchProcessor] Working directory: ${this.options.cwd}`)
 			this.logDebug(`[BatchProcessor] Task: ${taskDescription}`)
+
+			// Detect if this is an informational query
+			const isInfoQuery = this.isInformationalQuery(taskDescription)
+			this.logDebug(`[BatchProcessor] Task type - Informational query: ${isInfoQuery}`)
 
 			// Create CLI adapters
 			this.logDebug("[BatchProcessor] Creating CLI adapters...")
@@ -60,7 +119,6 @@ export class BatchProcessor {
 
 			// Load configuration
 			this.logDebug("[BatchProcessor] Loading configuration...")
-			//const { apiConfiguration } = await this.loadConfiguration()
 			const { apiConfiguration } = await this.loadConfiguration()
 			this.logDebug("[BatchProcessor] Configuration loaded")
 
@@ -91,15 +149,33 @@ export class BatchProcessor {
 				mcpRetries: this.options.mcpRetries,
 			})
 
+			// Store task reference for completion detection
+			this.currentTask = task
+
 			this.logDebug("[BatchProcessor] Task created, starting execution...")
 
-			// Execute the task with proper promise handling
-			await this.executeTask(task, taskPromise)
+			// Execute the task with enhanced completion detection
+			this.logDebug("[BatchProcessor] About to call executeTaskWithCompletionDetection...")
+			await this.executeTaskWithCompletionDetection(task, taskPromise, isInfoQuery)
+			this.logDebug("[BatchProcessor] executeTaskWithCompletionDetection returned")
+
+			// Immediately dispose of MCP connections to allow process exit
+			this.logDebug("[BatchProcessor] Disposing MCP connections...")
+			await this.disposeMcpConnections()
+			this.logDebug("[BatchProcessor] MCP connections disposed")
 
 			this.logDebug("[BatchProcessor] Task completed successfully")
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			this.logError("Batch execution failed:", message)
+
+			// Cleanup MCP connections even on error
+			try {
+				await this.disposeMcpConnections()
+			} catch (mcpError) {
+				this.logDebug("Error disposing MCP connections after error:", mcpError)
+			}
+
 			process.exit(1)
 		}
 	}
@@ -189,6 +265,227 @@ export class BatchProcessor {
 			} as RooCodeSettings
 
 			return { apiConfiguration, fullConfiguration }
+		}
+	}
+
+	/**
+	 * Enhanced task execution with response completion detection
+	 */
+	private async executeTaskWithCompletionDetection(
+		task: Task,
+		taskPromise: Promise<void>,
+		isInfoQuery: boolean,
+	): Promise<void> {
+		return new Promise((resolve, reject) => {
+			let isCompleted = false
+			let infoQueryTimeout: NodeJS.Timeout | null = null
+			let emergencyTimeout: NodeJS.Timeout | null = null
+
+			const cleanupTimers = () => {
+				if (infoQueryTimeout) {
+					clearTimeout(infoQueryTimeout)
+					infoQueryTimeout = null
+					this.logDebug("[BatchProcessor] Info query timeout cleared")
+				}
+				if (emergencyTimeout) {
+					clearTimeout(emergencyTimeout)
+					emergencyTimeout = null
+					this.logDebug("[BatchProcessor] Emergency timeout cleared")
+				}
+			}
+
+			const completeOnce = async (reason: string) => {
+				if (isCompleted) return
+				isCompleted = true
+
+				this.logDebug(`[BatchProcessor] Task completing: ${reason}`)
+
+				// Clean up timers first
+				cleanupTimers()
+
+				// Cleanup task before resolving
+				try {
+					if (typeof task.dispose === "function") {
+						await task.dispose()
+						this.logDebug("[BatchProcessor] Task cleanup completed")
+					}
+				} catch (error) {
+					this.logDebug("[BatchProcessor] Error during task cleanup:", error)
+				} finally {
+					resolve()
+				}
+			}
+
+			const rejectOnce = async (error: Error) => {
+				if (isCompleted) return
+				isCompleted = true
+
+				this.logDebug(`[BatchProcessor] Task rejecting: ${error.message}`)
+
+				// Clean up timers first
+				cleanupTimers()
+
+				try {
+					if (typeof task.dispose === "function") {
+						await task.dispose()
+						this.logDebug("[BatchProcessor] Task cleanup completed after error")
+					}
+				} catch (cleanupError) {
+					this.logDebug("[BatchProcessor] Error during cleanup after error:", cleanupError)
+				} finally {
+					reject(error)
+				}
+			}
+
+			// Set up response completion detection for info queries
+			if (isInfoQuery) {
+				this.setupResponseCompletionDetection(task, completeOnce)
+				// Shorter timeout for info queries
+				infoQueryTimeout = setTimeout(() => {
+					if (!isCompleted) {
+						completeOnce("Information query timeout (30s)")
+					}
+				}, 30000) // 30 seconds max for info queries
+			}
+
+			// Set up standard event handlers
+			this.setupStandardEventHandlers(task, completeOnce, rejectOnce)
+
+			// Handle task promise
+			taskPromise.catch((error) => {
+				this.logDebug(`[BatchProcessor] Task promise rejected:`, error)
+				if (!isCompleted) {
+					rejectOnce(error)
+				}
+			})
+
+			// Emergency timeout for all tasks
+			emergencyTimeout = setTimeout(() => {
+				if (!isCompleted) {
+					rejectOnce(new Error("Emergency timeout after 60 seconds"))
+				}
+			}, 60000) // 60 seconds emergency timeout
+		})
+	}
+
+	/**
+	 * Setup response monitoring for informational queries
+	 */
+	private setupResponseCompletionDetection(task: Task, complete: (reason: string) => void): void {
+		let responseBuffer = ""
+		let lastResponseTime = Date.now()
+		let completionTimer: NodeJS.Timeout | null = null
+		let isCompleted = false
+
+		const cleanupCompletionTimer = () => {
+			if (completionTimer) {
+				clearTimeout(completionTimer)
+				completionTimer = null
+				this.logDebug("[BatchProcessor] Response completion timer cleared")
+			}
+		}
+
+		const safeComplete = (reason: string) => {
+			if (isCompleted) return
+			isCompleted = true
+			cleanupCompletionTimer()
+			complete(reason)
+		}
+
+		task.on("message", (event: any) => {
+			if (isCompleted) return
+
+			if (event.action === "response" || event.action === "say") {
+				const content = event.message?.text || event.content || ""
+				responseBuffer += content
+				lastResponseTime = Date.now()
+
+				this.logDebug(`[BatchProcessor] Response content captured: ${content.substring(0, 100)}...`)
+
+				// Clear existing timer
+				cleanupCompletionTimer()
+
+				// Check for immediate completion indicators
+				if (this.detectResponseCompletion(responseBuffer)) {
+					this.logDebug("[BatchProcessor] Response completion detected immediately")
+					completionTimer = setTimeout(() => {
+						safeComplete("Response completion detected")
+					}, 1000) // 1 second delay to ensure response is complete
+				} else {
+					// Set timer for response completion by timeout
+					completionTimer = setTimeout(() => {
+						const timeSinceLastResponse = Date.now() - lastResponseTime
+						if (timeSinceLastResponse >= 2000 && responseBuffer.length > 50) {
+							this.logDebug("[BatchProcessor] Response completion by timeout and content length")
+							safeComplete("Response timeout completion")
+						}
+					}, 3000) // 3 seconds of no new content
+				}
+			}
+		})
+
+		// Clean up timer when task completes via other means
+		task.on("taskCompleted", () => {
+			this.logDebug("[BatchProcessor] Task completed, cleaning up response completion timer")
+			cleanupCompletionTimer()
+		})
+
+		task.on("taskAborted", () => {
+			this.logDebug("[BatchProcessor] Task aborted, cleaning up response completion timer")
+			cleanupCompletionTimer()
+		})
+	}
+
+	/**
+	 * Setup standard event handlers for task lifecycle
+	 */
+	private setupStandardEventHandlers(
+		task: Task,
+		complete: (reason: string) => void,
+		reject: (error: Error) => void,
+	): void {
+		task.on("taskCompleted", (taskId: string, tokenUsage: any, toolUsage: any) => {
+			this.logDebug(`[BatchProcessor] Standard task completed: ${taskId}`)
+			complete("Standard task completion")
+		})
+
+		task.on("taskAborted", () => {
+			this.logDebug("[BatchProcessor] Task was aborted")
+			reject(new Error("Task was aborted"))
+		})
+
+		task.on("taskToolFailed", (taskId: string, tool: string, error: string) => {
+			this.logDebug(`[BatchProcessor] Tool ${tool} failed: ${error}`)
+			reject(new Error(`Tool ${tool} failed: ${error}`))
+		})
+
+		// Activity tracking for debugging
+		task.on("taskStarted", () => {
+			this.logDebug("[BatchProcessor] Task started")
+		})
+
+		task.on("taskModeSwitched", (taskId: string, mode: string) => {
+			this.logDebug(`[BatchProcessor] Task mode switched to: ${mode}`)
+		})
+	}
+
+	/**
+	 * Dispose MCP connections to allow clean process exit
+	 */
+	private async disposeMcpConnections(): Promise<void> {
+		try {
+			const { GlobalCLIMcpService } = await import("../services/GlobalCLIMcpService")
+			const globalMcpService = GlobalCLIMcpService.getInstance()
+
+			if (globalMcpService.isInitialized()) {
+				this.logDebug("[BatchProcessor] Disposing global MCP service...")
+				await globalMcpService.dispose()
+				this.logDebug("[BatchProcessor] Global MCP service disposed successfully")
+			} else {
+				this.logDebug("[BatchProcessor] Global MCP service not initialized, nothing to dispose")
+			}
+		} catch (error) {
+			this.logDebug("[BatchProcessor] Error disposing MCP connections:", error)
 		}
 	}
 

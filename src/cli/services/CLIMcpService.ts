@@ -445,11 +445,11 @@ export class CLIMcpService implements ICLIMcpService {
 			}
 		}
 
-		// Disconnect all servers with timeout handling
+		// Disconnect all servers with aggressive timeout for CLI batch mode
 		const disconnectPromises = Array.from(this.connections.keys()).map(async (serverId) => {
 			try {
-				const timeoutPromise = new Promise((_, reject) =>
-					setTimeout(() => reject(new Error("Disconnect timeout")), 3000),
+				const timeoutPromise = new Promise(
+					(_, reject) => setTimeout(() => reject(new Error("Disconnect timeout")), 1000), // Reduced from 3000ms to 1000ms
 				)
 
 				await Promise.race([this.disconnectFromServer(serverId), timeoutPromise])

@@ -348,6 +348,10 @@ program
 							await batchProcessor.run(options.batch)
 						}
 					}
+
+					// Exit successfully after non-interactive execution completes
+					getCLILogger().debug("[cli-entry] Non-interactive execution completed successfully, exiting...")
+					process.exit(0)
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error)
 					if (options.color) {
