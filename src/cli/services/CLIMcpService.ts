@@ -426,18 +426,49 @@ export class CLIMcpService implements ICLIMcpService {
 	}
 
 	async dispose(): Promise<void> {
-		// Stop all health checkers
-		for (const [serverId] of this.healthCheckers) {
-			this.stopHealthCheck(serverId)
+		const { getCLILogger } = await import("../services/CLILogger")
+		const logger = getCLILogger()
+
+		if (this.isDisposed) {
+			return // Already disposed
 		}
 
-		// Disconnect all servers
-		const disconnectPromises = Array.from(this.connections.keys()).map((serverId) =>
-			this.disconnectFromServer(serverId),
-		)
+		logger.debug("CLIMcpService: Starting disposal...")
+
+		// Stop all health checkers first
+		for (const [serverId] of this.healthCheckers) {
+			try {
+				this.stopHealthCheck(serverId)
+				logger.debug(`CLIMcpService: Stopped health checker for ${serverId}`)
+			} catch (error) {
+				logger.debug(`CLIMcpService: Error stopping health checker for ${serverId}:`, error)
+			}
+		}
+
+		// Disconnect all servers with timeout handling
+		const disconnectPromises = Array.from(this.connections.keys()).map(async (serverId) => {
+			try {
+				const timeoutPromise = new Promise((_, reject) =>
+					setTimeout(() => reject(new Error("Disconnect timeout")), 3000),
+				)
+
+				await Promise.race([this.disconnectFromServer(serverId), timeoutPromise])
+
+				logger.debug(`CLIMcpService: Disconnected from ${serverId}`)
+			} catch (error) {
+				logger.debug(`CLIMcpService: Force disconnect ${serverId}:`, error)
+				// Force remove connection
+				this.connections.delete(serverId)
+			}
+		})
 
 		await Promise.allSettled(disconnectPromises)
+
+		this.isDisposed = true
+		logger.debug("CLIMcpService: Disposal complete")
 	}
+
+	private isDisposed = false
 
 	private async resolveConfigPath(configPath?: string): Promise<string> {
 		if (configPath) {

@@ -191,15 +191,37 @@ export class BatchProcessor {
 			this.logDebug("[BatchProcessor] Setting up task event handlers...")
 
 			// Set up event handlers
-			task.on("taskCompleted", (taskId: string, tokenUsage: any, toolUsage: any) => {
+			task.on("taskCompleted", async (taskId: string, tokenUsage: any, toolUsage: any) => {
 				this.logDebug(`[BatchProcessor] Task completed: ${taskId}`)
 				this.logDebug(`[BatchProcessor] Token usage:`, tokenUsage)
 				this.logDebug(`[BatchProcessor] Tool usage:`, toolUsage)
+
+				// Ensure cleanup before resolving
+				try {
+					if (typeof task.dispose === "function") {
+						await task.dispose()
+						this.logDebug("[BatchProcessor] Task cleanup completed")
+					}
+				} catch (error) {
+					this.logDebug("[BatchProcessor] Error during cleanup:", error)
+				}
+
 				resolve()
 			})
 
-			task.on("taskAborted", () => {
+			task.on("taskAborted", async () => {
 				this.logDebug("[BatchProcessor] Task was aborted")
+
+				// Ensure cleanup before rejecting
+				try {
+					if (typeof task.dispose === "function") {
+						await task.dispose()
+						this.logDebug("[BatchProcessor] Task cleanup completed after abort")
+					}
+				} catch (error) {
+					this.logDebug("[BatchProcessor] Error during cleanup:", error)
+				}
+
 				reject(new Error("Task was aborted"))
 			})
 

@@ -173,6 +173,28 @@ program
 		// Initialize CLI logger first
 		const logger = initializeCLILogger(options.verbose, options.quiet, options.color)
 
+		// Set up graceful shutdown handlers
+		let isShuttingDown = false
+		const gracefulShutdown = (signal: string) => {
+			if (isShuttingDown) return
+			isShuttingDown = true
+
+			if (options.verbose) {
+				logger.debug(`Received ${signal}, initiating graceful shutdown...`)
+			}
+
+			// Set a timeout for forced exit
+			setTimeout(() => {
+				if (options.verbose) {
+					logger.debug("Forcing process exit after timeout")
+				}
+				process.exit(signal === "SIGINT" ? 130 : 143)
+			}, 10000) // 10 second timeout
+		}
+
+		process.on("SIGINT", () => gracefulShutdown("SIGINT"))
+		process.on("SIGTERM", () => gracefulShutdown("SIGTERM"))
+
 		// Initialize performance monitoring and optimization
 		const performanceMonitor = new PerformanceMonitoringService()
 		const performanceConfig = new PerformanceConfigManager("standard")
@@ -353,6 +375,20 @@ program
 						`Performance: ${performanceReport.summary.totalOperations} operations, avg ${Math.round(performanceReport.summary.averageExecutionTime)}ms`,
 					)
 				}
+			}
+
+			// Ensure process exits automatically for non-interactive modes
+			if (options.batch || options.stdin || !options.interactive) {
+				if (options.verbose) {
+					logger.debug("Non-interactive mode completed, scheduling exit...")
+				}
+				// Schedule exit to allow any remaining async operations to complete
+				setTimeout(() => {
+					if (options.verbose) {
+						logger.debug("Exiting process after completion")
+					}
+					process.exit(0)
+				}, 1000) // 1 second delay to allow cleanup
 			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)

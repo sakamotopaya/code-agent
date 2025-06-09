@@ -191,6 +191,7 @@ export class Task extends EventEmitter<ClineEvents> {
 	private mcpAutoConnect: boolean = true
 	private mcpTimeout?: number
 	private mcpRetries?: number
+	private cliMcpService?: any // CLIMcpService instance for CLI mode
 
 	// Modular components
 	private messaging: TaskMessaging
@@ -541,6 +542,39 @@ export class Task extends EventEmitter<ClineEvents> {
 				throw new Error("Either historyItem or task/images must be provided")
 			}
 		}
+
+		// Set up cleanup event listeners for CLI mode
+		if (!provider) {
+			this.on("taskCompleted", async () => {
+				try {
+					await this.dispose()
+				} catch (error) {
+					this.logDebug("Error during cleanup:", error)
+				}
+			})
+
+			this.on("taskAborted", async () => {
+				try {
+					await this.dispose()
+				} catch (error) {
+					this.logDebug("Error during cleanup:", error)
+				}
+			})
+		}
+	}
+
+	// Dispose method to clean up MCP connections and other resources
+	async dispose(): Promise<void> {
+		if (this.cliMcpService) {
+			try {
+				this.logDebug("[Task] Disposing MCP service...")
+				await this.cliMcpService.dispose()
+				this.cliMcpService = undefined
+				this.logDebug("[Task] MCP service disposed")
+			} catch (error) {
+				this.logDebug("[Task] Error disposing MCP service:", error)
+			}
+		}
 	}
 
 	static create(options: TaskOptions): [Task, Promise<void>] {
@@ -724,6 +758,26 @@ export class Task extends EventEmitter<ClineEvents> {
 					partial: false,
 				})
 				return result
+			}
+
+			case "use_mcp_tool": {
+				if (!this.cliMcpService) {
+					throw new Error("MCP service not available in CLI mode")
+				}
+				const result = await this.cliMcpService.executeTool(
+					params.server_name,
+					params.tool_name,
+					JSON.parse(params.arguments),
+				)
+				return JSON.stringify(result, null, 2)
+			}
+
+			case "access_mcp_resource": {
+				if (!this.cliMcpService) {
+					throw new Error("MCP service not available in CLI mode")
+				}
+				const result = await this.cliMcpService.accessResource(params.server_name, params.uri)
+				return JSON.stringify(result, null, 2)
 			}
 
 			default:
@@ -1168,17 +1222,17 @@ export class Task extends EventEmitter<ClineEvents> {
 			// Initialize MCP service for CLI mode
 			try {
 				const { CLIMcpService } = await import("../../cli/services/CLIMcpService")
-				const cliMcpService = new CLIMcpService(this.mcpConfigPath)
+				this.cliMcpService = new CLIMcpService(this.mcpConfigPath)
 
 				// Load and connect to configured servers
-				const serverConfigs = await cliMcpService.loadServerConfigs()
+				const serverConfigs = await this.cliMcpService.loadServerConfigs()
 				console.log(`CLI MCP: Found ${serverConfigs.length} server configurations`)
 
 				if (this.mcpAutoConnect && serverConfigs.length > 0) {
 					for (const config of serverConfigs) {
 						try {
 							console.log(`CLI MCP: Connecting to server ${config.name}...`)
-							await cliMcpService.connectToServer(config)
+							await this.cliMcpService.connectToServer(config)
 							console.log(`CLI MCP: Successfully connected to ${config.name}`)
 						} catch (error) {
 							console.warn(`CLI MCP: Failed to connect to server ${config.name}:`, error)
@@ -1191,7 +1245,7 @@ export class Task extends EventEmitter<ClineEvents> {
 				// Create a compatible interface for getMcpServersSection
 				mcpHub = {
 					getServers: () => {
-						return cliMcpService.getConnectedServers().map((conn) => ({
+						return this.cliMcpService.getConnectedServers().map((conn: any) => ({
 							name: conn.config.name,
 							status: conn.status,
 							config: JSON.stringify(conn.config),
@@ -1207,9 +1261,9 @@ export class Task extends EventEmitter<ClineEvents> {
 				const servers = mcpHub.getServers()
 				for (const server of servers) {
 					try {
-						const connection = cliMcpService
+						const connection = this.cliMcpService
 							.getConnectedServers()
-							.find((conn) => conn.config.name === server.name)
+							.find((conn: any) => conn.config.name === server.name)
 						if (connection?.client && connection.isCapabilityReady()) {
 							// Import MCP types for proper request format
 							const { ListToolsResultSchema, ListResourcesResultSchema } = await import(
