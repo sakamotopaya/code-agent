@@ -16,6 +16,7 @@ import {
 import { McpConfigFile, McpDefaults, DEFAULT_MCP_CONFIG, MCP_CONFIG_FILENAME } from "../types/mcp-config-types"
 import { StdioMcpConnection } from "../connections/StdioMcpConnection"
 import { SseMcpConnection } from "../connections/SseMcpConnection"
+import { ListToolsResultSchema, ListResourcesResultSchema } from "@modelcontextprotocol/sdk/types.js"
 
 export interface ICLIMcpService {
 	// Server management
@@ -71,29 +72,52 @@ export class CLIMcpService implements ICLIMcpService {
 				resources: [],
 			}
 
-			if (connection?.client) {
+			if (connection?.client && connection.status === "connected" && connection.isCapabilityReady()) {
 				try {
-					// Get tools
-					const toolsResult = await connection.client.listTools()
-					serverInfo.tools = toolsResult.tools.map((tool: any) => ({
-						name: tool.name,
-						description: tool.description,
-						inputSchema: tool.inputSchema,
-						serverId: config.id,
-					}))
-
-					// Get resources
-					const resourcesResult = await connection.client.listResources()
-					serverInfo.resources = resourcesResult.resources.map((resource: any) => ({
-						uri: resource.uri,
-						name: resource.name,
-						mimeType: resource.mimeType,
-						description: resource.description,
-						serverId: config.id,
-					}))
+					// Get tools using correct MCP protocol method
+					const toolsResult = await connection.client.request({ method: "tools/list" }, ListToolsResultSchema)
+					if (toolsResult && toolsResult.tools) {
+						serverInfo.tools = toolsResult.tools.map((tool: any) => ({
+							name: tool.name,
+							description: tool.description,
+							inputSchema: tool.inputSchema,
+							serverId: config.id,
+						}))
+					}
 				} catch (error) {
-					console.error(`Error discovering capabilities for ${config.name}:`, error)
+					// Log more specific error information
+					if (error.code === -32601) {
+						console.debug(`Tools not supported by ${config.name} - this is normal for some servers`)
+					} else {
+						console.error(`Error discovering tools for ${config.name}:`, error.message || error)
+					}
 				}
+
+				try {
+					// Get resources using correct MCP protocol method
+					const resourcesResult = await connection.client.request(
+						{ method: "resources/list" },
+						ListResourcesResultSchema,
+					)
+					if (resourcesResult && resourcesResult.resources) {
+						serverInfo.resources = resourcesResult.resources.map((resource: any) => ({
+							uri: resource.uri,
+							name: resource.name,
+							mimeType: resource.mimeType,
+							description: resource.description,
+							serverId: config.id,
+						}))
+					}
+				} catch (error) {
+					// Log more specific error information
+					if (error.code === -32601) {
+						console.debug(`Resources not supported by ${config.name} - this is normal for some servers`)
+					} else {
+						console.error(`Error discovering resources for ${config.name}:`, error.message || error)
+					}
+				}
+			} else if (connection?.status === "connecting" || connection?.status === "handshaking") {
+				console.log(`Server ${config.name} is still connecting/handshaking...`)
 			}
 
 			serverInfos.push(serverInfo)
@@ -161,19 +185,27 @@ export class CLIMcpService implements ICLIMcpService {
 		const tools: McpToolInfo[] = []
 
 		for (const connection of this.getConnectedServers()) {
-			if (!connection.client) continue
+			if (!connection.client || connection.status !== "connected" || !connection.isCapabilityReady()) continue
 
 			try {
-				const result = await connection.client.listTools()
-				const serverTools = result.tools.map((tool: any) => ({
-					name: tool.name,
-					description: tool.description,
-					inputSchema: tool.inputSchema,
-					serverId: connection.id,
-				}))
-				tools.push(...serverTools)
+				const result = await connection.client.request({ method: "tools/list" }, ListToolsResultSchema)
+				if (result && result.tools && Array.isArray(result.tools)) {
+					const serverTools = result.tools.map((tool: any) => ({
+						name: tool.name,
+						description: tool.description,
+						inputSchema: tool.inputSchema,
+						serverId: connection.id,
+					}))
+					tools.push(...serverTools)
+				}
 			} catch (error) {
-				console.error(`Error listing tools for ${connection.config.name}:`, error)
+				if (error.code === -32601) {
+					console.debug(
+						`Method 'tools/list' not found for ${connection.config.name}. Server may not support this capability.`,
+					)
+				} else {
+					console.error(`Error listing tools for ${connection.config.name}:`, error.message || error)
+				}
 			}
 		}
 
@@ -182,8 +214,8 @@ export class CLIMcpService implements ICLIMcpService {
 
 	async executeTool(serverId: string, toolName: string, args: any): Promise<McpExecutionResult> {
 		const connection = this.connections.get(serverId)
-		if (!connection || !connection.client) {
-			throw new McpToolExecutionError(`Server ${serverId} is not connected`, toolName, serverId)
+		if (!connection || !connection.client || connection.status !== "connected" || !connection.isCapabilityReady()) {
+			throw new McpToolExecutionError(`Server ${serverId} is not ready for tool execution`, toolName, serverId)
 		}
 
 		try {
@@ -201,7 +233,14 @@ export class CLIMcpService implements ICLIMcpService {
 			}
 		} catch (error) {
 			connection.errorCount++
-			throw new McpToolExecutionError(`Tool execution failed: ${error.message}`, toolName, serverId)
+			if (error.code === -32601) {
+				throw new McpToolExecutionError(
+					`Tool '${toolName}' not found on server ${serverId}. Server may not support this tool.`,
+					toolName,
+					serverId,
+				)
+			}
+			throw new McpToolExecutionError(`Tool execution failed: ${error.message || error}`, toolName, serverId)
 		}
 	}
 
@@ -225,20 +264,28 @@ export class CLIMcpService implements ICLIMcpService {
 		const resources: McpResourceInfo[] = []
 
 		for (const connection of this.getConnectedServers()) {
-			if (!connection.client) continue
+			if (!connection.client || connection.status !== "connected" || !connection.isCapabilityReady()) continue
 
 			try {
-				const result = await connection.client.listResources()
-				const serverResources = result.resources.map((resource: any) => ({
-					uri: resource.uri,
-					name: resource.name,
-					mimeType: resource.mimeType,
-					description: resource.description,
-					serverId: connection.id,
-				}))
-				resources.push(...serverResources)
+				const result = await connection.client.request({ method: "resources/list" }, ListResourcesResultSchema)
+				if (result && result.resources && Array.isArray(result.resources)) {
+					const serverResources = result.resources.map((resource: any) => ({
+						uri: resource.uri,
+						name: resource.name,
+						mimeType: resource.mimeType,
+						description: resource.description,
+						serverId: connection.id,
+					}))
+					resources.push(...serverResources)
+				}
 			} catch (error) {
-				console.error(`Error listing resources for ${connection.config.name}:`, error)
+				if (error.code === -32601) {
+					console.debug(
+						`Method 'resources/list' not found for ${connection.config.name}. Server may not support this capability.`,
+					)
+				} else {
+					console.error(`Error listing resources for ${connection.config.name}:`, error.message || error)
+				}
 			}
 		}
 
@@ -247,8 +294,8 @@ export class CLIMcpService implements ICLIMcpService {
 
 	async accessResource(serverId: string, uri: string): Promise<any> {
 		const connection = this.connections.get(serverId)
-		if (!connection || !connection.client) {
-			throw new McpConnectionError(`Server ${serverId} is not connected`, serverId)
+		if (!connection || !connection.client || !connection.isCapabilityReady()) {
+			throw new McpConnectionError(`Server ${serverId} is not ready for resource access`, serverId)
 		}
 
 		try {

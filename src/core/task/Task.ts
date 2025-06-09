@@ -1210,22 +1210,51 @@ export class Task extends EventEmitter<ClineEvents> {
 						const connection = cliMcpService
 							.getConnectedServers()
 							.find((conn) => conn.config.name === server.name)
-						if (connection?.client) {
-							// Get tools
-							const toolsResult = await connection.client.listTools()
-							server.tools = toolsResult.tools.map((tool: any) => ({
-								name: tool.name,
-								description: tool.description,
-								inputSchema: tool.inputSchema,
-							}))
+						if (connection?.client && connection.isCapabilityReady()) {
+							// Import MCP types for proper request format
+							const { ListToolsResultSchema, ListResourcesResultSchema } = await import(
+								"@modelcontextprotocol/sdk/types.js"
+							)
 
-							// Get resources
-							const resourcesResult = await connection.client.listResources()
-							server.resources = resourcesResult.resources.map((resource: any) => ({
-								uri: resource.uri,
-								name: resource.name,
-								description: resource.description,
-							}))
+							try {
+								// Get tools using correct MCP protocol method
+								const toolsResult = await connection.client.request(
+									{ method: "tools/list" },
+									ListToolsResultSchema,
+								)
+								server.tools = toolsResult.tools.map((tool: any) => ({
+									name: tool.name,
+									description: tool.description,
+									inputSchema: tool.inputSchema,
+								}))
+							} catch (error) {
+								if (error.code !== -32601) {
+									console.debug(`Error getting tools for ${server.name}:`, error)
+								}
+								// Tools not supported, use empty array
+								server.tools = []
+							}
+
+							try {
+								// Get resources using correct MCP protocol method
+								const resourcesResult = await connection.client.request(
+									{ method: "resources/list" },
+									ListResourcesResultSchema,
+								)
+								server.resources = resourcesResult.resources.map((resource: any) => ({
+									uri: resource.uri,
+									name: resource.name,
+									description: resource.description,
+								}))
+							} catch (error) {
+								if (error.code !== -32601) {
+									console.debug(`Error getting resources for ${server.name}:`, error)
+								}
+								// Resources not supported, use empty array
+								server.resources = []
+							}
+						} else if (connection && !connection.isCapabilityReady()) {
+							console.debug(`Server ${server.name} is not ready for capability discovery yet`)
 						}
 					} catch (error) {
 						console.warn(`Failed to get capabilities for ${server.name}:`, error)
