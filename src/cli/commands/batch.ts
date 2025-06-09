@@ -5,6 +5,7 @@ import { defaultModeSlug } from "../../shared/modes"
 import type { ProviderSettings, RooCodeSettings } from "@roo-code/types"
 import { CliConfigManager } from "../config/CliConfigManager"
 import { getCLILogger } from "../services/CLILogger"
+import { CLIUIService } from "../services/CLIUIService"
 
 interface BatchOptions extends CliAdapterOptions {
 	cwd: string
@@ -63,6 +64,10 @@ export class BatchProcessor {
 			const { apiConfiguration } = await this.loadConfiguration()
 			this.logDebug("[BatchProcessor] Configuration loaded")
 
+			// Create CLI UI service for question handling
+			this.logDebug("[BatchProcessor] Creating CLI UI service...")
+			const cliUIService = new CLIUIService(this.options.color)
+
 			// Create and execute task
 			this.logDebug("[BatchProcessor] Creating task...")
 
@@ -78,6 +83,7 @@ export class BatchProcessor {
 				globalStoragePath: process.env.HOME ? `${process.env.HOME}/.agentz` : "/tmp/.agentz",
 				startTask: true,
 				verbose: this.options.verbose,
+				cliUIService: cliUIService,
 				// MCP configuration options
 				mcpConfigPath: this.options.mcpConfig,
 				mcpAutoConnect: this.options.mcpAutoConnect !== false && !this.options.noMcpAutoConnect,
@@ -190,11 +196,122 @@ export class BatchProcessor {
 		return new Promise((resolve, reject) => {
 			this.logDebug("[BatchProcessor] Setting up task event handlers...")
 
+			// Sliding timeout implementation - much longer for batch mode since it includes user interaction
+			const timeoutMs = 600000 // 10 minutes for batch mode to allow for user questions
+			let timeout: NodeJS.Timeout
+			let isWaitingForUserInput = false
+			let lastActivityTime = Date.now()
+
+			const resetTimeout = () => {
+				lastActivityTime = Date.now()
+				if (timeout) {
+					clearTimeout(timeout)
+				}
+				if (isWaitingForUserInput) {
+					this.logDebug("[BatchProcessor] Not setting new timeout - waiting for user input")
+					return
+				}
+				timeout = setTimeout(() => {
+					const timeSinceLastActivity = Date.now() - lastActivityTime
+					this.logDebug(
+						`[BatchProcessor] Checking timeout: ${timeSinceLastActivity}ms since last activity, waiting for input: ${isWaitingForUserInput}`,
+					)
+
+					if (isWaitingForUserInput) {
+						this.logDebug("[BatchProcessor] Timeout fired but waiting for user input - extending timeout")
+						resetTimeout() // Reset for another cycle
+						return
+					}
+					this.logDebug(`[BatchProcessor] Task execution timeout after ${timeoutMs}ms of inactivity`)
+					reject(new Error(`Task execution timeout after ${timeoutMs}ms of inactivity`))
+				}, timeoutMs)
+				this.logDebug(
+					`[BatchProcessor] Timeout reset - task has ${timeoutMs / 1000} seconds of inactivity before timeout`,
+				)
+			}
+
+			const pauseTimeout = () => {
+				if (timeout) {
+					clearTimeout(timeout)
+					this.logDebug("[BatchProcessor] Timeout paused - waiting for user input")
+				}
+				isWaitingForUserInput = true
+			}
+
+			const resumeTimeout = () => {
+				this.logDebug("[BatchProcessor] Resuming timeout after user input")
+				isWaitingForUserInput = false
+				// Always reset timeout after user responds, regardless of previous state
+				if (timeout) {
+					clearTimeout(timeout)
+				}
+				timeout = setTimeout(() => {
+					this.logDebug(`[BatchProcessor] Task execution timeout after ${timeoutMs}ms of inactivity`)
+					reject(new Error(`Task execution timeout after ${timeoutMs}ms of inactivity`))
+				}, timeoutMs)
+				this.logDebug(
+					`[BatchProcessor] Timeout RESET after user response - task has ${timeoutMs}ms of inactivity before timeout`,
+				)
+			}
+
+			const clearSlidingTimeout = () => {
+				if (timeout) {
+					clearTimeout(timeout)
+					this.logDebug("[BatchProcessor] Sliding timeout cleared")
+				}
+				isWaitingForUserInput = false
+			}
+
+			// Start the initial timeout
+			resetTimeout()
+
+			// Intercept the ask method to pause timeout during user input
+			const originalAsk = task.ask.bind(task)
+			task.ask = async (type: any, text?: string, partial?: boolean, progressStatus?: any) => {
+				this.logDebug("[BatchProcessor] Question asked via task.ask() - pausing timeout")
+				pauseTimeout()
+				try {
+					const result = await originalAsk(type, text, partial, progressStatus)
+					return result
+				} finally {
+					// Don't resume here - wait for taskAskResponded event
+				}
+			}
+
+			// Detect questions via message events - be very liberal in detection
+			task.on("message", (messageEvent: any) => {
+				this.logDebug(`[BatchProcessor] Message event: ${messageEvent.action}`)
+
+				// Check for any indication this is a question
+				const message = messageEvent.message
+				const isQuestion =
+					message &&
+					(message.ask ||
+						message.type === "ask" ||
+						(message.text &&
+							(message.text.includes("ask_followup_question") ||
+								message.text.includes("<question>") ||
+								message.text.includes("?") ||
+								message.text.includes("choose") ||
+								message.text.includes("select"))))
+
+				if (isQuestion) {
+					this.logDebug("[BatchProcessor] *** QUESTION DETECTED - pausing timeout ***")
+					pauseTimeout()
+				} else {
+					// Regular message activity should reset timeout only if not waiting for input
+					this.logDebug("[BatchProcessor] Regular message activity")
+					resetTimeout()
+				}
+			})
+
 			// Set up event handlers
 			task.on("taskCompleted", async (taskId: string, tokenUsage: any, toolUsage: any) => {
 				this.logDebug(`[BatchProcessor] Task completed: ${taskId}`)
 				this.logDebug(`[BatchProcessor] Token usage:`, tokenUsage)
 				this.logDebug(`[BatchProcessor] Tool usage:`, toolUsage)
+
+				clearSlidingTimeout()
 
 				// Ensure cleanup before resolving
 				try {
@@ -212,6 +329,8 @@ export class BatchProcessor {
 			task.on("taskAborted", async () => {
 				this.logDebug("[BatchProcessor] Task was aborted")
 
+				clearSlidingTimeout()
+
 				// Ensure cleanup before rejecting
 				try {
 					if (typeof task.dispose === "function") {
@@ -225,21 +344,48 @@ export class BatchProcessor {
 				reject(new Error("Task was aborted"))
 			})
 
+			// Reset timeout on activity events
 			task.on("taskStarted", () => {
 				this.logDebug("[BatchProcessor] Task started")
+				resetTimeout()
+			})
+
+			task.on("taskModeSwitched", (taskId: string, mode: string) => {
+				this.logDebug(`[BatchProcessor] Task mode switched to: ${mode}`)
+				resetTimeout()
 			})
 
 			task.on("taskPaused", () => {
 				this.logDebug("[BatchProcessor] Task paused")
+				resetTimeout()
 			})
 
 			task.on("taskUnpaused", () => {
 				this.logDebug("[BatchProcessor] Task unpaused")
+				resetTimeout()
 			})
 
-			// Handle tool failures
+			task.on("taskAskResponded", () => {
+				this.logDebug(
+					"[BatchProcessor] *** CRITICAL: User answered question - resuming timeout with fresh 60 seconds ***",
+				)
+				resumeTimeout()
+			})
+
+			task.on("taskSpawned", (taskId: string) => {
+				this.logDebug(`[BatchProcessor] Task spawned: ${taskId}`)
+				resetTimeout()
+			})
+
+			task.on("taskTokenUsageUpdated", (taskId: string, tokenUsage: any) => {
+				this.logDebug(`[BatchProcessor] Token usage updated for task: ${taskId}`)
+				resetTimeout()
+			})
+
+			// Handle tool failures - don't reset timeout, but clear it since we're rejecting
 			task.on("taskToolFailed", (taskId: string, tool: string, error: string) => {
 				this.logDebug(`[BatchProcessor] Tool ${tool} failed: ${error}`)
+				clearSlidingTimeout()
 				reject(new Error(`Tool ${tool} failed: ${error}`))
 			})
 
@@ -251,19 +397,9 @@ export class BatchProcessor {
 			// Wait for the task promise and handle errors
 			taskPromise.catch((error) => {
 				this.logDebug(`[BatchProcessor] Task promise rejected:`, error)
+				clearSlidingTimeout()
 				reject(error)
 			})
-
-			// Add a timeout to prevent hanging - increased for complex tasks
-			const timeoutMs = 60000 // 60 seconds
-			const timeout = setTimeout(() => {
-				this.logDebug(`[BatchProcessor] Task execution timeout after ${timeoutMs}ms`)
-				reject(new Error(`Task execution timeout after ${timeoutMs}ms`))
-			}, timeoutMs)
-
-			// Clear timeout when task completes
-			task.on("taskCompleted", () => clearTimeout(timeout))
-			task.on("taskAborted", () => clearTimeout(timeout))
 		})
 	}
 }
