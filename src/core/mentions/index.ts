@@ -15,7 +15,7 @@ import { diagnosticsToProblemsString } from "../../integrations/diagnostics"
 
 import { UrlContentFetcher } from "../../services/browser/UrlContentFetcher"
 
-import { FileContextTracker } from "../context-tracking/FileContextTracker"
+import { IFileContextTracker } from "../interfaces/IFileContextTracker"
 
 import { RooIgnoreController } from "../ignore/RooIgnoreController"
 
@@ -51,7 +51,7 @@ export async function parseMentions(
 	text: string,
 	cwd: string,
 	urlContentFetcher: UrlContentFetcher,
-	fileContextTracker?: FileContextTracker,
+	fileContextTracker?: IFileContextTracker,
 	rooIgnoreController?: RooIgnoreController,
 	showRooIgnoredFiles: boolean = true,
 ): Promise<string> {

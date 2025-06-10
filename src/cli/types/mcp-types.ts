@@ -64,7 +64,7 @@ export interface McpErrorEntry {
 	serverId?: string
 }
 
-export type ServerStatus = "connected" | "connecting" | "disconnected" | "error" | "retrying"
+export type ServerStatus = "connected" | "connecting" | "handshaking" | "disconnected" | "error" | "retrying"
 
 export interface McpConnection {
 	id: string
@@ -74,11 +74,16 @@ export interface McpConnection {
 	status: ServerStatus
 	lastActivity: number
 	errorCount: number
+	isReady: boolean // Whether handshake is complete and ready for capability requests
 
 	// Connection methods
 	connect(): Promise<void>
 	disconnect(): Promise<void>
 	isHealthy(): Promise<boolean>
+
+	// Handshake methods
+	waitForReady(timeout?: number): Promise<void>
+	isCapabilityReady(): boolean
 }
 
 export interface ValidationResult {

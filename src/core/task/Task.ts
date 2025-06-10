@@ -39,6 +39,8 @@ import { RepoPerTaskCheckpointService } from "../../services/checkpoints"
 
 // integrations
 import { DiffViewProvider } from "../../integrations/editor/DiffViewProvider"
+import { IDiffViewProvider } from "../interfaces/IDiffViewProvider"
+import { CLIDiffViewProvider } from "../adapters/cli/CLIDiffViewProvider"
 import { RooTerminalProcess } from "../../integrations/terminal/types"
 import { TerminalRegistry } from "../../integrations/terminal/TerminalRegistry"
 
@@ -48,10 +50,23 @@ import { getWorkspacePath } from "../../utils/path"
 // prompts
 import { formatResponse } from "../prompts/responses"
 import { SYSTEM_PROMPT } from "../prompts/system"
+import { getToolDescriptionsForMode } from "../prompts/tools"
+import {
+	getRulesSection,
+	getSystemInfoSection,
+	getObjectiveSection,
+	getMcpServersSection,
+	getToolUseGuidelinesSection,
+	getCapabilitiesSection,
+	getModesSection,
+	addCustomInstructions,
+} from "../prompts/sections"
 
 // core modules
 import { ToolRepetitionDetector } from "../tools/ToolRepetitionDetector"
 import { FileContextTracker } from "../context-tracking/FileContextTracker"
+import { CLIFileContextTracker } from "../adapters/cli/CLIFileContextTracker"
+import { IFileContextTracker } from "../interfaces/IFileContextTracker"
 import { RooIgnoreController } from "../ignore/RooIgnoreController"
 import { ClineProvider } from "../webview/ClineProvider"
 import { MultiSearchReplaceDiffStrategy } from "../diff/strategies/multi-search-replace"
@@ -118,6 +133,13 @@ export type TaskOptions = {
 	globalStoragePath?: string
 	workspacePath?: string
 	verbose?: boolean
+	// CLI specific dependencies
+	cliUIService?: any // CLIUIService type import would create circular dependency
+	// MCP configuration options
+	mcpConfigPath?: string
+	mcpAutoConnect?: boolean
+	mcpTimeout?: number
+	mcpRetries?: number
 }
 
 export class Task extends EventEmitter<ClineEvents> {
@@ -145,7 +167,7 @@ export class Task extends EventEmitter<ClineEvents> {
 
 	toolRepetitionDetector: ToolRepetitionDetector
 	rooIgnoreController?: RooIgnoreController
-	fileContextTracker: FileContextTracker
+	fileContextTracker: IFileContextTracker
 	urlContentFetcher: UrlContentFetcher
 	terminalProcess?: RooTerminalProcess
 
@@ -153,7 +175,7 @@ export class Task extends EventEmitter<ClineEvents> {
 	browserSession: BrowserSession
 
 	// Editing
-	diffViewProvider: DiffViewProvider
+	diffViewProvider: IDiffViewProvider
 	diffStrategy?: DiffStrategy
 	diffEnabled: boolean = false
 	fuzzyMatchThreshold: number
@@ -175,7 +197,15 @@ export class Task extends EventEmitter<ClineEvents> {
 	private terminal?: ITerminal
 	private browser?: IBrowser
 	private telemetryService?: ITelemetryService
+	private cliUIService?: any // CLIUIService instance for CLI mode
 	private verbose: boolean = false
+
+	// MCP configuration
+	private mcpConfigPath?: string
+	private mcpAutoConnect: boolean = true
+	private mcpTimeout?: number
+	private mcpRetries?: number
+	private cliMcpService?: any // CLIMcpService instance for CLI mode
 
 	// Modular components
 	private messaging: TaskMessaging
@@ -395,6 +425,11 @@ export class Task extends EventEmitter<ClineEvents> {
 		globalStoragePath,
 		workspacePath,
 		verbose = false,
+		cliUIService,
+		mcpConfigPath,
+		mcpAutoConnect = true,
+		mcpTimeout,
+		mcpRetries,
 	}: TaskOptions) {
 		super()
 
@@ -414,7 +449,14 @@ export class Task extends EventEmitter<ClineEvents> {
 		this.terminal = terminal
 		this.browser = browser
 		this.telemetryService = telemetry
+		this.cliUIService = cliUIService
 		this.verbose = verbose
+
+		// Store MCP configuration
+		this.mcpConfigPath = mcpConfigPath
+		this.mcpAutoConnect = mcpAutoConnect
+		this.mcpTimeout = mcpTimeout
+		this.mcpRetries = mcpRetries
 
 		// Set up provider and storage
 		if (provider) {
@@ -445,22 +487,18 @@ export class Task extends EventEmitter<ClineEvents> {
 		)
 
 		// Initialize other components
-		// Only initialize RooIgnoreController if we have a provider (VS Code mode)
-		if (provider) {
-			this.rooIgnoreController = new RooIgnoreController(this.workspacePath)
-			this.rooIgnoreController.initialize().catch((error) => {
-				console.error("Failed to initialize RooIgnoreController:", error)
-			})
-		}
+		// Initialize RooIgnoreController in both VS Code and CLI modes
+		// Enable file watcher only in VSCode mode (when provider exists)
+		this.rooIgnoreController = new RooIgnoreController(this.workspacePath, !!provider)
+		this.rooIgnoreController.initialize().catch((error) => {
+			console.error("Failed to initialize RooIgnoreController:", error)
+		})
 
 		if (provider) {
 			this.fileContextTracker = new FileContextTracker(provider, this.taskId)
 		} else {
-			// For CLI usage, create a minimal FileContextTracker implementation
-			this.fileContextTracker = {
-				dispose: () => {},
-				// Add other required methods as needed
-			} as any
+			// For CLI usage, use the CLI implementation
+			this.fileContextTracker = new CLIFileContextTracker(this.taskId)
 		}
 
 		this.apiConfiguration = apiConfiguration
@@ -486,11 +524,10 @@ export class Task extends EventEmitter<ClineEvents> {
 			this.browserSession = new BrowserSession(provider.context)
 			this.diffViewProvider = new DiffViewProvider(this.workspacePath)
 		} else {
-			// For CLI usage, create minimal implementations
-			// TODO: Implement CLI-compatible versions
+			// For CLI usage, create CLI-compatible implementations
 			this.urlContentFetcher = new UrlContentFetcher(null as any)
 			this.browserSession = new BrowserSession(null as any)
-			this.diffViewProvider = new DiffViewProvider(this.workspacePath)
+			this.diffViewProvider = new CLIDiffViewProvider(this.workspacePath)
 		}
 
 		this.diffEnabled = enableDiff
@@ -520,6 +557,35 @@ export class Task extends EventEmitter<ClineEvents> {
 			} else {
 				throw new Error("Either historyItem or task/images must be provided")
 			}
+		}
+
+		// Set up cleanup event listeners for CLI mode
+		if (!provider) {
+			this.on("taskCompleted", async () => {
+				try {
+					await this.dispose()
+				} catch (error) {
+					this.logDebug("Error during cleanup:", error)
+				}
+			})
+
+			this.on("taskAborted", async () => {
+				try {
+					await this.dispose()
+				} catch (error) {
+					this.logDebug("Error during cleanup:", error)
+				}
+			})
+		}
+	}
+
+	// Dispose method to clean up MCP connections and other resources
+	async dispose(): Promise<void> {
+		// Note: Don't dispose the MCP service in CLI mode since it's a shared global instance
+		// The global MCP service will be disposed when the CLI shuts down
+		if (this.cliMcpService) {
+			this.logDebug("[Task] Releasing reference to shared MCP service...")
+			this.cliMcpService = undefined
 		}
 	}
 
@@ -695,6 +761,39 @@ export class Task extends EventEmitter<ClineEvents> {
 				return result
 			}
 
+			case "search_files": {
+				const { searchFilesTool } = await import("../tools/searchFilesTool")
+				const result = await this.executeToolWithCLIInterface(searchFilesTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
+			case "search_and_replace": {
+				const { searchAndReplaceTool } = await import("../tools/searchAndReplaceTool")
+				const result = await this.executeToolWithCLIInterface(searchAndReplaceTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
+			case "execute_command": {
+				const { executeCommandTool } = await import("../tools/executeCommandTool")
+				const result = await this.executeToolWithCLIInterface(executeCommandTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
 			case "attempt_completion": {
 				const { attemptCompletionTool } = await import("../tools/attemptCompletionTool")
 				const result = await this.executeToolWithCLIInterface(attemptCompletionTool, {
@@ -704,6 +803,62 @@ export class Task extends EventEmitter<ClineEvents> {
 					partial: false,
 				})
 				return result
+			}
+
+			case "use_mcp_tool": {
+				if (!this.cliMcpService) {
+					throw new Error("MCP service not available in CLI mode")
+				}
+				const result = await this.cliMcpService.executeTool(
+					params.server_name,
+					params.tool_name,
+					JSON.parse(params.arguments),
+				)
+				return JSON.stringify(result, null, 2)
+			}
+
+			case "access_mcp_resource": {
+				if (!this.cliMcpService) {
+					throw new Error("MCP service not available in CLI mode")
+				}
+				const result = await this.cliMcpService.accessResource(params.server_name, params.uri)
+				return JSON.stringify(result, null, 2)
+			}
+
+			case "ask_followup_question": {
+				// Use the new question handling system
+				const { TaskQuestionService } = await import("../question-handling/services/TaskQuestionService")
+				const { createCLIQuestionHandler } = await import("../question-handling/handlers/CLIQuestionHandler")
+
+				// Use the injected CLI UI service or create a fallback
+				let promptManager: any
+				if (this.cliUIService) {
+					promptManager = this.cliUIService.getPromptManager()
+				} else {
+					// Fallback: create a new CLI UI service if none was injected
+					const { CLIUIService } = await import("../../cli/services/CLIUIService")
+					const fallbackUIService = new CLIUIService(true) // Enable color by default
+					promptManager = fallbackUIService.getPromptManager()
+				}
+
+				// Create CLI question handler
+				const handler = createCLIQuestionHandler({
+					promptManager,
+					logger: this,
+				})
+
+				// Create question service
+				const questionService = new TaskQuestionService(handler, this)
+
+				// Ask the question
+				const response = await questionService.askFollowupQuestion(
+					params.question,
+					params.follow_up,
+					false, // not partial for CLI
+				)
+
+				// Return formatted response
+				return questionService.formatResponseForTool(response)
 			}
 
 			default:
@@ -1134,15 +1289,38 @@ export class Task extends EventEmitter<ClineEvents> {
 				console.warn(`[Task] Failed to get provider state:`, error)
 			}
 		} else {
-			// CLI mode - use defaults
+			// CLI mode - use defaults and enable MCP
 			// Debug: Using default CLI settings (only log in verbose mode)
 			state = {
-				mcpEnabled: false, // Disable MCP in CLI for now
+				mcpEnabled: true, // Enable MCP in CLI mode
 				browserViewportSize: "900x600",
 				mode: "code",
 				customModes: [],
 				customModePrompts: {},
 				customInstructions: "",
+			}
+
+			// Use global MCP service for CLI mode
+			try {
+				const { GlobalCLIMcpService } = await import("../../cli/services/GlobalCLIMcpService")
+				const globalMcpService = GlobalCLIMcpService.getInstance()
+
+				if (globalMcpService.isInitialized()) {
+					// Get the shared MCP service instance
+					this.cliMcpService = globalMcpService.getMcpService()
+
+					// Create a compatible interface for getMcpServersSection
+					mcpHub = globalMcpService.createMcpHub()
+
+					// Populate tools and resources for each server
+					if (mcpHub) {
+						await globalMcpService.populateServerCapabilities(mcpHub)
+					}
+				} else {
+					this.logDebug("[Task] Global MCP service not initialized - MCP features will be unavailable")
+				}
+			} catch (error) {
+				this.logDebug(`[Task] Failed to use global MCP service:`, error)
 			}
 		}
 
@@ -1174,6 +1352,7 @@ export class Task extends EventEmitter<ClineEvents> {
 				getSystemInfoSection,
 				getObjectiveSection,
 				getSharedToolUseSection,
+				getMcpServersSection,
 				getToolUseGuidelinesSection,
 				getCapabilitiesSection,
 				markdownFormattingSection,
@@ -1187,6 +1366,11 @@ export class Task extends EventEmitter<ClineEvents> {
 			const mode = "code"
 			const modeConfig = modes.find((m) => m.slug === mode) || modes[0]
 			const { roleDefinition } = getModeSelection(mode, undefined, [])
+
+			// Check if this mode supports MCP
+			const enableMcpServerCreation = modeConfig.groups.some(
+				(groupEntry) => (typeof groupEntry === "string" ? groupEntry : groupEntry[0]) === "mcp",
+			)
 
 			// Build the same comprehensive prompt as VSCode extension
 			const systemPrompt = `${roleDefinition}
@@ -1202,12 +1386,14 @@ ${getToolDescriptionsForMode(
 	undefined, // codeIndexManager - CLI doesn't need code indexing
 	undefined, // diffStrategy
 	"900x600", // browserViewportSize
-	undefined, // mcpHub - disable MCP in CLI
+	mcpHub, // mcpHub - now enabled in CLI
 	[], // customModeConfigs
 	{}, // experiments
 	true, // partialReadsEnabled
 	{}, // settings
 )}
+
+${await getMcpServersSection(mcpHub, undefined, enableMcpServerCreation)}
 
 ${getToolUseGuidelinesSection()}
 
@@ -1218,6 +1404,64 @@ ${getRulesSection(this.workspacePath, false, undefined)}
 ${getSystemInfoSection(this.workspacePath)}
 
 ${getObjectiveSection()}`
+
+			return systemPrompt
+		}
+
+		// In CLI mode, provider might be undefined, so we need to handle this case
+		if (!provider) {
+			// For CLI mode, create a minimal system prompt that includes MCP server information
+			const mcpServersSection = await getMcpServersSection(
+				mcpHub,
+				this.diffEnabled ? this.diffStrategy : undefined,
+				enableMcpServerCreation,
+			)
+
+			const systemPrompt = `You are Roo, a highly skilled software engineer with extensive knowledge in many programming languages, frameworks, design patterns, and best practices. Applying the wisdom in this document (docs/prompts/development-prompt.md), you write the application code
+
+====
+
+MARKDOWN RULES
+
+ALL responses MUST show ANY \`language construct\` OR filename reference as clickable, exactly as [\`filename OR language.declaration()\`](relative/file/path.ext:line); line is required for \`syntax\` and optional for filename links. This applies to ALL markdown responses and ALSO those in <attempt_completion>
+
+====
+
+TOOL USE
+
+You have access to a set of tools that are executed upon the user's approval. You can use one tool per message, and will receive the result of that tool use in the user's response. You use tools step-by-step to accomplish a given task, with each tool use informed by the result of the previous tool use.
+
+${getToolDescriptionsForMode(
+	mode,
+	this.workspacePath,
+	(this.api.getModel().info.supportsComputerUse ?? false) && (browserToolEnabled ?? true),
+	undefined, // codeIndexManager not available in CLI mode
+	this.diffEnabled ? this.diffStrategy : undefined,
+	browserViewportSize,
+	mcpHub,
+	customModes,
+	experiments,
+	maxReadFileLine !== -1,
+	{
+		maxConcurrentFileReads,
+	},
+)}
+
+${getToolUseGuidelinesSection()}
+
+${mcpServersSection}
+
+${getCapabilitiesSection(this.workspacePath, (this.api.getModel().info.supportsComputerUse ?? false) && (browserToolEnabled ?? true), mcpHub, this.diffEnabled ? this.diffStrategy : undefined, undefined)}
+
+${await this.getCliModesSection(customModes)}
+
+${getRulesSection(this.workspacePath, (this.api.getModel().info.supportsComputerUse ?? false) && (browserToolEnabled ?? true), this.diffEnabled ? this.diffStrategy : undefined)}
+
+${getSystemInfoSection(this.workspacePath)}
+
+${getObjectiveSection()}
+
+${await addCustomInstructions("", customInstructions || "", this.workspacePath, mode, { language: language ?? "English", rooIgnoreInstructions })}`
 
 			return systemPrompt
 		}
@@ -1243,6 +1487,43 @@ ${getObjectiveSection()}`
 				maxConcurrentFileReads,
 			},
 		)
+	}
+
+	/**
+	 * Create a simplified modes section for CLI mode that doesn't require VSCode context
+	 */
+	private async getCliModesSection(customModes?: any[]): Promise<string> {
+		// Import modes directly instead of using VSCode context
+		const { getAllModes } = await import("../../shared/modes")
+		const allModes = getAllModes(customModes)
+
+		let modesContent = `====
+
+MODES
+
+- These are the currently available modes:
+${allModes
+	.map((mode: any) => {
+		let description: string
+		if (mode.whenToUse && mode.whenToUse.trim() !== "") {
+			// Use whenToUse as the primary description, indenting subsequent lines for readability
+			description = mode.whenToUse.replace(/\n/g, "\n    ")
+		} else {
+			// Fallback to the first sentence of roleDefinition if whenToUse is not available
+			description = mode.roleDefinition.split(".")[0]
+		}
+		return `  * "${mode.name}" mode (${mode.slug}) - ${description}`
+	})
+	.join("\n")}`
+
+		modesContent += `
+If the user asks you to create or edit a new mode for this project, you should read the instructions by using the fetch_instructions tool, like this:
+<fetch_instructions>
+<task>create_mode</task>
+</fetch_instructions>
+`
+
+		return modesContent
 	}
 
 	private async getEnvironmentDetails(includeFileDetails: boolean): Promise<string> {

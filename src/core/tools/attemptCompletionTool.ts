@@ -116,17 +116,23 @@ export async function attemptCompletionTool(
 			// We already sent completion_result says, an
 			// empty string asks relinquishes control over
 			// button and field.
-			const { response, text, images } = await cline.ask("completion_result", "", false)
+			// In CLI mode, use the askApproval function which auto-approves
+			// In VSCode mode, this will show the appropriate UI for completion approval
+			const approved = await askApproval("completion_result", "")
 
-			// Signals to recursive loop to stop (for now
-			// cline never happens since yesButtonClicked
-			// will trigger a new task).
-			if (response === "yesButtonClicked") {
+			// Signals to recursive loop to stop
+			// In CLI mode, auto-approval means completion is accepted
+			if (approved) {
 				pushToolResult("")
 				return
 			}
 
-			await cline.say("user_feedback", text ?? "", images)
+			// If not approved, we need to continue with feedback handling
+			// Note: In CLI mode this branch may not be reached due to auto-approval
+			const feedbackText = "Completion not approved - please continue with the task"
+			const feedbackImages: string[] = []
+
+			await cline.say("user_feedback", feedbackText, feedbackImages)
 			const toolResults: (Anthropic.TextBlockParam | Anthropic.ImageBlockParam)[] = []
 
 			if (commandResult) {
@@ -139,10 +145,10 @@ export async function attemptCompletionTool(
 
 			toolResults.push({
 				type: "text",
-				text: `The user has provided feedback on the results. Consider their input to continue the task, and then attempt completion again.\n<feedback>\n${text}\n</feedback>`,
+				text: `The user has provided feedback on the results. Consider their input to continue the task, and then attempt completion again.\n<feedback>\n${feedbackText}\n</feedback>`,
 			})
 
-			toolResults.push(...formatResponse.imageBlocks(images))
+			toolResults.push(...formatResponse.imageBlocks(feedbackImages))
 			cline.userMessageContent.push({ type: "text", text: `${toolDescription()} Result:` })
 			cline.userMessageContent.push(...toolResults)
 

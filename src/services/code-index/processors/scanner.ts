@@ -54,7 +54,8 @@ export class DirectoryScanner implements IDirectoryScanner {
 		const filePaths = allPaths.filter((p) => !p.endsWith("/"))
 
 		// Initialize RooIgnoreController if not provided
-		const ignoreController = new RooIgnoreController(directoryPath)
+		// Disable file watcher for code-index scanner to avoid conflicts
+		const ignoreController = new RooIgnoreController(directoryPath, false)
 
 		await ignoreController.initialize()
 

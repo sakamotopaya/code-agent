@@ -44,7 +44,17 @@ export async function newTaskTool(
 			cline.consecutiveMistakeCount = 0
 
 			// Verify the mode exists
-			const targetMode = getModeBySlug(mode, (await cline.providerRef?.deref()?.getState())?.customModes)
+			let customModes: any = undefined
+			if (cline.providerRef) {
+				try {
+					const state = await cline.providerRef.deref()?.getState()
+					customModes = state?.customModes
+				} catch (error) {
+					// Use default if state access fails (likely CLI mode)
+					customModes = undefined
+				}
+			}
+			const targetMode = getModeBySlug(mode, customModes)
 
 			if (!targetMode) {
 				pushToolResult(formatResponse.toolError(`Invalid mode: ${mode}`))
@@ -74,7 +84,13 @@ export async function newTaskTool(
 			}
 
 			// Preserve the current mode so we can resume with it later.
-			cline.pausedModeSlug = (await provider.getState()).mode ?? defaultModeSlug
+			try {
+				const state = await provider.getState()
+				cline.pausedModeSlug = state?.mode ?? defaultModeSlug
+			} catch (error) {
+				// Use default if state access fails (likely CLI mode)
+				cline.pausedModeSlug = defaultModeSlug
+			}
 
 			// Switch mode first, then create new task instance.
 			await provider.handleModeSwitch(mode)

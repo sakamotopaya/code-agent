@@ -16,13 +16,17 @@ export class RooIgnoreController {
 	private ignoreInstance: Ignore
 	private disposables: vscode.Disposable[] = []
 	rooIgnoreContent: string | undefined
+	private enableFileWatcher: boolean
 
-	constructor(cwd: string) {
+	constructor(cwd: string, enableFileWatcher: boolean = true) {
 		this.cwd = cwd
 		this.ignoreInstance = ignore()
 		this.rooIgnoreContent = undefined
-		// Set up file watcher for .rooignore
-		this.setupFileWatcher()
+		this.enableFileWatcher = enableFileWatcher
+		// Set up file watcher for .rooignore (only in VSCode mode)
+		if (this.enableFileWatcher) {
+			this.setupFileWatcher()
+		}
 	}
 
 	/**
@@ -37,24 +41,29 @@ export class RooIgnoreController {
 	 * Set up the file watcher for .rooignore changes
 	 */
 	private setupFileWatcher(): void {
-		const rooignorePattern = new vscode.RelativePattern(this.cwd, ".rooignore")
-		const fileWatcher = vscode.workspace.createFileSystemWatcher(rooignorePattern)
+		try {
+			const rooignorePattern = new vscode.RelativePattern(this.cwd, ".rooignore")
+			const fileWatcher = vscode.workspace.createFileSystemWatcher(rooignorePattern)
 
-		// Watch for changes and updates
-		this.disposables.push(
-			fileWatcher.onDidChange(() => {
-				this.loadRooIgnore()
-			}),
-			fileWatcher.onDidCreate(() => {
-				this.loadRooIgnore()
-			}),
-			fileWatcher.onDidDelete(() => {
-				this.loadRooIgnore()
-			}),
-		)
+			// Watch for changes and updates
+			this.disposables.push(
+				fileWatcher.onDidChange(() => {
+					this.loadRooIgnore()
+				}),
+				fileWatcher.onDidCreate(() => {
+					this.loadRooIgnore()
+				}),
+				fileWatcher.onDidDelete(() => {
+					this.loadRooIgnore()
+				}),
+			)
 
-		// Add fileWatcher itself to disposables
-		this.disposables.push(fileWatcher)
+			// Add fileWatcher itself to disposables
+			this.disposables.push(fileWatcher)
+		} catch (error) {
+			// File watcher setup failed (likely in CLI mode), continue without it
+			console.debug("RooIgnoreController: File watcher setup failed, continuing without file watching:", error)
+		}
 	}
 
 	/**
@@ -69,7 +78,8 @@ export class RooIgnoreController {
 				const content = await fs.readFile(ignorePath, "utf8")
 				this.rooIgnoreContent = content
 				this.ignoreInstance.add(content)
-				this.ignoreInstance.add(".rooignore")
+				// Note: We don't add .rooignore itself to the ignore patterns
+				// to allow debugging and access to the configuration file
 			} else {
 				this.rooIgnoreContent = undefined
 			}
@@ -92,7 +102,7 @@ export class RooIgnoreController {
 		try {
 			// Normalize path to be relative to cwd and use forward slashes
 			const absolutePath = path.resolve(this.cwd, filePath)
-			const relativePath = path.relative(this.cwd, absolutePath).toPosix()
+			const relativePath = path.relative(this.cwd, absolutePath).replace(/\\/g, "/")
 
 			// Ignore expects paths to be path.relative()'d
 			return !this.ignoreInstance.ignores(relativePath)
