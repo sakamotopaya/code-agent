@@ -91,7 +91,12 @@ describe("BatchProcessor", () => {
 			jest.advanceTimersByTime(59000)
 
 			// Task should still be running, no timeout yet
-			expect(runPromise).not.toBe(undefined)
+			await expect(
+				Promise.race([
+					runPromise,
+					new Promise((resolve) => setTimeout(resolve, 1000)), // Ensure promise does not resolve within 1 second
+				]),
+			).resolves.not.toBe(runPromise)
 
 			// Now wait the full 60 seconds from the last activity
 			jest.advanceTimersByTime(1000)
@@ -121,7 +126,12 @@ describe("BatchProcessor", () => {
 				mockTask.emit(event[0], ...event.slice(1))
 
 				// Should not timeout yet
-				expect(runPromise).not.toBe(undefined)
+				await expect(
+					Promise.race([
+						runPromise,
+						new Promise((resolve) => setTimeout(resolve, 1000)), // Ensure promise does not resolve within 1 second
+					]),
+				).resolves.not.toBe(runPromise)
 			}
 
 			// Wait full timeout after last activity
@@ -192,7 +202,12 @@ describe("BatchProcessor", () => {
 			jest.advanceTimersByTime(59000)
 
 			// Should still be running
-			expect(runPromise).not.toBe(undefined)
+			await expect(
+				Promise.race([
+					runPromise,
+					new Promise((resolve) => setTimeout(resolve, 1000)), // Ensure promise does not resolve within 1 second
+				]),
+			).resolves.not.toBe(runPromise)
 
 			// Wait the final second to trigger timeout
 			jest.advanceTimersByTime(1000)
