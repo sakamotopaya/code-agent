@@ -8,10 +8,17 @@ import { Task } from "../task/Task"
 import { ToolUse, AskApproval, HandleError, PushToolResult, RemoveClosingTag, ToolResponse } from "../../shared/tools"
 import { formatResponse } from "../prompts/responses"
 import { unescapeHtmlEntities } from "../../utils/text-normalization"
-import { ExitCodeDetails, RooTerminalCallbacks, RooTerminalProcess } from "../../integrations/terminal/types"
+import {
+	ExitCodeDetails,
+	RooTerminalCallbacks,
+	RooTerminalProcess,
+	RooTerminal,
+	RooTerminalProvider,
+} from "../../integrations/terminal/types"
 import { TerminalRegistry } from "../../integrations/terminal/TerminalRegistry"
 import { Terminal } from "../../integrations/terminal/Terminal"
 import { ITerminal, ExecuteCommandOptions as ITerminalExecuteCommandOptions } from "../interfaces/ITerminal"
+import { CLITerminalAdapter } from "../adapters/cli/CLITerminalAdapter"
 
 class ShellIntegrationError extends Error {}
 
@@ -127,6 +134,34 @@ export type ExecuteCommandOptions = {
 	terminalOutputLineLimit?: number
 }
 
+/**
+ * Gets the appropriate terminal for the task context.
+ * Uses CLI terminal adapter when in CLI context, falls back to TerminalRegistry for VSCode.
+ */
+async function getTerminalForTask(
+	cline: Task,
+	workingDir: string,
+	requiredCwd: boolean,
+	taskId?: string,
+	terminalProvider: RooTerminalProvider = "execa",
+): Promise<RooTerminal> {
+	// Check if task has CLI terminal adapter (indicates CLI context)
+	try {
+		const terminal = cline.term
+		if (terminal && typeof terminal.executeCommand === "function") {
+			// Generate unique ID for CLI terminal adapter
+			const adapterId = Date.now() + Math.floor(Math.random() * 1000)
+			return new CLITerminalAdapter(terminal, workingDir, adapterId, taskId)
+		}
+	} catch (error) {
+		// Terminal not available, fall through to TerminalRegistry
+	}
+
+	// Fall back to TerminalRegistry for VSCode context
+	const provider = terminalProvider as "vscode" | "execa"
+	return await TerminalRegistry.getOrCreateTerminal(workingDir, requiredCwd, taskId, provider)
+}
+
 export async function executeCommand(
 	cline: Task,
 	{
@@ -212,7 +247,7 @@ export async function executeCommand(
 		}
 	}
 
-	const terminal = await TerminalRegistry.getOrCreateTerminal(workingDir, !!customCwd, cline.taskId, terminalProvider)
+	const terminal = await getTerminalForTask(cline, workingDir, !!customCwd, cline.taskId, terminalProvider)
 
 	if (terminal instanceof Terminal) {
 		terminal.terminal.show(true)
