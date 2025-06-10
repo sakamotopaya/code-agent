@@ -299,7 +299,7 @@ program
 					})
 					getCLILogger().debug("[cli-entry] GlobalCLIMcpService initialized successfully")
 				} catch (error) {
-					getCLILogger().debug("[cli-entry] Failed to initialize GlobalCLIMcpService:", error)
+					getCLILogger().warn("[cli-entry] Failed to initialize GlobalCLIMcpService:", error)
 					if (options.verbose) {
 						console.warn(
 							chalk.yellow("Warning: MCP initialization failed:"),
