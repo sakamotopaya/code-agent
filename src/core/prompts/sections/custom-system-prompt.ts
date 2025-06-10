@@ -46,11 +46,11 @@ async function safeReadFile(filePath: string): Promise<string> {
  * Get the path to a system prompt file for a specific mode
  */
 export function getSystemPromptFilePath(cwd: string, mode: Mode): string {
-	return path.join(cwd, ".roo", `system-prompt-${mode}`)
+	return path.join(cwd, ".agentz", `system-prompt-${mode}`)
 }
 
 /**
- * Loads custom system prompt from a file at .roo/system-prompt-[mode slug]
+ * Loads custom system prompt from a file at .agentz/system-prompt-[mode slug]
  * If the file doesn't exist, returns an empty string
  */
 export async function loadSystemPromptFile(cwd: string, mode: Mode, variables: PromptVariables): Promise<string> {

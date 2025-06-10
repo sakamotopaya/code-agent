@@ -38,14 +38,34 @@ export interface LanguageParser {
 }
 
 async function loadLanguage(langName: string) {
-	return await Parser.Language.load(path.join(__dirname, `tree-sitter-${langName}.wasm`))
+	// Detect if we're running in CLI context by checking if __dirname ends with '/cli'
+	// When running as CLI, __dirname points to dist/cli/ but WASM files are in dist/
+	// When running as VSCode extension, __dirname points to dist/ where WASM files are
+	const isCliContext = __dirname.endsWith("/cli") || __dirname.endsWith("\\cli")
+	const wasmDir = isCliContext
+		? path.join(__dirname, "..") // CLI: go up one level from dist/cli/ to dist/
+		: __dirname // VSCode extension: use dist/ directly
+
+	return await Parser.Language.load(path.join(wasmDir, `tree-sitter-${langName}.wasm`))
 }
 
 let isParserInitialized = false
 
 async function initializeParser() {
 	if (!isParserInitialized) {
-		await Parser.init()
+		// Detect if we're running in CLI context by checking if __dirname ends with '/cli'
+		// When running as CLI, __dirname points to dist/cli/ but WASM files are in dist/
+		// When running as VSCode extension, __dirname points to dist/ where WASM files are
+		const isCliContext = __dirname.endsWith("/cli") || __dirname.endsWith("\\cli")
+		const wasmDir = isCliContext
+			? path.join(__dirname, "..") // CLI: go up one level from dist/cli/ to dist/
+			: __dirname // VSCode extension: use dist/ directly
+
+		await Parser.init({
+			locateFile(scriptName: string, scriptDirectory: string) {
+				return path.join(wasmDir, scriptName)
+			},
+		})
 		isParserInitialized = true
 	}
 }

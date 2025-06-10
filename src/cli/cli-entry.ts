@@ -283,6 +283,34 @@ program
 				console.log()
 			}
 
+			// Initialize MCP service if auto-connect is enabled
+			if (options.mcpAutoConnect) {
+				try {
+					getCLILogger().debug("[cli-entry] Initializing GlobalCLIMcpService...")
+					const { GlobalCLIMcpService } = await import("./services/GlobalCLIMcpService")
+					const globalMcpService = GlobalCLIMcpService.getInstance()
+
+					// Initialize with MCP-specific options
+					await globalMcpService.initialize({
+						mcpConfigPath: options.mcpConfig,
+						mcpAutoConnect: options.mcpAutoConnect,
+						mcpTimeout: options.mcpTimeout,
+						mcpRetries: options.mcpRetries,
+					})
+					getCLILogger().debug("[cli-entry] GlobalCLIMcpService initialized successfully")
+				} catch (error) {
+					getCLILogger().warn("[cli-entry] Failed to initialize GlobalCLIMcpService:", error)
+					if (options.verbose) {
+						console.warn(
+							chalk.yellow("Warning: MCP initialization failed:"),
+							error instanceof Error ? error.message : String(error),
+						)
+					}
+				}
+			} else {
+				getCLILogger().debug("[cli-entry] MCP auto-connect disabled, skipping MCP initialization")
+			}
+
 			// Pass configuration to processors
 			if (options.batch || options.stdin || !options.interactive) {
 				// Use NonInteractiveModeService for non-interactive operations
@@ -320,6 +348,10 @@ program
 							await batchProcessor.run(options.batch)
 						}
 					}
+
+					// Exit successfully after non-interactive execution completes
+					getCLILogger().debug("[cli-entry] Non-interactive execution completed successfully, exiting...")
+					process.exit(0)
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error)
 					if (options.color) {

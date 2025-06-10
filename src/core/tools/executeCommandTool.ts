@@ -8,10 +8,17 @@ import { Task } from "../task/Task"
 import { ToolUse, AskApproval, HandleError, PushToolResult, RemoveClosingTag, ToolResponse } from "../../shared/tools"
 import { formatResponse } from "../prompts/responses"
 import { unescapeHtmlEntities } from "../../utils/text-normalization"
-import { ExitCodeDetails, RooTerminalCallbacks, RooTerminalProcess } from "../../integrations/terminal/types"
+import {
+	ExitCodeDetails,
+	RooTerminalCallbacks,
+	RooTerminalProcess,
+	RooTerminal,
+	RooTerminalProvider,
+} from "../../integrations/terminal/types"
 import { TerminalRegistry } from "../../integrations/terminal/TerminalRegistry"
 import { Terminal } from "../../integrations/terminal/Terminal"
 import { ITerminal, ExecuteCommandOptions as ITerminalExecuteCommandOptions } from "../interfaces/ITerminal"
+import { CLITerminalAdapter } from "../adapters/cli/CLITerminalAdapter"
 
 class ShellIntegrationError extends Error {}
 
@@ -56,9 +63,23 @@ export async function executeCommandTool(
 			}
 
 			const executionId = cline.lastMessageTs?.toString() ?? Date.now().toString()
-			const clineProvider = await cline.providerRef?.deref()
-			const clineProviderState = await clineProvider?.getState()
-			const { terminalOutputLineLimit = 500, terminalShellIntegrationDisabled = false } = clineProviderState ?? {}
+			// Get state from provider in VSCode mode, use defaults in CLI mode
+			let terminalOutputLineLimit = 500
+			let terminalShellIntegrationDisabled = false
+			let clineProvider: any = null
+			if (cline.providerRef) {
+				try {
+					clineProvider = await cline.providerRef.deref()
+					const clineProviderState = await clineProvider?.getState()
+					terminalOutputLineLimit = clineProviderState?.terminalOutputLineLimit ?? 500
+					terminalShellIntegrationDisabled = clineProviderState?.terminalShellIntegrationDisabled ?? false
+				} catch (error) {
+					// Use defaults if state access fails (likely CLI mode)
+					terminalOutputLineLimit = 500
+					terminalShellIntegrationDisabled = false
+					clineProvider = null
+				}
+			}
 
 			const options: ExecuteCommandOptions = {
 				executionId,
@@ -69,7 +90,7 @@ export async function executeCommandTool(
 			}
 
 			try {
-				const [rejected, result] = await executeCommand(cline, options)
+				const [rejected, result] = await executeCommand(cline, options, askApproval)
 
 				if (rejected) {
 					cline.didRejectTool = true
@@ -82,10 +103,14 @@ export async function executeCommandTool(
 				await cline.say("shell_integration_warning")
 
 				if (error instanceof ShellIntegrationError) {
-					const [rejected, result] = await executeCommand(cline, {
-						...options,
-						terminalShellIntegrationDisabled: true,
-					})
+					const [rejected, result] = await executeCommand(
+						cline,
+						{
+							...options,
+							terminalShellIntegrationDisabled: true,
+						},
+						askApproval,
+					)
 
 					if (rejected) {
 						cline.didRejectTool = true
@@ -113,6 +138,34 @@ export type ExecuteCommandOptions = {
 	terminalOutputLineLimit?: number
 }
 
+/**
+ * Gets the appropriate terminal for the task context.
+ * Uses CLI terminal adapter when in CLI context, falls back to TerminalRegistry for VSCode.
+ */
+async function getTerminalForTask(
+	cline: Task,
+	workingDir: string,
+	requiredCwd: boolean,
+	taskId?: string,
+	terminalProvider: RooTerminalProvider = "execa",
+): Promise<RooTerminal> {
+	// Check if task has CLI terminal adapter (indicates CLI context)
+	try {
+		const terminal = cline.term
+		if (terminal && typeof terminal.executeCommand === "function") {
+			// Generate unique ID for CLI terminal adapter
+			const adapterId = Date.now() + Math.floor(Math.random() * 1000)
+			return new CLITerminalAdapter(terminal, workingDir, adapterId, taskId)
+		}
+	} catch (error) {
+		// Terminal not available, fall through to TerminalRegistry
+	}
+
+	// Fall back to TerminalRegistry for VSCode context
+	const provider = terminalProvider as "vscode" | "execa"
+	return await TerminalRegistry.getOrCreateTerminal(workingDir, requiredCwd, taskId, provider)
+}
+
 export async function executeCommand(
 	cline: Task,
 	{
@@ -122,6 +175,7 @@ export async function executeCommand(
 		terminalShellIntegrationDisabled = false,
 		terminalOutputLineLimit = 500,
 	}: ExecuteCommandOptions,
+	askApproval?: AskApproval,
 ): Promise<[boolean, ToolResponse]> {
 	let workingDir: string
 
@@ -152,6 +206,9 @@ export async function executeCommand(
 	const terminalProvider = terminalShellIntegrationDisabled ? "execa" : "vscode"
 	const clineProvider = await cline.providerRef?.deref()
 
+	// Handle undefined askApproval for backward compatibility
+	const approvalFunction = askApproval
+
 	let accumulatedOutput = ""
 	const callbacks: RooTerminalCallbacks = {
 		onLine: async (lines: string, process: RooTerminalProcess) => {
@@ -165,12 +222,23 @@ export async function executeCommand(
 			}
 
 			try {
-				const { response, text, images } = await cline.ask("command_output", "")
-				runInBackground = true
-
-				if (response === "messageResponse") {
-					message = { text, images }
-					process.continue()
+				// In CLI mode, use the askApproval function which auto-approves
+				// In VSCode mode, this will show the appropriate UI for command output approval
+				// If no approval function provided, fall back to original behavior
+				if (approvalFunction) {
+					const approved = await approvalFunction("command_output", "")
+					runInBackground = true
+					if (approved) {
+						process.continue()
+					}
+				} else {
+					// Fallback to original cline.ask behavior
+					const { response, text, images } = await cline.ask("command_output", "")
+					runInBackground = true
+					if (response === "messageResponse") {
+						message = { text, images }
+						process.continue()
+					}
 				}
 			} catch (_error) {}
 		},
@@ -198,7 +266,7 @@ export async function executeCommand(
 		}
 	}
 
-	const terminal = await TerminalRegistry.getOrCreateTerminal(workingDir, !!customCwd, cline.taskId, terminalProvider)
+	const terminal = await getTerminalForTask(cline, workingDir, !!customCwd, cline.taskId, terminalProvider)
 
 	if (terminal instanceof Terminal) {
 		terminal.terminal.show(true)
