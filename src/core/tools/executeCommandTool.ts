@@ -90,7 +90,7 @@ export async function executeCommandTool(
 			}
 
 			try {
-				const [rejected, result] = await executeCommand(cline, options)
+				const [rejected, result] = await executeCommand(cline, options, askApproval)
 
 				if (rejected) {
 					cline.didRejectTool = true
@@ -103,10 +103,14 @@ export async function executeCommandTool(
 				await cline.say("shell_integration_warning")
 
 				if (error instanceof ShellIntegrationError) {
-					const [rejected, result] = await executeCommand(cline, {
-						...options,
-						terminalShellIntegrationDisabled: true,
-					})
+					const [rejected, result] = await executeCommand(
+						cline,
+						{
+							...options,
+							terminalShellIntegrationDisabled: true,
+						},
+						askApproval,
+					)
 
 					if (rejected) {
 						cline.didRejectTool = true
@@ -171,6 +175,7 @@ export async function executeCommand(
 		terminalShellIntegrationDisabled = false,
 		terminalOutputLineLimit = 500,
 	}: ExecuteCommandOptions,
+	askApproval?: AskApproval,
 ): Promise<[boolean, ToolResponse]> {
 	let workingDir: string
 
@@ -201,6 +206,9 @@ export async function executeCommand(
 	const terminalProvider = terminalShellIntegrationDisabled ? "execa" : "vscode"
 	const clineProvider = await cline.providerRef?.deref()
 
+	// Handle undefined askApproval for backward compatibility
+	const approvalFunction = askApproval
+
 	let accumulatedOutput = ""
 	const callbacks: RooTerminalCallbacks = {
 		onLine: async (lines: string, process: RooTerminalProcess) => {
@@ -214,12 +222,23 @@ export async function executeCommand(
 			}
 
 			try {
-				const { response, text, images } = await cline.ask("command_output", "")
-				runInBackground = true
-
-				if (response === "messageResponse") {
-					message = { text, images }
-					process.continue()
+				// In CLI mode, use the askApproval function which auto-approves
+				// In VSCode mode, this will show the appropriate UI for command output approval
+				// If no approval function provided, fall back to original behavior
+				if (approvalFunction) {
+					const approved = await approvalFunction("command_output", "")
+					runInBackground = true
+					if (approved) {
+						process.continue()
+					}
+				} else {
+					// Fallback to original cline.ask behavior
+					const { response, text, images } = await cline.ask("command_output", "")
+					runInBackground = true
+					if (response === "messageResponse") {
+						message = { text, images }
+						process.continue()
+					}
 				}
 			} catch (_error) {}
 		},
