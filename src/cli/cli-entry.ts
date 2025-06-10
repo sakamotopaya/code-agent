@@ -15,6 +15,7 @@ import { StartupOptimizer } from "./optimization/StartupOptimizer"
 import { MemoryOptimizer } from "./optimization/MemoryOptimizer"
 import { PerformanceConfigManager } from "./config/performance-config"
 import { PlatformServiceFactory, PlatformContext } from "../core/adapters/PlatformServiceFactory"
+import { CleanupManager } from "./services/CleanupManager"
 import chalk from "chalk"
 import * as fs from "fs"
 
@@ -349,9 +350,57 @@ program
 						}
 					}
 
-					// Exit successfully after non-interactive execution completes
-					getCLILogger().debug("[cli-entry] Non-interactive execution completed successfully, exiting...")
-					process.exit(0)
+					// Perform proper cleanup before exit
+					getCLILogger().debug("[cli-entry] Non-interactive execution completed, performing cleanup...")
+
+					try {
+						const cleanupManager = CleanupManager.getInstance()
+
+						// Register essential cleanup tasks
+						cleanupManager.registerCleanupTask(async () => {
+							if (options.mcpAutoConnect) {
+								try {
+									const { GlobalCLIMcpService } = await import("./services/GlobalCLIMcpService")
+									const globalMcpService = GlobalCLIMcpService.getInstance()
+									await globalMcpService.dispose()
+									getCLILogger().debug("[cli-entry] GlobalCLIMcpService disposed successfully")
+								} catch (error) {
+									getCLILogger().warn("[cli-entry] Failed to dispose GlobalCLIMcpService:", error)
+								}
+							}
+						})
+
+						cleanupManager.registerCleanupTask(async () => {
+							try {
+								memoryOptimizer.stopMonitoring()
+								getCLILogger().debug("[cli-entry] MemoryOptimizer monitoring stopped")
+							} catch (error) {
+								getCLILogger().warn("[cli-entry] Failed to stop MemoryOptimizer:", error)
+							}
+						})
+
+						cleanupManager.registerCleanupTask(async () => {
+							try {
+								// Stop performance monitoring
+								const startupDuration = cliStartupTimer.stop()
+								getCLILogger().debug(
+									`[cli-entry] Performance monitoring stopped (startup: ${Math.round(startupDuration)}ms)`,
+								)
+							} catch (error) {
+								getCLILogger().warn("[cli-entry] Failed to stop performance monitoring:", error)
+							}
+						})
+
+						// Perform graceful shutdown
+						await cleanupManager.performShutdown()
+
+						getCLILogger().debug("[cli-entry] Cleanup completed successfully")
+					} catch (error) {
+						getCLILogger().error("[cli-entry] Cleanup failed:", error)
+						process.exitCode = 1
+					}
+
+					// Process will exit naturally once event loop drains
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error)
 					if (options.color) {
@@ -359,7 +408,26 @@ program
 					} else {
 						console.error("Non-interactive execution failed:", message)
 					}
-					process.exit(1)
+
+					// Set exit code and attempt cleanup before exit
+					process.exitCode = 1
+					try {
+						const cleanupManager = CleanupManager.getInstance()
+						cleanupManager.registerCleanupTask(async () => {
+							if (options.mcpAutoConnect) {
+								const { GlobalCLIMcpService } = await import("./services/GlobalCLIMcpService")
+								const globalMcpService = GlobalCLIMcpService.getInstance()
+								await globalMcpService.dispose()
+							}
+						})
+						cleanupManager.registerCleanupTask(async () => {
+							memoryOptimizer.stopMonitoring()
+						})
+						await cleanupManager.emergencyShutdown()
+					} catch (cleanupError) {
+						getCLILogger().warn("[cli-entry] Emergency cleanup failed:", cleanupError)
+						process.exit(1)
+					}
 				}
 			} else {
 				const repl = new CliRepl(options, configManager)
@@ -396,14 +464,31 @@ program
 				console.error("Use --help for usage information")
 			}
 
-			// Clean up performance monitoring
+			// Clean up performance monitoring using CleanupManager
 			try {
-				memoryOptimizer.stopMonitoring()
-			} catch (cleanupError) {
-				// Ignore cleanup errors
-			}
+				const cleanupManager = CleanupManager.getInstance()
 
-			process.exit(1)
+				cleanupManager.registerCleanupTask(async () => {
+					memoryOptimizer.stopMonitoring()
+				})
+
+				cleanupManager.registerCleanupTask(async () => {
+					if (options.mcpAutoConnect) {
+						const { GlobalCLIMcpService } = await import("./services/GlobalCLIMcpService")
+						const globalMcpService = GlobalCLIMcpService.getInstance()
+						await globalMcpService.dispose()
+					}
+				})
+
+				// Set exit code before cleanup
+				process.exitCode = 1
+
+				// Perform emergency cleanup with shorter timeout
+				await cleanupManager.emergencyShutdown()
+			} catch (cleanupError) {
+				getCLILogger().warn("[cli-entry] Emergency cleanup failed:", cleanupError)
+				process.exit(1)
+			}
 		}
 	})
 
@@ -431,7 +516,8 @@ program
 					chalk.red("Failed to load configuration:"),
 					error instanceof Error ? error.message : String(error),
 				)
-				process.exit(1)
+				process.exitCode = 1
+				return
 			}
 		} else if (options.validate) {
 			try {
@@ -442,7 +528,8 @@ program
 					chalk.red(`❌ Configuration file ${options.validate} is invalid:`),
 					error instanceof Error ? error.message : String(error),
 				)
-				process.exit(1)
+				process.exitCode = 1
+				return
 			}
 		} else if (options.generate) {
 			try {
@@ -453,11 +540,13 @@ program
 					chalk.red("Failed to generate configuration:"),
 					error instanceof Error ? error.message : String(error),
 				)
-				process.exit(1)
+				process.exitCode = 1
+				return
 			}
 		} else {
 			console.log("Use --show, --validate <path>, or --generate <path> with the config command")
-			process.exit(1)
+			process.exitCode = 1
+			return
 		}
 	})
 
@@ -538,7 +627,7 @@ try {
 program.on("command:*", function (operands) {
 	console.error(chalk.red(`❌ Unknown command: ${operands[0]}`))
 	console.error("See --help for a list of available commands.")
-	process.exit(1)
+	process.exitCode = 1
 })
 
 // Parse command line arguments

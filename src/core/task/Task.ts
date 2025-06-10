@@ -761,6 +761,17 @@ export class Task extends EventEmitter<ClineEvents> {
 				return result
 			}
 
+			case "list_code_definition_names": {
+				const { listCodeDefinitionNamesTool } = await import("../tools/listCodeDefinitionNamesTool")
+				const result = await this.executeToolWithCLIInterface(listCodeDefinitionNamesTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
 			case "search_files": {
 				const { searchFilesTool } = await import("../tools/searchFilesTool")
 				const result = await this.executeToolWithCLIInterface(searchFilesTool, {
