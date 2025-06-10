@@ -197,7 +197,9 @@ export async function searchAndReplaceTool(
 
 		// Show changes in diff view
 		if (!cline.diffViewProvider.isEditing) {
-			await cline.ask("tool", JSON.stringify(sharedMessageProps), true).catch(() => {})
+			// In CLI mode, use the askApproval function which auto-approves
+			// In VSCode mode, this will show the appropriate UI for diff preview
+			await askApproval("tool", JSON.stringify(sharedMessageProps))
 			await cline.diffViewProvider.open(validRelPath)
 			await cline.diffViewProvider.update(fileContent, false)
 			cline.diffViewProvider.scrollToFirstDiff()
@@ -208,9 +210,9 @@ export async function searchAndReplaceTool(
 
 		// Request user approval for changes
 		const completeMessage = JSON.stringify({ ...sharedMessageProps, diff } satisfies ClineSayTool)
-		const didApprove = await cline
-			.ask("tool", completeMessage, false)
-			.then((response) => response.response === "yesButtonClicked")
+		// In CLI mode, use the askApproval function which auto-approves
+		// In VSCode mode, this will show the appropriate UI for change approval
+		const didApprove = await askApproval("tool", completeMessage)
 
 		if (!didApprove) {
 			await cline.diffViewProvider.revertChanges()

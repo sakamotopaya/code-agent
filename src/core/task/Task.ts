@@ -772,6 +772,28 @@ export class Task extends EventEmitter<ClineEvents> {
 				return result
 			}
 
+			case "search_and_replace": {
+				const { searchAndReplaceTool } = await import("../tools/searchAndReplaceTool")
+				const result = await this.executeToolWithCLIInterface(searchAndReplaceTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
+			case "execute_command": {
+				const { executeCommandTool } = await import("../tools/executeCommandTool")
+				const result = await this.executeToolWithCLIInterface(executeCommandTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
 			case "attempt_completion": {
 				const { attemptCompletionTool } = await import("../tools/attemptCompletionTool")
 				const result = await this.executeToolWithCLIInterface(attemptCompletionTool, {
