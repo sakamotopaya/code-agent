@@ -1,11 +1,11 @@
 /* eslint-env node */
+/* global module, require, process */
 // Mock VSCode module for CLI context
 // Enhanced for standalone executable compatibility
 
 const os = require("os")
 const path = require("path")
 
-// eslint-disable-next-line no-undef
 module.exports = {
 	workspace: {
 		getConfiguration: (section) => ({

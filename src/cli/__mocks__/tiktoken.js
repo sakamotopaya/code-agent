@@ -1,4 +1,5 @@
 /* eslint-env node */
+/* global module */
 // Mock tiktoken implementation for CLI context
 // Provides reasonable token estimation without WebAssembly dependencies
 
