@@ -7,7 +7,7 @@ Test extraction of function and class definitions from source code.
 ## Test Prompt
 
 ```
-Create a TypeScript file at `test-run-output/sample-code.ts` with various code definitions including classes, functions, interfaces, and enums. Then use list_code_definition_names to extract all the definitions and verify they are correctly identified.
+Create a TypeScript file at 'test-run-output/sample-code.ts' with various code definitions including classes, functions, interfaces, and enums. Then use list_code_definition_names to extract all the definitions and verify they are correctly identified.
 ```
 
 ## Expected Tool Usage

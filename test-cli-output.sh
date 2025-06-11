@@ -16,3 +16,5 @@ cd src && node dist/cli/index.js --batch "list the files in the current director
 echo
 
 echo "Testing complete!"
+
+npm run start:cli --silent -- --config ~/.agentz/agent-config.json --batch "Create a TypeScript file at 'test-run-output/sample-code.ts' with various code definitions including classes, functions, interfaces, and enums. Then use list_code_definition_names to extract all the definitions and verify they are correctly identified."
