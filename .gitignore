@@ -14,6 +14,7 @@ mock/
 # Builds
 bin/
 *.vsix
+apps/
 
 # Local prompts and rules
 /local-prompts
