@@ -1,0 +1,261 @@
+name: Build Standalone CLI Executables
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'scripts/build-standalone.sh'
+      - '.github/workflows/build-standalone-cli.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'scripts/build-standalone.sh'
+      - '.github/workflows/build-standalone-cli.yml'
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Platforms to build (all, macos, windows, linux)'
+        required: false
+        default: 'all'
+
+jobs:
+  build-standalone:
+    name: Build Standalone CLI
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: macos
+          - os: windows-latest
+            platform: windows
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: 'src/package-lock.json'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: |
+          cd src
+          pnpm install --frozen-lockfile
+
+      - name: Build CLI bundle
+        run: |
+          cd src
+          pnpm run build:cli
+
+      - name: Install PKG globally (Windows)
+        if: matrix.os == 'windows-latest'
+        run: npm install -g pkg
+
+      - name: Build standalone executable (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd src
+          pnpm run build:standalone:linux
+
+      - name: Build standalone executable (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          cd src
+          pnpm run build:standalone:macos
+
+      - name: Build standalone executable (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cd src
+          pnpm run build:standalone:windows
+
+      - name: Sign executable (macOS)
+        if: matrix.os == 'macos-latest'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          cd src
+          pnpm run sign:macos
+
+      - name: Sign executable (Windows)
+        if: matrix.os == 'windows-latest'
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          TIMESTAMP_SERVER: ${{ secrets.TIMESTAMP_SERVER || 'http://timestamp.sectigo.com' }}
+        run: |
+          cd src
+          pnpm run sign:windows
+
+      - name: Sign executable (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd src
+          pnpm run sign:linux
+
+      - name: Test executable (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          ls -la apps/
+          ./apps/roo-cline-linux --version || true
+          ./apps/roo-cline-linux --help || true
+
+      - name: Test executable (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          ls -la apps/
+          ./apps/roo-cline-macos --version || true
+          ./apps/roo-cline-macos --help || true
+
+      - name: Test executable (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          dir apps\
+          .\apps\roo-cline-win.exe --version
+          .\apps\roo-cline-win.exe --help
+
+      - name: Upload Linux artifacts
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: roo-cli-linux
+          path: |
+            apps/roo-cline-linux*
+          retention-days: 30
+
+      - name: Upload macOS artifacts
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: roo-cli-macos
+          path: |
+            apps/roo-cline-macos*
+          retention-days: 30
+
+      - name: Upload Windows artifacts
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: roo-cli-windows
+          path: |
+            apps/roo-cline-win.exe
+          retention-days: 30
+
+  smoke-test:
+    name: Smoke Test Executables
+    needs: build-standalone
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            artifact: roo-cli-linux
+            executable: roo-cline-linux
+          - os: macos-latest
+            artifact: roo-cli-macos
+            executable: roo-cline-macos
+          - os: windows-latest
+            artifact: roo-cli-windows
+            executable: roo-cline-win.exe
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ./bin
+
+      - name: Make executable (Unix)
+        if: matrix.os != 'windows-latest'
+        run: chmod +x ./bin/${{ matrix.executable }}
+
+      - name: Test basic functionality (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          ./bin/${{ matrix.executable }} --version
+          ./bin/${{ matrix.executable }} --help
+          ./bin/${{ matrix.executable }} --generate-config ./test-config.json
+          cat ./test-config.json
+
+      - name: Test basic functionality (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          .\bin\${{ matrix.executable }} --version
+          .\bin\${{ matrix.executable }} --help
+          .\bin\${{ matrix.executable }} --generate-config .\test-config.json
+          type .\test-config.json
+
+  # Only run on releases or manual dispatch
+  release-artifacts:
+    name: Release Artifacts
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    needs: [build-standalone, smoke-test]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Display structure
+        run: ls -la artifacts/
+
+      - name: Combine artifacts
+        run: |
+          mkdir -p release
+          cp artifacts/roo-cli-linux/* release/
+          cp artifacts/roo-cli-macos/* release/
+          cp artifacts/roo-cli-windows/* release/
+
+      - name: Upload combined artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: roo-cli-all-platforms
+          path: release/
+          retention-days: 90
+
+      - name: Upload to release (if release event)
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

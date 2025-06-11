@@ -111,6 +111,25 @@ async function main() {
 	}
 
 	/**
+	 * CLI-specific plugins for PKG optimization
+	 * @type {import('esbuild').Plugin[]}
+	 */
+	const cliPlugins = [
+		{
+			name: "pkg-optimization",
+			setup(build) {
+				// Help PKG understand dynamic imports
+				build.onResolve({ filter: /^\./ }, (args) => {
+					if (args.importer && args.path.includes('__mocks__')) {
+						return null // Let esbuild handle mock resolution normally
+					}
+					return null
+				})
+			}
+		}
+	]
+
+	/**
 	 * @type {import('esbuild').BuildOptions}
 	 */
 	const cliConfig = {
@@ -122,14 +141,21 @@ async function main() {
 		},
 		alias: {
 			"vscode": path.resolve(__dirname, "cli/__mocks__/vscode.js"),
-			"@roo-code/telemetry": path.resolve(__dirname, "cli/__mocks__/@roo-code/telemetry.js")
+			"@roo-code/telemetry": path.resolve(__dirname, "cli/__mocks__/@roo-code/telemetry.js"),
+			"tiktoken/lite": path.resolve(__dirname, "cli/__mocks__/tiktoken.js"),
+			"tiktoken/encoders/o200k_base": path.resolve(__dirname, "cli/__mocks__/tiktoken.js")
 		},
 		external: [
-			"@roo-code/telemetry"
+			// Only keep truly external dependencies that can't be bundled
 		],
 		define: {
-			'process.env.VSCODE_CONTEXT': 'false'
-		}
+			'process.env.VSCODE_CONTEXT': 'false',
+			'process.env.PKG_EXECUTABLE': process.argv.includes('--pkg') ? 'true' : 'false'
+		},
+		// Optimize for PKG bundling
+		treeShaking: true,
+		keepNames: true,
+		plugins: cliPlugins
 	}
 
 	const [extensionCtx, workerCtx, cliCtx] = await Promise.all([

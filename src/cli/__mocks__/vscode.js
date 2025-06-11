@@ -1,10 +1,21 @@
 /* eslint-env node */
 // Mock VSCode module for CLI context
+// Enhanced for standalone executable compatibility
+
+const os = require("os")
+const path = require("path")
+
 // eslint-disable-next-line no-undef
 module.exports = {
 	workspace: {
-		getConfiguration: () => ({
-			get: () => undefined,
+		getConfiguration: (section) => ({
+			get: (key, defaultValue) => {
+				// Return sensible defaults for CLI context
+				if (section === "roo-cline" && key === "customStoragePath") {
+					return path.join(os.homedir(), ".roo-cline")
+				}
+				return defaultValue
+			},
 			has: () => false,
 			update: () => Promise.resolve(),
 		}),
@@ -15,6 +26,9 @@ module.exports = {
 			createDirectory: () => Promise.reject(new Error("VSCode fs not available in CLI")),
 			delete: () => Promise.reject(new Error("VSCode fs not available in CLI")),
 		},
+		workspaceFolders: [],
+		onDidChangeWorkspaceFolders: () => ({ dispose: () => {} }),
+		rootPath: process.cwd(),
 	},
 	window: {
 		showInformationMessage: () => Promise.resolve(),

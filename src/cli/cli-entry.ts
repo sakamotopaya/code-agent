@@ -205,12 +205,24 @@ program
 		}
 
 		try {
-			// Handle config generation
+			// Handle config generation - early exit with proper cleanup
 			if (options.generateConfig) {
 				const configManager = new CliConfigManager({ verbose: options.verbose })
 				await configManager.generateDefaultConfig(options.generateConfig)
 				console.log(chalk.green(`✓ Generated default configuration at: ${options.generateConfig}`))
 				console.log(chalk.gray("Edit the file to customize your settings."))
+
+				// Clean up performance monitoring before exit
+				try {
+					const startupDuration = cliStartupTimer.stop()
+					memoryOptimizer.stopMonitoring()
+					if (options.verbose) {
+						console.log(chalk.gray(`Config generation completed in ${Math.round(startupDuration)}ms`))
+					}
+				} catch (cleanupError) {
+					getCLILogger().warn("Cleanup failed during config generation:", cleanupError)
+				}
+
 				return
 			}
 
