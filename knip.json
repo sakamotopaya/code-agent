@@ -1,29 +1,49 @@
 {
-	"$schema": "https://unpkg.com/knip@latest/schema.json",
-	"entry": ["src/extension.ts", "src/activate/index.ts", "webview-ui/src/index.tsx"],
-	"project": ["src/**/*.ts", "webview-ui/src/**/*.{ts,tsx}"],
-	"ignore": [
-		"**/__mocks__/**",
-		"**/__tests__/**",
-		"**/test/**",
-		"**/*.test.ts",
-		"**/*.test.tsx",
-		"**/stories/**",
-		"bin/**",
-		"apps/vscode-e2e/**",
-		"evals/**",
-		"src/extension/**",
-		"src/activate/**",
-		"src/workers/**",
-		"src/schemas/ipc.ts",
-		"src/extension.ts",
-		"scripts/**",
-		"vitest.config.ts"
-	],
+	"$schema": "https://unpkg.com/knip@5/schema.json",
 	"workspaces": {
+		".": {
+			"entry": ["scripts/**/*.{js,mjs,ts}", "test-*.js"],
+			"project": ["scripts/**/*.{js,mjs,ts}", "test-*.js"]
+		},
+		"src": {
+			"entry": [
+				"extension.ts",
+				"cli/index.ts",
+				"cli/cli-entry.ts",
+				"cli/simple-index.ts",
+				"workers/countTokens.ts"
+			],
+			"project": [
+				"**/*.{js,ts}",
+				"!**/__tests__/**",
+				"!**/__mocks__/**",
+				"!**/*.test.{js,ts}",
+				"!**/*.spec.{js,ts}",
+				"!temp/**/*",
+				"!cli/commands/__tests__/sliding-timeout-demo.{js,ts}"
+			],
+			"ignore": [
+				"temp/**/*",
+				"cli/minimal-config.ts",
+				"cli/standalone-config.ts",
+				"cli/optimization/index.ts",
+				"cli/utils/output-validation.ts",
+				"core/question-handling/index.ts",
+				"**/*.benchmark.{js,ts}",
+				"dist/**/*",
+				"out/**/*"
+			]
+		},
 		"webview-ui": {
-			"entry": ["src/index.tsx"],
-			"project": ["src/**/*.{ts,tsx}"]
+			"ignore": ["src/__mocks__/**", "src/components/common/__mocks__/**"]
+		},
+		"apps/vscode-e2e": {
+			"entry": [".vscode-test.mjs"],
+			"ignore": ["src/**"]
+		},
+		"evals": {
+			"ignore": ["**/*"]
 		}
-	}
+	},
+	"ignore": ["evals/**/*", "__mocks__/**", "dist/**", "out/**", "bin/**"]
 }
