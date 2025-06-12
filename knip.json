@@ -11,6 +11,7 @@
 				"cli/index.ts",
 				"cli/cli-entry.ts",
 				"cli/simple-index.ts",
+				"api/api-entry.ts",
 				"workers/countTokens.ts"
 			],
 			"project": [
