@@ -332,11 +332,35 @@ export class ApiTerminal implements ITerminal {
 					// Limit to 50 processes
 					const line = lines[i]
 					if (line.trim() && (!filter || line.toLowerCase().includes(filter.toLowerCase()))) {
-						processes.push({
-							pid: i, // Simplified - would need proper parsing
-							name: line.split(/\s+/)[0] || "unknown",
-							cmd: line.trim(),
-						})
+						let pid: number
+						let name: string
+
+						if (process.platform === "win32") {
+							// Windows tasklist CSV format: "Image Name","PID","Session Name","Session#","Mem Usage"
+							const csvMatch = line.match(/^"([^"]+)","(\d+)",/)
+							if (csvMatch) {
+								name = csvMatch[1]
+								pid = parseInt(csvMatch[2], 10)
+							} else {
+								// Fallback: try splitting by comma and removing quotes
+								const columns = line.split(",").map((col) => col.replace(/"/g, "").trim())
+								name = columns[0] || "unknown"
+								pid = parseInt(columns[1], 10)
+							}
+						} else {
+							// Unix/Linux/Mac ps aux format: USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND
+							const columns = line.split(/\s+/)
+							pid = parseInt(columns[1], 10) // PID is second column (columns[1])
+							name = columns[0] || "unknown" // USER is first column
+						}
+
+						if (!isNaN(pid)) {
+							processes.push({
+								pid: pid, // Properly parsed process ID
+								name: name,
+								cmd: line.trim(),
+							})
+						}
 					}
 				}
 			}

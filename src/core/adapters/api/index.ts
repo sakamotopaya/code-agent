@@ -1,6 +1,10 @@
 import { CoreInterfaces } from "../../interfaces"
-import { createCliAdapters, CliAdapterOptions } from "../cli"
+import { createCliAdapters } from "../cli"
 import { ApiUserInterface } from "./ApiUserInterface"
+import { ApiBrowser } from "./ApiBrowser"
+import { ApiFileSystem } from "./ApiFileSystem"
+import { ApiStorageService } from "./ApiStorage"
+import { ApiTelemetryService } from "./ApiTelemetryService"
 
 /**
  * Options for creating API adapters
@@ -18,39 +22,43 @@ export interface ApiAdapterOptions {
 
 /**
  * Create API adapter implementations for all abstraction interfaces
- * For now, this reuses CLI adapters but replaces the user interface with API-specific one
+ * Uses API-specific implementations where available, falling back to CLI adapters for terminal
  */
 export async function createApiAdapters(options: ApiAdapterOptions = {}): Promise<CoreInterfaces> {
 	const { workspaceRoot = process.cwd(), verbose = false, debug = false } = options
 
-	// Create CLI adapters as base
+	// Create API-specific adapters
+	const apiUserInterface = new ApiUserInterface({ verbose, debug })
+	const apiBrowser = new ApiBrowser({ verbose })
+	const apiFileSystem = new ApiFileSystem(workspaceRoot, { verbose })
+	const apiStorage = new ApiStorageService({ verbose })
+	const apiTelemetry = new ApiTelemetryService({ enabled: false, verbose })
+
+	// For terminal, we still use CLI adapter as it provides the actual terminal functionality
 	const cliAdapters = createCliAdapters({
 		workspaceRoot,
 		isInteractive: false, // API mode is non-interactive
 		verbose,
 	})
 
-	// Replace user interface with API-specific implementation
-	const apiUserInterface = new ApiUserInterface({ verbose, debug })
-
 	// Log adapter creation if verbose mode is enabled
 	if (verbose) {
 		console.log(`Created API adapters:`)
 		console.log(`  - UserInterface (API-specific, debug: ${debug})`)
-		console.log(`  - FileSystem (CLI-based, workspace: ${workspaceRoot})`)
+		console.log(`  - FileSystem (API-specific, workspace: ${workspaceRoot})`)
 		console.log(`  - Terminal (CLI-based)`)
-		console.log(`  - Browser (CLI-based)`)
-		console.log(`  - Telemetry (CLI-based)`)
-		console.log(`  - Storage (CLI-based)`)
+		console.log(`  - Browser (API-specific)`)
+		console.log(`  - Telemetry (API-specific)`)
+		console.log(`  - Storage (API-specific)`)
 	}
 
 	return {
 		userInterface: apiUserInterface,
-		fileSystem: cliAdapters.fileSystem,
+		fileSystem: apiFileSystem,
 		terminal: cliAdapters.terminal,
-		browser: cliAdapters.browser,
-		telemetry: cliAdapters.telemetry,
-		storage: cliAdapters.storage,
+		browser: apiBrowser,
+		telemetry: apiTelemetry,
+		storage: apiStorage,
 	}
 }
 
@@ -100,5 +108,9 @@ export function validateApiAdapterOptions(options: ApiAdapterOptions): void {
 	}
 }
 
-// Re-export the API user interface for direct use
+// Re-export all API adapters for direct use
 export { ApiUserInterface } from "./ApiUserInterface"
+export { ApiBrowser } from "./ApiBrowser"
+export { ApiFileSystem } from "./ApiFileSystem"
+export { ApiStorageService } from "./ApiStorage"
+export { ApiTelemetryService } from "./ApiTelemetryService"
