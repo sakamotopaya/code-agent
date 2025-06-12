@@ -14,10 +14,9 @@ if (!isTestEnv) {
 		const path = require("path")
 
 		// Check if running as standalone executable (SEA)
+		const seaFuseVar = `NODE_SEA_FUSE_${"fce680ab2cc467b6e072b8b5df1996b2"}`
 		const isStandaloneExecutable =
-			process.env.SEA_EXECUTABLE === "true" ||
-			process.argv[0].includes("roo-cline") ||
-			!!process.env.NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+			process.env.SEA_EXECUTABLE === "true" || process.argv[0].includes("roo-cline") || !!process.env[seaFuseVar]
 
 		// Determine locales directory based on context
 		let localesDir: string
@@ -114,10 +113,9 @@ if (!isTestEnv) {
 		}
 	} catch (error) {
 		// Only log error for non-standalone executables
+		const seaFuseVar = `NODE_SEA_FUSE_${"fce680ab2cc467b6e072b8b5df1996b2"}`
 		const isStandaloneExecutable =
-			process.env.SEA_EXECUTABLE === "true" ||
-			process.argv[0].includes("roo-cline") ||
-			!!process.env.NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+			process.env.SEA_EXECUTABLE === "true" || process.argv[0].includes("roo-cline") || !!process.env[seaFuseVar]
 
 		if (!isStandaloneExecutable) {
 			console.error("Error loading translations:", error)

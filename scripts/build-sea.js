@@ -38,7 +38,7 @@ function info(message) {
 // Get the current directory (should be src)
 const srcDir = process.cwd()
 const projectRoot = path.dirname(srcDir)
-const binDir = path.resolve(projectRoot, "apps")
+const binDir = path.resolve(projectRoot, "bin")
 
 // Debug path information
 info(`Current working directory: ${srcDir}`)
@@ -145,7 +145,7 @@ async function buildSEA() {
 			// Use postject or manual injection for Node.js SEA
 			if (targetPlatform === "darwin") {
 				execSync(
-					`npx postject "${outputPath}" NODE_SEA_BLOB "${blobPath}" --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 --macho-segment-name NODE_SEA`,
+					`postject "${outputPath}" NODE_SEA_BLOB "${blobPath}" --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 --macho-segment-name NODE_SEA`,
 					{
 						cwd: srcDir,
 						stdio: "inherit",
@@ -153,7 +153,7 @@ async function buildSEA() {
 				)
 			} else if (targetPlatform === "win32") {
 				execSync(
-					`npx postject "${outputPath}" NODE_SEA_BLOB "${blobPath}" --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2`,
+					`postject "${outputPath}" NODE_SEA_BLOB "${blobPath}" --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2`,
 					{
 						cwd: srcDir,
 						stdio: "inherit",
@@ -161,7 +161,7 @@ async function buildSEA() {
 				)
 			} else {
 				execSync(
-					`npx postject "${outputPath}" NODE_SEA_BLOB "${blobPath}" --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2`,
+					`postject "${outputPath}" NODE_SEA_BLOB "${blobPath}" --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2`,
 					{
 						cwd: srcDir,
 						stdio: "inherit",
@@ -197,10 +197,10 @@ async function buildSEA() {
 // Check if we need to install postject
 function ensurePostject() {
 	try {
-		execSync("npx postject --help", { stdio: "ignore" })
+		execSync("postject --help", { stdio: "ignore" })
 	} catch {
-		info("Installing postject...")
-		execSync("npm install --save-dev postject", { cwd: srcDir, stdio: "inherit" })
+		info("Installing postject globally...")
+		execSync("npm install --global postject@1.0.0-alpha.6", { stdio: "inherit" })
 	}
 }
 
