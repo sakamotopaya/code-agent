@@ -158,18 +158,42 @@ async function main() {
 		plugins: cliPlugins
 	}
 
-	const [extensionCtx, workerCtx, cliCtx] = await Promise.all([
+	/**
+	 * @type {import('esbuild').BuildOptions}
+	 */
+	const apiConfig = {
+		...buildOptions,
+		entryPoints: ["api/api-entry.ts"],
+		outfile: "dist/api/api-entry.js",
+		alias: {
+			"vscode": path.resolve(__dirname, "cli/__mocks__/vscode.js"),
+			"@roo-code/telemetry": path.resolve(__dirname, "cli/__mocks__/@roo-code/telemetry.js"),
+			"tiktoken/lite": path.resolve(__dirname, "cli/__mocks__/tiktoken.js"),
+			"tiktoken/encoders/o200k_base": path.resolve(__dirname, "cli/__mocks__/tiktoken.js")
+		},
+		external: [
+			// Only keep truly external dependencies that can't be bundled
+		],
+		define: {
+			'process.env.VSCODE_CONTEXT': 'false',
+		},
+		treeShaking: true,
+		keepNames: true,
+	}
+
+	const [extensionCtx, workerCtx, cliCtx, apiCtx] = await Promise.all([
 		esbuild.context(extensionConfig),
 		esbuild.context(workerConfig),
 		esbuild.context(cliConfig),
+		esbuild.context(apiConfig),
 	])
 
 	if (watch) {
-		await Promise.all([extensionCtx.watch(), workerCtx.watch(), cliCtx.watch()])
+		await Promise.all([extensionCtx.watch(), workerCtx.watch(), cliCtx.watch(), apiCtx.watch()])
 		copyLocales(srcDir, distDir)
 		setupLocaleWatcher(srcDir, distDir)
 	} else {
-		await Promise.all([extensionCtx.rebuild(), workerCtx.rebuild(), cliCtx.rebuild()])
+		await Promise.all([extensionCtx.rebuild(), workerCtx.rebuild(), cliCtx.rebuild(), apiCtx.rebuild()])
 		
 		// Make CLI executable
 		const cliPath = path.join(distDir, "cli", "index.js")
@@ -177,7 +201,7 @@ async function main() {
 			fs.chmodSync(cliPath, 0o755)
 		}
 		
-		await Promise.all([extensionCtx.dispose(), workerCtx.dispose(), cliCtx.dispose()])
+		await Promise.all([extensionCtx.dispose(), workerCtx.dispose(), cliCtx.dispose(), apiCtx.dispose()])
 	}
 }
 

@@ -24,6 +24,61 @@
 				"group": "tasks",
 				"order": 1
 			}
+		},
+		{
+			"name": "Run API Server",
+			"type": "node",
+			"request": "launch",
+			"program": "${workspaceFolder}/src/api/api-entry.ts",
+			"outFiles": ["${workspaceFolder}/src/dist/**/*.js"],
+			"sourceMaps": true,
+			"runtimeArgs": ["-r", "ts-node/register"],
+			"envFile": "${workspaceFolder}/.env",
+			"env": {
+				"NODE_ENV": "development",
+				"API_PORT": "3000",
+				"API_HOST": "localhost",
+				"API_WORKSPACE_ROOT": "${workspaceFolder}",
+				"API_VERBOSE": "true",
+				"API_DEBUG": "true"
+			},
+			"console": "integratedTerminal",
+			"internalConsoleOptions": "neverOpen",
+			"resolveSourceMapLocations": ["${workspaceFolder}/**", "!**/node_modules/**"],
+			"presentation": {
+				"hidden": false,
+				"group": "tasks",
+				"order": 2
+			},
+			"preLaunchTask": "build",
+			"restart": true,
+			"autoAttachChildProcesses": true
+		},
+		{
+			"name": "Run API Server (Production)",
+			"type": "node",
+			"request": "launch",
+			"program": "${workspaceFolder}/src/dist/api/api-entry.js",
+			"outFiles": ["${workspaceFolder}/src/dist/**/*.js"],
+			"sourceMaps": true,
+			"envFile": "${workspaceFolder}/.env",
+			"env": {
+				"NODE_ENV": "production",
+				"API_PORT": "3000",
+				"API_HOST": "localhost",
+				"API_WORKSPACE_ROOT": "${workspaceFolder}",
+				"API_VERBOSE": "false",
+				"API_DEBUG": "false"
+			},
+			"console": "integratedTerminal",
+			"internalConsoleOptions": "neverOpen",
+			"resolveSourceMapLocations": ["${workspaceFolder}/**", "!**/node_modules/**"],
+			"presentation": {
+				"hidden": false,
+				"group": "tasks",
+				"order": 3
+			},
+			"preLaunchTask": "build"
 		}
 	]
 }
