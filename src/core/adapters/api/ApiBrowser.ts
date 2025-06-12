@@ -9,6 +9,18 @@ import {
 	ScreenshotResult,
 	ConsoleLog,
 	ViewportSize,
+	NavigationOptions,
+	ClickOptions,
+	TypeOptions,
+	HoverOptions,
+	ScrollDirection,
+	ScrollOptions,
+	ResizeOptions,
+	ScreenshotOptions,
+	ScriptOptions,
+	WaitOptions,
+	LogOptions,
+	BrowserEvent,
 } from "../../interfaces"
 
 /**
@@ -24,15 +36,18 @@ export interface ApiBrowserOptions {
  * by delegating to the underlying CLI browser implementation
  */
 export class ApiBrowserSession implements IBrowserSession {
-	private sessionId: string
+	public readonly id: string
+	public isActive = false
 	private options: ApiBrowserOptions
-	private isConnected = false
 	private currentUrl?: string
 	private viewport: ViewportSize = { width: 1280, height: 720 }
+	private consoleLogs: ConsoleLog[] = []
+	private eventListeners: Map<BrowserEvent, ((data: any) => void)[]> = new Map()
 
 	constructor(sessionId: string, options: ApiBrowserOptions = {}) {
-		this.sessionId = sessionId
+		this.id = sessionId
 		this.options = options
+		this.isActive = true
 	}
 
 	private log(message: string): void {
@@ -41,113 +56,158 @@ export class ApiBrowserSession implements IBrowserSession {
 		}
 	}
 
-	async navigate(url: string): Promise<BrowserActionResult> {
+	async navigateToUrl(url: string, options?: NavigationOptions): Promise<BrowserActionResult> {
 		this.log(`Navigate to: ${url}`)
 		this.currentUrl = url
 
 		// In API context, this would delegate to actual browser implementation
 		return {
-			success: true,
-			message: `Navigated to ${url}`,
-			timestamp: new Date(),
+			currentUrl: url,
+			screenshot: "mock-screenshot-base64",
+			logs: "Navigation completed",
 		}
 	}
 
-	async click(selector: string): Promise<BrowserActionResult> {
-		this.log(`Click: ${selector}`)
+	async click(coordinate: string, options?: ClickOptions): Promise<BrowserActionResult> {
+		this.log(`Click: ${coordinate}`)
 
 		return {
-			success: true,
-			message: `Clicked ${selector}`,
-			timestamp: new Date(),
+			currentUrl: this.currentUrl,
+			screenshot: "mock-screenshot-base64",
+			logs: `Clicked at ${coordinate}`,
 		}
 	}
 
-	async type(selector: string, text: string): Promise<BrowserActionResult> {
-		this.log(`Type in ${selector}: ${text}`)
+	async type(text: string, options?: TypeOptions): Promise<BrowserActionResult> {
+		this.log(`Type: ${text}`)
 
 		return {
-			success: true,
-			message: `Typed "${text}" in ${selector}`,
-			timestamp: new Date(),
+			currentUrl: this.currentUrl,
+			screenshot: "mock-screenshot-base64",
+			logs: `Typed: ${text}`,
 		}
 	}
 
-	async waitForSelector(selector: string, timeout?: number): Promise<BrowserActionResult> {
-		this.log(`Wait for selector: ${selector}`)
+	async hover(coordinate: string, options?: HoverOptions): Promise<BrowserActionResult> {
+		this.log(`Hover: ${coordinate}`)
 
 		return {
-			success: true,
-			message: `Found selector ${selector}`,
-			timestamp: new Date(),
+			currentUrl: this.currentUrl,
+			screenshot: "mock-screenshot-base64",
+			logs: `Hovered at ${coordinate}`,
+			currentMousePosition: coordinate,
 		}
 	}
 
-	async screenshot(): Promise<ScreenshotResult> {
+	async scroll(direction: ScrollDirection, options?: ScrollOptions): Promise<BrowserActionResult> {
+		this.log(`Scroll: ${direction}`)
+
+		return {
+			currentUrl: this.currentUrl,
+			screenshot: "mock-screenshot-base64",
+			logs: `Scrolled ${direction}`,
+		}
+	}
+
+	async resize(size: string, options?: ResizeOptions): Promise<BrowserActionResult> {
+		this.log(`Resize: ${size}`)
+		const [width, height] = size.split(",").map((s) => parseInt(s.trim()))
+		this.viewport = { width, height }
+
+		return {
+			currentUrl: this.currentUrl,
+			screenshot: "mock-screenshot-base64",
+			logs: `Resized to ${size}`,
+		}
+	}
+
+	async screenshot(options?: ScreenshotOptions): Promise<ScreenshotResult> {
 		this.log(`Taking screenshot`)
 
 		// In API context, this would return actual screenshot data
 		return {
-			success: true,
-			data: Buffer.from("mock-screenshot-data"),
-			format: "png",
-			timestamp: new Date(),
+			data: "mock-screenshot-base64-data",
+			format: options?.format || "png",
+			width: this.viewport.width,
+			height: this.viewport.height,
 		}
 	}
 
-	async getContent(): Promise<string> {
-		this.log(`Getting page content`)
-
-		// In API context, this would return actual page content
-		return "<html><body>Mock page content</body></html>"
-	}
-
-	async executeScript(script: string): Promise<any> {
+	async executeScript(script: string, options?: ScriptOptions): Promise<any> {
 		this.log(`Execute script: ${script}`)
 
 		// In API context, this would execute actual JavaScript
 		return { result: "mock-script-result" }
 	}
 
-	async close(): Promise<void> {
-		this.log(`Closing browser session`)
-		this.isConnected = false
+	async waitForElement(selector: string, options?: WaitOptions): Promise<boolean> {
+		this.log(`Wait for element: ${selector}`)
+		// In API context, this would wait for actual element
+		return true
 	}
 
-	getSessionId(): string {
-		return this.sessionId
+	async waitForNavigation(options?: WaitOptions): Promise<boolean> {
+		this.log(`Wait for navigation`)
+		// In API context, this would wait for actual navigation
+		return true
 	}
 
-	isActive(): boolean {
-		return this.isConnected
+	async getCurrentUrl(): Promise<string> {
+		return this.currentUrl || "about:blank"
 	}
 
-	getCurrentUrl(): string | undefined {
-		return this.currentUrl
+	async getTitle(): Promise<string> {
+		this.log(`Getting page title`)
+		return "Mock Page Title"
 	}
 
-	getViewport(): ViewportSize {
+	async getContent(): Promise<string> {
+		this.log(`Getting page content`)
+		// In API context, this would return actual page content
+		return "<html><body>Mock page content</body></html>"
+	}
+
+	async getConsoleLogs(options?: LogOptions): Promise<ConsoleLog[]> {
+		this.log(`Getting console logs`)
+		return this.consoleLogs
+	}
+
+	async clearConsoleLogs(): Promise<void> {
+		this.log(`Clearing console logs`)
+		this.consoleLogs = []
+	}
+
+	async setViewport(width: number, height: number): Promise<void> {
+		this.log(`Set viewport: ${width}x${height}`)
+		this.viewport = { width, height }
+	}
+
+	async getViewport(): Promise<ViewportSize> {
 		return this.viewport
 	}
 
-	async setViewport(viewport: ViewportSize): Promise<void> {
-		this.log(`Set viewport: ${viewport.width}x${viewport.height}`)
-		this.viewport = viewport
+	async close(): Promise<void> {
+		this.log(`Closing browser session`)
+		this.isActive = false
 	}
 
-	onConsole(callback: (log: ConsoleLog) => void): void {
-		this.log(`Console listener registered`)
-		// In API context, this would listen for actual console events
+	on(event: BrowserEvent, callback: (data: any) => void): void {
+		this.log(`Event listener added: ${event}`)
+		if (!this.eventListeners.has(event)) {
+			this.eventListeners.set(event, [])
+		}
+		this.eventListeners.get(event)!.push(callback)
 	}
 
-	onRequest(callback: (url: string, method: string) => void): void {
-		this.log(`Request listener registered`)
-		// In API context, this would listen for actual network requests
-	}
-
-	onResponse(callback: (url: string, status: number) => void): void {
-		this.log(`Response listener registered`)
-		// In API context, this would listen for actual network responses
+	off(event: BrowserEvent, callback: (data: any) => void): void {
+		this.log(`Event listener removed: ${event}`)
+		const listeners = this.eventListeners.get(event)
+		if (listeners) {
+			const index = listeners.indexOf(callback)
+			if (index > -1) {
+				listeners.splice(index, 1)
+			}
+		}
 	}
 }
 
@@ -194,18 +254,30 @@ export class ApiBrowser implements IBrowser {
 		return session
 	}
 
-	async getInstalledBrowsers(): Promise<BrowserType[]> {
-		this.log(`Getting installed browsers`)
+	async getAvailableBrowsers(): Promise<BrowserType[]> {
+		this.log(`Getting available browsers`)
 
 		// In API context, this would detect actual installed browsers
-		return ["chromium", "firefox", "webkit"]
+		return ["chromium", "firefox", "chrome"] as BrowserType[]
 	}
 
-	async installBrowser(browser: BrowserType, options?: BrowserInstallOptions): Promise<boolean> {
-		this.log(`Installing browser: ${browser}`)
+	async isBrowserInstalled(browserType: BrowserType): Promise<boolean> {
+		this.log(`Checking if browser is installed: ${browserType}`)
+		// In API context, this would check actual browser installation
+		return true
+	}
+
+	async getBrowserExecutablePath(browserType: BrowserType): Promise<string | undefined> {
+		this.log(`Getting browser executable path: ${browserType}`)
+		// In API context, this would return actual browser path
+		return "/mock/browser/path"
+	}
+
+	async installBrowser(browserType: BrowserType, options?: BrowserInstallOptions): Promise<void> {
+		this.log(`Installing browser: ${browserType}`)
 
 		// In API context, this would perform actual browser installation
-		return true
+		// No return value as per interface
 	}
 
 	async getBrowserVersion(browser: BrowserType): Promise<string | null> {
@@ -233,7 +305,7 @@ export class ApiBrowser implements IBrowser {
 	}
 
 	async getActiveSessions(): Promise<IBrowserSession[]> {
-		return Array.from(this.sessions.values()).filter((session) => session.isActive())
+		return Array.from(this.sessions.values()).filter((session) => session.isActive)
 	}
 
 	async closeSession(sessionId: string): Promise<void> {
@@ -255,7 +327,7 @@ export class ApiBrowser implements IBrowser {
 	}
 
 	getDefaultBrowser(): BrowserType {
-		return "chromium"
+		return "chromium" as BrowserType
 	}
 
 	isHeadlessSupported(): boolean {

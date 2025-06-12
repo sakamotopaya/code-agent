@@ -5,14 +5,18 @@ export interface ApiStorageOptions {
 }
 
 export class ApiStorageService implements IStorageService {
-	private storage: Map<string, any> = new Map()
+	private globalState: Map<string, any> = new Map()
+	private secrets: Map<string, string> = new Map()
 	private options: ApiStorageOptions
+	private globalStoragePath: string
 
 	constructor(options: ApiStorageOptions = {}) {
 		this.options = {
 			verbose: false,
 			...options,
 		}
+		// In API context, this would be a real path
+		this.globalStoragePath = "/tmp/api-storage"
 	}
 
 	private log(message: string): void {
@@ -21,40 +25,29 @@ export class ApiStorageService implements IStorageService {
 		}
 	}
 
-	async get<T>(key: string, defaultValue?: T): Promise<T | undefined> {
-		const value = this.storage.get(key)
-		this.log(`Get: ${key} = ${value !== undefined ? "found" : "not found"}`)
-		return value !== undefined ? value : defaultValue
+	getGlobalStoragePath(): string {
+		return this.globalStoragePath
 	}
 
-	async set<T>(key: string, value: T): Promise<void> {
-		this.storage.set(key, value)
-		this.log(`Set: ${key}`)
+	getGlobalState<T>(key: string): T | undefined {
+		const value = this.globalState.get(key)
+		this.log(`Get global state: ${key} = ${value !== undefined ? "found" : "not found"}`)
+		return value
 	}
 
-	async delete(key: string): Promise<void> {
-		const deleted = this.storage.delete(key)
-		this.log(`Delete: ${key} ${deleted ? "success" : "not found"}`)
+	async setGlobalState<T>(key: string, value: T): Promise<void> {
+		this.globalState.set(key, value)
+		this.log(`Set global state: ${key}`)
 	}
 
-	async clear(): Promise<void> {
-		this.storage.clear()
-		this.log(`Cleared all storage`)
+	getSecret(key: string): string | undefined {
+		const value = this.secrets.get(key)
+		this.log(`Get secret: ${key} = ${value !== undefined ? "found" : "not found"}`)
+		return value
 	}
 
-	async has(key: string): Promise<boolean> {
-		const exists = this.storage.has(key)
-		this.log(`Has: ${key} = ${exists}`)
-		return exists
-	}
-
-	async keys(): Promise<string[]> {
-		const keyList = Array.from(this.storage.keys())
-		this.log(`Keys: ${keyList.length} found`)
-		return keyList
-	}
-
-	async size(): Promise<number> {
-		return this.storage.size
+	async setSecret(key: string, value: string): Promise<void> {
+		this.secrets.set(key, value)
+		this.log(`Set secret: ${key}`)
 	}
 }
