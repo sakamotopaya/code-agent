@@ -294,16 +294,32 @@ export class SSEOutputAdapter implements IUserInterface {
 	 * Core event emission method
 	 */
 	private emitEvent(event: SSEEvent): void {
-		console.log(`[SSE] Emitting event for job ${this.jobId}:`, JSON.stringify(event, null, 2))
-		console.log(`[SSE] StreamManager active streams:`, this.streamManager.hasActiveStream(this.jobId))
+		// Enhanced logging with source tracking and content preview
+		const contentPreview = event.message
+			? event.message.length > 100
+				? event.message.substring(0, 100) + "..."
+				: event.message
+			: "no message"
+
+		console.log(`[SSE] Emitting ${event.type} for job ${this.jobId}:`, {
+			eventType: event.type,
+			contentPreview,
+			contentLength: event.message?.length || 0,
+			hasProgress: event.progress !== undefined,
+			timestamp: event.timestamp,
+			source: "userInterface",
+		})
 
 		const success = this.streamManager.sendEvent(this.jobId, event)
 		if (!success) {
 			this.logger.warn(`Failed to emit event ${event.type} for job ${this.jobId}`)
-			console.log(`[SSE] Failed to send event ${event.type} for job ${this.jobId}`)
+			console.log(`[SSE] ❌ Failed to send ${event.type} for job ${this.jobId}`)
 			console.log(`[SSE] Available streams:`, this.streamManager.getActiveStreamIds())
+			console.log(`[SSE] Stream manager active status:`, this.streamManager.hasActiveStream(this.jobId))
 		} else {
-			console.log(`[SSE] Successfully sent event ${event.type} for job ${this.jobId}`)
+			console.log(
+				`[SSE] ✅ Successfully sent ${event.type} for job ${this.jobId} (${event.message?.length || 0} chars)`,
+			)
 		}
 	}
 

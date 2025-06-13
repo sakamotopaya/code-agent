@@ -323,4 +323,57 @@ describe("SSEOutputAdapter", () => {
 			consoleSpy.mockRestore()
 		})
 	})
+
+	describe("enhanced logging", () => {
+		it("should log detailed event information", async () => {
+			const consoleSpy = jest.spyOn(console, "log").mockImplementation(() => {})
+			const message = "Test message with detailed logging"
+
+			await adapter.showInformation(message)
+
+			// Check that enhanced logging includes source and content preview
+			expect(consoleSpy).toHaveBeenCalledWith(
+				expect.stringContaining("[SSE] Emitting information for job test-job-123:"),
+				expect.objectContaining({
+					eventType: "information",
+					contentPreview: message,
+					contentLength: message.length,
+					source: "userInterface",
+				}),
+			)
+
+			consoleSpy.mockRestore()
+		})
+
+		it("should truncate long content in preview", async () => {
+			const consoleSpy = jest.spyOn(console, "log").mockImplementation(() => {})
+			const longMessage = "a".repeat(150) // 150 characters
+
+			await adapter.showInformation(longMessage)
+
+			// Check that content is truncated to 100 chars + "..."
+			expect(consoleSpy).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({
+					contentPreview: "a".repeat(100) + "...",
+					contentLength: 150,
+				}),
+			)
+
+			consoleSpy.mockRestore()
+		})
+
+		it("should show success indicator in logs", async () => {
+			const consoleSpy = jest.spyOn(console, "log").mockImplementation(() => {})
+
+			await adapter.showInformation("Test")
+
+			// Check for success indicator
+			expect(consoleSpy).toHaveBeenCalledWith(
+				expect.stringContaining("[SSE] ✅ Successfully sent information for job test-job-123 (4 chars)"),
+			)
+
+			consoleSpy.mockRestore()
+		})
+	})
 })

@@ -44,19 +44,42 @@ export class ApiTaskExecutionHandler implements ITaskExecutionHandler {
 
 	async onTaskMessage(taskId: string, event: any): Promise<void> {
 		if (this.verbose) {
-			console.log(`[ApiTaskExecutionHandler] Task ${taskId} message:`, event.action)
+			console.log(`[ApiTaskExecutionHandler] Task ${taskId} message:`, event.action, {
+				hasText: !!event.message?.text,
+				textLength: event.message?.text?.length || 0,
+				source: "message_handler",
+			})
 		}
 
-		// Forward task messages to the SSE stream
-		if (event.action === "say" && event.message?.text) {
-			// Stream the actual task response content to the client
-			await this.sseAdapter.showInformation(event.message.text)
-		} else if (event.action === "ask" && event.message?.text) {
-			// Handle questions from the task
+		// NOTE: Do NOT forward "say" actions - they are already handled by the Task using SSEOutputAdapter as userInterface
+		// This was causing duplicate content emission in the SSE stream
+
+		// Only forward specialized events that need custom handling beyond standard userInterface methods
+		if (event.action === "ask" && event.message?.text) {
+			// Questions might need special SSE handling beyond standard askQuestion
+			if (this.verbose) {
+				console.log(
+					`[ApiTaskExecutionHandler] Forwarding question to SSE:`,
+					event.message.text.substring(0, 100),
+				)
+			}
 			await this.sseAdapter.showInformation(`Question: ${event.message.text}`)
-		} else if (event.message?.text) {
-			// Handle other message types
+		} else if (event.action !== "say" && event.message?.text) {
+			// Handle other message types (but NOT "say" to avoid duplication)
+			if (this.verbose) {
+				console.log(
+					`[ApiTaskExecutionHandler] Forwarding ${event.action} to SSE log:`,
+					event.message.text.substring(0, 100),
+				)
+			}
 			await this.sseAdapter.log(event.message.text)
+		}
+
+		// Log skipped "say" actions for debugging
+		if (event.action === "say" && this.verbose) {
+			console.log(
+				`[ApiTaskExecutionHandler] SKIPPED duplicate "say" forwarding - handled by userInterface directly`,
+			)
 		}
 	}
 
