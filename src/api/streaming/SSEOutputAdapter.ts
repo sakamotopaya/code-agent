@@ -301,7 +301,7 @@ export class SSEOutputAdapter implements IUserInterface {
 		if (!success) {
 			this.logger.warn(`Failed to emit event ${event.type} for job ${this.jobId}`)
 			console.log(`[SSE] Failed to send event ${event.type} for job ${this.jobId}`)
-			console.log(`[SSE] Available streams:`, Object.keys((this.streamManager as any).streams || {}))
+			console.log(`[SSE] Available streams:`, this.streamManager.getActiveStreamIds())
 		} else {
 			console.log(`[SSE] Successfully sent event ${event.type} for job ${this.jobId}`)
 		}

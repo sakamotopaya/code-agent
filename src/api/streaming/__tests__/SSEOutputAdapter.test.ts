@@ -300,4 +300,27 @@ describe("SSEOutputAdapter", () => {
 			expect(new Date(event.timestamp)).toBeInstanceOf(Date)
 		})
 	})
+
+	describe("error handling", () => {
+		it("should handle stream failure gracefully", async () => {
+			// Close the stream to simulate failure
+			streamManager.closeStream(jobId)
+
+			// Spy on console.log to verify error logging
+			const consoleSpy = jest.spyOn(console, "log").mockImplementation(() => {})
+
+			await adapter.showInformation("Test message")
+
+			// Verify that error logging uses public API
+			expect(consoleSpy).toHaveBeenCalledWith(
+				expect.stringContaining("[SSE] Failed to send event information for job test-job-123"),
+			)
+			expect(consoleSpy).toHaveBeenCalledWith(
+				expect.stringContaining("[SSE] Available streams:"),
+				expect.any(Array),
+			)
+
+			consoleSpy.mockRestore()
+		})
+	})
 })

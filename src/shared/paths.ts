@@ -4,6 +4,7 @@
  */
 
 import * as os from "os"
+import * as path from "path"
 
 /**
  * Get the global storage path for the application
@@ -11,14 +12,14 @@ import * as os from "os"
  */
 export function getGlobalStoragePath(): string {
 	const homeDir = os.homedir()
-	return `${homeDir}/.agentz`
+	return path.join(homeDir, ".agentz")
 }
 
 /**
  * Get the fallback storage path for environments without home directory
  */
 export function getFallbackStoragePath(): string {
-	return "/tmp/.agentz"
+	return path.join("/tmp", ".agentz")
 }
 
 /**
