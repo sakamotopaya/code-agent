@@ -56,6 +56,12 @@ export interface ApiServerOptions {
 		key?: string
 		cert?: string
 	}
+
+	/** MCP (Model Context Protocol) configuration */
+	mcpConfigPath?: string
+	mcpAutoConnect?: boolean
+	mcpTimeout?: number
+	mcpRetries?: number
 }
 
 /**

@@ -8,6 +8,7 @@
 import { FastifyServer } from "./server/FastifyServer"
 import { ApiConfigManager } from "./config/ApiConfigManager"
 import { createApiAdapters } from "../core/adapters/api"
+import { PlatformServiceFactory, PlatformContext } from "../core/adapters/PlatformServiceFactory"
 import type { ApiServerOptions } from "./types/server"
 
 /**
@@ -24,6 +25,30 @@ export async function startApiServer(options: ApiServerOptions = {}): Promise<Fa
 
 	// Get the final merged configuration
 	const finalConfig = config.getConfiguration()
+
+	// Initialize platform services for API context - force CLI context to avoid VSCode detection issues
+	await PlatformServiceFactory.initialize(PlatformContext.CLI, "roo-cline-api")
+
+	// Initialize MCP service following CLI pattern (default to auto-connect)
+	const mcpAutoConnect = finalConfig.mcpAutoConnect !== false
+	if (mcpAutoConnect) {
+		try {
+			console.log("[API] Initializing GlobalCLIMcpService...")
+			const { GlobalCLIMcpService } = await import("../cli/services/GlobalCLIMcpService")
+			const globalMcpService = GlobalCLIMcpService.getInstance()
+
+			// Initialize with MCP-specific options (same as CLI)
+			await globalMcpService.initialize({
+				mcpConfigPath: finalConfig.mcpConfigPath,
+				mcpAutoConnect: mcpAutoConnect,
+				mcpTimeout: finalConfig.mcpTimeout || 30000,
+				mcpRetries: finalConfig.mcpRetries || 3,
+			})
+			console.log("[API] GlobalCLIMcpService initialized successfully")
+		} catch (error) {
+			console.warn("[API] Failed to initialize GlobalCLIMcpService:", error)
+		}
+	}
 
 	// Create API adapters
 	const adapters = await createApiAdapters({

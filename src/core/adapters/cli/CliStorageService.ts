@@ -2,6 +2,7 @@ import * as path from "path"
 import * as os from "os"
 import * as fs from "fs/promises"
 import { IStorageService } from "../../interfaces/IStorageService"
+import { getStoragePath } from "../../../shared/paths"
 
 /**
  * CLI implementation of storage service
@@ -14,7 +15,7 @@ export class CliStorageService implements IStorageService {
 	private verbose: boolean
 
 	constructor(options: { globalStoragePath?: string; verbose?: boolean } = {}) {
-		this.globalStoragePath = options.globalStoragePath || path.join(os.homedir(), ".roo-code")
+		this.globalStoragePath = options.globalStoragePath || getStoragePath()
 		this.verbose = options.verbose ?? false
 
 		if (this.verbose) {

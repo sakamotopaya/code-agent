@@ -51,7 +51,8 @@ Options:
   --help      Show this help
 
 Examples:
-  node test-api.js "Create a simple calculator"
+  node test-api.js --stream "where does the vscode extension code store it's mode config files?"
+  node test-api.js --stream "list your MCP servers"
   node test-api.js --stream "Write a React component"
   node test-api.js --host api.example.com --port 8080 "Debug this code"
 `)
@@ -245,9 +246,13 @@ function testStreamingEndpoint() {
 										)
 										break
 									case "complete":
+									case "completion":
 										console.log(`     ✅ [${timestamp}] ${data.message}`)
 										console.log(`     📋 Result: ${data.result}`)
-										break
+										// Close the connection when task completes
+										console.log("     🔚 Task completed, closing connection...")
+										res.destroy()
+										return
 									case "error":
 										console.log(`     ❌ [${timestamp}] Error: ${data.error}`)
 										break

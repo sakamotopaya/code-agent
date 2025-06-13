@@ -46,6 +46,7 @@ export class TaskApiHandler {
 		private providerRef?: WeakRef<ClineProvider>,
 		private onTokenUsageUpdate?: (taskId: string, tokenUsage: any) => void,
 		private onToolFailed?: (taskId: string, tool: ToolName, error: string) => void,
+		private onMessage?: (action: "created" | "updated", message: any) => void,
 		private cliMode: boolean = false,
 		private cliApiConfiguration?: any,
 	) {
@@ -606,6 +607,34 @@ export class TaskApiHandler {
 							// Stream LLM output to terminal in CLI mode
 							if (this.cliMode && chunk.text) {
 								getCLILogger().streamLLMOutput(chunk.text)
+							}
+
+							// Always stream AI response text through messaging system for SSE/userInterface
+							if (chunk.text) {
+								try {
+									// Send AI response text through messaging system with proper callback for Task event emission
+									this.messaging
+										.say(
+											"text",
+											chunk.text,
+											undefined,
+											true,
+											undefined,
+											undefined,
+											undefined,
+											undefined,
+											false,
+											this.onMessage,
+										)
+										.catch((error) => {
+											this.log(`[TaskApiHandler] Error in say call:`, error)
+										})
+									this.log(
+										`[TaskApiHandler] Streamed text chunk to messaging system: ${chunk.text.substring(0, 100)}...`,
+									)
+								} catch (error) {
+									this.log(`[TaskApiHandler] Error streaming text to messaging:`, error)
+								}
 							}
 
 							if (this.assistantMessageContent.length > prevLength) {

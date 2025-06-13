@@ -514,6 +514,7 @@ export class Task extends EventEmitter<ClineEvents> {
 			this.providerRef,
 			(taskId, tokenUsage) => this.emit("taskTokenUsageUpdated", taskId, tokenUsage),
 			(taskId, tool, error) => this.emit("taskToolFailed", taskId, tool, error),
+			(action, message) => this.emit("message", { action, message }), // onMessage callback
 			!provider, // cliMode - true if no provider
 			apiConfiguration, // cliApiConfiguration
 		)
