@@ -15,7 +15,7 @@ import { PerformanceMonitoringService } from "./optimization/PerformanceMonitori
 import { StartupOptimizer } from "./optimization/StartupOptimizer"
 import { MemoryOptimizer } from "./optimization/MemoryOptimizer"
 import { PerformanceConfigManager } from "./config/performance-config"
-import { initializeCLILogger, getCLILogger } from "./services/CLILogger"
+import { initializeCLILogger, getCLILogger, formatDebugMessage } from "./services/CLILogger"
 import { GlobalCLIMcpService } from "./services/GlobalCLIMcpService"
 import chalk from "chalk"
 import * as fs from "fs"
@@ -171,12 +171,40 @@ program
 	.option("--no-mcp-auto-connect", "Do not automatically connect to enabled MCP servers")
 	.option("--mcp-log-level <level>", "MCP logging level (error, warn, info, debug)", validateMcpLogLevel)
 	.action(async (options: CliOptions) => {
-		console.log("[DEBUG] CLI: Entered main action with options:", JSON.stringify(options, null, 2))
+		// Set up global error handler to catch undefined startsWith errors
+		process.on("uncaughtException", (error) => {
+			console.error("Uncaught Exception:", error.message)
+			console.error("Stack:", error.stack)
+			if (error.message.includes("startsWith")) {
+				console.error("This appears to be a startsWith on undefined error - debugging info:")
+				console.error("Options:", JSON.stringify(options, null, 2))
+			}
+			process.exit(1)
+		})
+
+		process.on("unhandledRejection", (reason, promise) => {
+			console.error("Unhandled Rejection at:", promise, "reason:", reason)
+			if (
+				reason &&
+				typeof reason === "object" &&
+				"message" in reason &&
+				typeof reason.message === "string" &&
+				reason.message.includes("startsWith")
+			) {
+				console.error("This appears to be a startsWith on undefined error in promise")
+			}
+			process.exit(1)
+		})
+
+		console.log(
+			formatDebugMessage("CLI: Entered main action with options:", options.color),
+			JSON.stringify(options, null, 2),
+		)
 
 		// Initialize CLI logger first
 		const logger = initializeCLILogger(options.verbose, options.quiet, options.color)
 
-		console.log("[DEBUG] CLI: Logger initialized")
+		console.log(formatDebugMessage("CLI: Logger initialized", options.color))
 
 		// Set up graceful shutdown handlers
 		let isShuttingDown = false
@@ -240,34 +268,36 @@ program
 
 		// Initialize global MCP service once at startup
 		console.log(
-			"[DEBUG] CLI: MCP auto-connect check:",
+			formatDebugMessage("CLI: MCP auto-connect check:", options.color),
 			options.mcpAutoConnect,
 			"!== false =",
 			options.mcpAutoConnect !== false,
 		)
 		if (options.mcpAutoConnect !== false) {
-			console.log("[DEBUG] CLI: About to initialize global MCP service...")
+			console.log(formatDebugMessage("CLI: About to initialize global MCP service...", options.color))
 			try {
 				const { GlobalCLIMcpService } = await import("./services/GlobalCLIMcpService")
-				console.log("[DEBUG] CLI: GlobalCLIMcpService imported successfully")
+				console.log(formatDebugMessage("CLI: GlobalCLIMcpService imported successfully", options.color))
 				const globalMcpService = GlobalCLIMcpService.getInstance()
-				console.log("[DEBUG] CLI: GlobalCLIMcpService instance obtained")
+				console.log(formatDebugMessage("CLI: GlobalCLIMcpService instance obtained", options.color))
 				await globalMcpService.initialize({
 					mcpConfigPath: options.mcpConfig,
 					mcpAutoConnect: options.mcpAutoConnect,
 					mcpTimeout: options.mcpTimeout,
 					mcpRetries: options.mcpRetries,
 				})
-				console.log("[DEBUG] CLI: GlobalCLIMcpService.initialize() completed")
+				console.log(formatDebugMessage("CLI: GlobalCLIMcpService.initialize() completed", options.color))
 				if (options.verbose) {
 					logger.debug("Global MCP service initialized successfully")
 				}
 			} catch (error) {
-				console.error("[DEBUG] CLI: Failed to initialize global MCP service:", error)
+				console.error(formatDebugMessage("CLI: Failed to initialize global MCP service:", options.color), error)
 				logger.warn("Failed to initialize global MCP service:", error)
 			}
 		} else {
-			console.log("[DEBUG] CLI: MCP auto-connect disabled, skipping MCP initialization")
+			console.log(
+				formatDebugMessage("CLI: MCP auto-connect disabled, skipping MCP initialization", options.color),
+			)
 		}
 
 		// Handle MCP auto-connect logic: default to true, but allow explicit override

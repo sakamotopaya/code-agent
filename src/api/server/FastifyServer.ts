@@ -268,7 +268,7 @@ export class FastifyServer {
 				// Set up execution options
 				const executionOptions = {
 					isInfoQuery,
-					infoQueryTimeoutMs: 30000, // 30 seconds for info queries
+					infoQueryTimeoutMs: 120000, // 2 minutes for info queries
 					emergencyTimeoutMs: 60000, // 60 seconds emergency timeout
 					slidingTimeoutMs: 600000, // 10 minutes for regular tasks
 					useSlidingTimeout: !isInfoQuery,

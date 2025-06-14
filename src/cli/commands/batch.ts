@@ -152,7 +152,23 @@ export class BatchProcessor {
 			// Store task reference for completion detection
 			this.currentTask = task
 
-			this.logDebug("[BatchProcessor] Task created, starting execution...")
+			// Register task disposal with CleanupManager as a safety net
+			const { CleanupManager } = await import("../services/CleanupManager")
+			const cleanupManager = CleanupManager.getInstance()
+
+			cleanupManager.registerCleanupTask(async () => {
+				try {
+					this.logDebug("[BatchProcessor] CleanupManager disposing task using existing Task.dispose()...")
+					if (typeof task.dispose === "function") {
+						await task.dispose()
+						this.logDebug("[BatchProcessor] CleanupManager task disposal completed")
+					}
+				} catch (error) {
+					this.logDebug("[BatchProcessor] CleanupManager task disposal error:", error)
+				}
+			})
+
+			this.logDebug("[BatchProcessor] Task created and registered with CleanupManager, starting execution...")
 
 			// Execute the task with enhanced completion detection
 			this.logDebug("[BatchProcessor] About to call executeTaskWithCompletionDetection...")

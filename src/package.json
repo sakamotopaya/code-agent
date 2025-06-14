@@ -384,6 +384,7 @@
 		"nexe:build:macos": "node ../scripts/build-nexe.js --platform=darwin",
 		"nexe:build:windows": "node ../scripts/build-nexe.js --platform=win32",
 		"nexe:build:linux": "node ../scripts/build-nexe.js --platform=linux",
+		"cli": "node ./dist/cli/index.js",
 		"start:cli": "node ./dist/cli/index.js",
 		"clean": "rimraf README.md CHANGELOG.md LICENSE dist webview-ui out mock .turbo bin"
 	},

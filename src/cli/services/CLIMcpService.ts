@@ -162,19 +162,28 @@ export class CLIMcpService implements ICLIMcpService {
 	}
 
 	async disconnectFromServer(serverId: string): Promise<void> {
+		const { getCLILogger } = await import("../services/CLILogger")
+		const logger = getCLILogger()
+
+		logger.debug(`CLIMcpService: disconnectFromServer called for ${serverId}`)
 		const connection = this.connections.get(serverId)
 		if (!connection) {
+			logger.debug(`CLIMcpService: No connection found for ${serverId}`)
 			return
 		}
 
+		logger.debug(`CLIMcpService: Found connection for ${serverId}, stopping health check`)
 		// Stop health checking
 		this.stopHealthCheck(serverId)
 
+		logger.debug(`CLIMcpService: Calling connection.disconnect() for ${serverId}`)
 		// Disconnect
 		await connection.disconnect()
 
+		logger.debug(`CLIMcpService: Connection.disconnect() completed for ${serverId}, removing from connections`)
 		// Remove from connections
 		this.connections.delete(serverId)
+		logger.debug(`CLIMcpService: Removed ${serverId} from connections map`)
 	}
 
 	getConnectedServers(): McpConnection[] {
@@ -448,6 +457,7 @@ export class CLIMcpService implements ICLIMcpService {
 		// Disconnect all servers with aggressive timeout for CLI batch mode
 		const disconnectPromises = Array.from(this.connections.keys()).map(async (serverId) => {
 			try {
+				logger.debug(`CLIMcpService: Starting disconnect for ${serverId}`)
 				const timeoutPromise = new Promise(
 					(_, reject) => setTimeout(() => reject(new Error("Disconnect timeout")), 1000), // Reduced from 3000ms to 1000ms
 				)
@@ -456,8 +466,23 @@ export class CLIMcpService implements ICLIMcpService {
 
 				logger.debug(`CLIMcpService: Disconnected from ${serverId}`)
 			} catch (error) {
-				logger.debug(`CLIMcpService: Force disconnect ${serverId}:`, error)
-				// Force remove connection
+				logger.debug(`CLIMcpService: Force disconnect ${serverId} due to timeout:`, error)
+				// Force remove connection and kill process directly
+				const connection = this.connections.get(serverId)
+				if (connection) {
+					logger.debug(`CLIMcpService: Force killing connection for ${serverId}`)
+					// For stdio connections, force kill the child process
+					if ((connection as any).childProcess) {
+						const childProcess = (connection as any).childProcess
+						logger.debug(`CLIMcpService: Force killing child process ${childProcess.pid} for ${serverId}`)
+						try {
+							childProcess.kill("SIGKILL")
+							childProcess.unref()
+						} catch (killError) {
+							logger.debug(`CLIMcpService: Error force killing process:`, killError)
+						}
+					}
+				}
 				this.connections.delete(serverId)
 			}
 		})
