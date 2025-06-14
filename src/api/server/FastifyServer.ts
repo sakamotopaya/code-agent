@@ -131,6 +131,7 @@ export class FastifyServer {
 				const body = request.body as any
 				const task = body.task || "No task specified"
 				const mode = body.mode || "code"
+				const verbose = body.verbose || false // Extract verbose flag from request
 
 				// Create job
 				const job = this.jobManager.createJob(task, {
@@ -153,8 +154,8 @@ export class FastifyServer {
 				// Create SSE stream
 				const stream = this.streamManager.createStream(reply.raw, job.id)
 
-				// Create SSE adapter for this job
-				const sseAdapter = new SSEOutputAdapter(this.streamManager, job.id)
+				// Create SSE adapter for this job with verbose flag
+				const sseAdapter = new SSEOutputAdapter(this.streamManager, job.id, verbose)
 
 				// Send initial start event
 				await sseAdapter.emitStart("Task started", task)

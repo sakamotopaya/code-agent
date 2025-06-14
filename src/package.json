@@ -342,6 +342,7 @@
 		}
 	},
 	"scripts": {
+		"api:start": "node -r ts-node/register api/api-entry.ts",
 		"lint": "eslint . --ext=ts --max-warnings=0",
 		"check-types": "tsc --noEmit",
 		"pretest": "turbo run bundle --cwd ..",

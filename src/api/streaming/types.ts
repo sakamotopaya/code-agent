@@ -1,4 +1,5 @@
 import { ServerResponse } from "http"
+import { ContentType } from "./MessageBuffer"
 
 /**
  * SSE event type definitions for Task execution streaming
@@ -20,6 +21,9 @@ export interface SSEEvent {
 	progress?: number
 	questionId?: string
 	choices?: string[]
+	// New fields for content type classification
+	contentType?: ContentType
+	isComplete?: boolean
 }
 
 export interface SSEStream {

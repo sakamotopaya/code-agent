@@ -36,7 +36,7 @@ describe("SSEOutputAdapter", () => {
 		// Create stream first
 		streamManager.createStream(mockResponse as ServerResponse, jobId)
 
-		adapter = new SSEOutputAdapter(streamManager, jobId)
+		adapter = new SSEOutputAdapter(streamManager, jobId, false) // Add verbose parameter
 	})
 
 	afterEach(() => {

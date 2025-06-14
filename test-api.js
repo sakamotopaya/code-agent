@@ -22,6 +22,9 @@ let port = 3000
 let task = "Test task from API client"
 let showHelp = false
 let verbose = false
+let showThinking = false
+let showTools = false
+let showSystem = false
 
 for (let i = 0; i < args.length; i++) {
 	const arg = args[i]
@@ -34,6 +37,12 @@ for (let i = 0; i < args.length; i++) {
 		port = parseInt(args[++i]) || port
 	} else if (arg === "--verbose" || arg === "-v") {
 		verbose = true
+	} else if (arg === "--show-thinking") {
+		showThinking = true
+	} else if (arg === "--show-tools") {
+		showTools = true
+	} else if (arg === "--show-system") {
+		showSystem = true
 	} else if (arg === "--help" || arg === "-h") {
 		showHelp = true
 	} else if (!arg.startsWith("--")) {
@@ -48,16 +57,27 @@ if (showHelp) {
 Usage: node test-api.js [options] "Your task here"
 
 Options:
-  --stream     Test SSE streaming endpoint (default: false)
-  --verbose    Show full JSON payload (default: false)
-  --host       API host (default: localhost)
-  --port       API port (default: 3000)
-  --help       Show this help
+  --stream         Test SSE streaming endpoint (default: false)
+  --verbose        Show full JSON payload (default: false)
+  --show-thinking  Show thinking sections in LLM output (default: false)
+  --show-tools     Show tool call content (default: false)
+  --show-system    Show system content (default: false)
+  --host           API host (default: localhost)
+  --port           API port (default: 3000)
+  --help           Show this help
+
+Content Display:
+  Default mode shows only main content and tool results.
+  Use --show-thinking to see LLM reasoning sections.
+  Use --show-tools to see tool calls and their parameters.
+  Use --show-system to see all system-level content.
+  Use --verbose to see full JSON payloads with all metadata.
 
 Examples:
   node test-api.js --stream "where does the vscode extension code store it's mode config files?"
   node test-api.js --verbose --stream "list your MCP servers"
-  node test-api.js --stream "Write a React component"
+  node test-api.js --stream --show-thinking "Write a React component"
+  node test-api.js --stream --show-tools --show-thinking "Debug this code"
   node test-api.js --host api.example.com --port 8080 "Debug this code"
 `)
 	process.exit(0)
@@ -70,6 +90,9 @@ if (verbose) {
 	console.log(`📝 Task: "${task}"`)
 	console.log(`🌊 Streaming: ${useStream ? "enabled" : "disabled"}`)
 	console.log(`📊 Verbose: ${verbose ? "enabled" : "disabled"}`)
+	console.log(`🧠 Show Thinking: ${showThinking ? "enabled" : "disabled"}`)
+	console.log(`🔧 Show Tools: ${showTools ? "enabled" : "disabled"}`)
+	console.log(`⚙️  Show System: ${showSystem ? "enabled" : "disabled"}`)
 	console.log("")
 }
 
@@ -243,6 +266,24 @@ async function testExecuteEndpoint() {
 }
 
 /**
+ * Get display prefix for content types
+ */
+function getContentTypePrefix(contentType, toolName) {
+	switch (contentType) {
+		case "thinking":
+			return "\n[Thinking] "
+		case "tool_call":
+			return toolName ? `\n[Tool: ${toolName}] ` : "\n[Tool] "
+		case "system":
+			return "\n[System] "
+		case "tool_result":
+			return "\n[Result] "
+		default:
+			return ""
+	}
+}
+
+/**
  * Test SSE streaming endpoint
  */
 function testStreamingEndpoint() {
@@ -288,6 +329,25 @@ function testStreamingEndpoint() {
 								const data = JSON.parse(line.slice(6))
 								const timestamp = new Date(data.timestamp).toLocaleTimeString()
 
+								// Helper function to determine if content should be displayed
+								const shouldShowContent = (contentType) => {
+									if (!contentType) return true // Default for messages without contentType
+
+									switch (contentType) {
+										case "content":
+										case "tool_result":
+											return true // Always show main content and results
+										case "thinking":
+											return showThinking
+										case "tool_call":
+											return showTools
+										case "system":
+											return showSystem
+										default:
+											return true // Show unknown content types by default
+									}
+								}
+
 								if (verbose) {
 									switch (data.type) {
 										case "start":
@@ -313,35 +373,84 @@ function testStreamingEndpoint() {
 											console.log(`     📨 [${timestamp}] ${JSON.stringify(data)}`)
 									}
 								} else {
-									// Simple output mode - stream content as it comes without extra newlines
+									// Simple output mode - stream content based on content type filtering
+									const shouldDisplay = shouldShowContent(data.contentType)
+
+									// Filter out system messages we don't want to show
+									const isSystemMessage = (text) => {
+										if (!text) return false
+										return (
+											text === "Task execution started" ||
+											text === "Task started" ||
+											text === "Task has been completed successfully" ||
+											text === "Task completed" ||
+											text === "Task execution completed" ||
+											/^<[^>]+>$/.test(text.trim())
+										) // Pure XML tags
+									}
+
+									const messageIsSystem = isSystemMessage(data.message)
+									const resultIsSystem = isSystemMessage(data.result)
+
 									switch (data.type) {
 										case "start":
 											// Don't output anything for start
 											break
 										case "progress":
-											// Stream progress messages (this is where LLM response content is)
-											if (data.message && data.message !== "Processing...") {
+											// Stream progress messages with content type filtering
+											if (
+												data.message &&
+												data.message !== "Processing..." &&
+												!messageIsSystem &&
+												shouldDisplay
+											) {
+												// Only add prefix for non-content types and when content isn't just XML
+												if (
+													data.contentType &&
+													data.contentType !== "content" &&
+													!data.message.match(/^<[^>]*>.*<\/[^>]*>$/)
+												) {
+													const prefix = getContentTypePrefix(data.contentType, data.toolName)
+													if (prefix) {
+														process.stdout.write(prefix)
+													}
+												}
 												process.stdout.write(data.message)
 											}
 											break
 										case "complete":
 										case "completion":
-											// Show final result
-											if (data.result) {
+											// Show final result with content type filtering
+											let outputSomething = false
+											if (shouldDisplay && !resultIsSystem && data.result) {
 												process.stdout.write(data.result)
-											} else if (data.message) {
+												outputSomething = true
+											} else if (shouldDisplay && !messageIsSystem && data.message) {
 												process.stdout.write(data.message)
+												outputSomething = true
 											}
-											// Add final newline
-											process.stdout.write("\n")
+											// Add final newline only if we actually output something
+											if (outputSomething) {
+												process.stdout.write("\n")
+											}
 											res.destroy()
 											return
 										case "error":
 											console.log(`❌ Error: ${data.error}`)
 											break
 										default:
-											// Stream any other message content
-											if (data.message) {
+											// Stream any other message content with filtering
+											if (data.message && !messageIsSystem && shouldDisplay) {
+												if (
+													data.contentType &&
+													data.contentType !== "content" &&
+													!data.message.match(/^<[^>]*>.*<\/[^>]*>$/)
+												) {
+													const prefix = getContentTypePrefix(data.contentType, data.toolName)
+													if (prefix) {
+														process.stdout.write(prefix)
+													}
+												}
 												process.stdout.write(data.message)
 											}
 									}
