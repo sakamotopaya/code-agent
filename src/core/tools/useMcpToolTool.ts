@@ -76,20 +76,48 @@ export async function useMcpToolTool(
 			// Now execute the tool
 			await cline.say("mcp_server_request_started") // same as browser_action_result
 
-			const toolResult = await cline.providerRef
-				?.deref()
-				?.getMcpHub()
-				?.callTool(server_name, tool_name, parsedArguments)
+			if (cline.isVerbose) {
+				console.log(`[useMcpToolTool] About to call cline.executeMcpTool`)
+				console.log(`[useMcpToolTool] Server: ${server_name}`)
+				console.log(`[useMcpToolTool] Tool: ${tool_name}`)
+				console.log(`[useMcpToolTool] Args: ${JSON.stringify(parsedArguments, null, 2)}`)
+			}
+
+			// Use Task's new public method for MCP tool execution
+			const mcpResult = await cline.executeMcpTool(server_name, tool_name, parsedArguments)
+
+			if (cline.isVerbose) {
+				console.log(`[useMcpToolTool] executeMcpTool returned:`, JSON.stringify(mcpResult, null, 2))
+			}
+
+			// Convert to expected format for response handling
+			const toolResult = {
+				isError: !mcpResult.success,
+				content: [
+					{
+						type: "text",
+						text: mcpResult.success
+							? typeof mcpResult.result === "string"
+								? mcpResult.result
+								: JSON.stringify(mcpResult.result, null, 2)
+							: mcpResult.error || "Tool execution failed",
+					},
+				],
+			}
+
+			if (cline.isVerbose) {
+				console.log(`[useMcpToolTool] Final toolResult:`, JSON.stringify(toolResult, null, 2))
+			}
 
 			// TODO: add progress indicator and ability to parse images and non-text responses
 			const toolResultPretty =
 				(toolResult?.isError ? "Error:\n" : "") +
 					toolResult?.content
-						.map((item) => {
+						.map((item: any) => {
 							if (item.type === "text") {
 								return item.text
 							}
-							if (item.type === "resource") {
+							if (item.type === "resource" && item.resource) {
 								const { blob: _, ...rest } = item.resource
 								return JSON.stringify(rest, null, 2)
 							}

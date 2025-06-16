@@ -6,6 +6,7 @@
 import chalk from "chalk"
 import { ProcessedMessage, ContentType } from "../../../api/streaming/MessageBuffer"
 import { IContentTypeHandler, DisplayContext, DisplayResult } from "./interfaces"
+import { cleanOutput } from "../../../utils/cleanOutput"
 
 /**
  * Base abstract class for content handlers
@@ -101,7 +102,19 @@ export class ContentHandler_ToolCall extends ContentHandler {
 			}
 		}
 
-		// Skip tool content itself (XML tags and parameters)
+		// Special case: attempt_completion content should be displayed as final result
+		if (message.toolName === "attempt_completion" && message.content) {
+			// Clean XML tags from the content before displaying
+			const cleanedContent = cleanOutput(message.content)
+			// Check for content without trimming to preserve meaningful whitespace
+			if (cleanedContent !== undefined && cleanedContent !== null && cleanedContent !== "") {
+				return {
+					displayText: cleanedContent,
+				}
+			}
+		}
+
+		// Skip tool content itself (XML tags and parameters) for other tools
 		return null
 	}
 }

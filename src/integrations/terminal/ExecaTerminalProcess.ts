@@ -49,6 +49,16 @@ export class ExecaTerminalProcess extends BaseTerminalProcess {
 			})`${command}`
 
 			this.pid = subprocess.pid
+
+			// Emit shell execution started event for callbacks
+			if (this.pid !== undefined) {
+				console.log(`[ExecaTerminalProcess] Process started with PID: ${this.pid}`)
+				this.emit("shell_execution_started", this.pid)
+			} else {
+				console.warn("[ExecaTerminalProcess] subprocess.pid is undefined")
+				this.emit("shell_execution_started", undefined)
+			}
+
 			const stream = subprocess.iterable({ from: "all", preserveNewlines: true })
 			this.terminal.setActiveStream(stream, subprocess.pid)
 

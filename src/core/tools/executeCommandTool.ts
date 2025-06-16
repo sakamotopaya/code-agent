@@ -150,18 +150,40 @@ async function getTerminalForTask(
 	terminalProvider: RooTerminalProvider = "execa",
 ): Promise<RooTerminal> {
 	// Check if task has CLI terminal adapter (indicates CLI context)
+	const isVerbose = cline.isVerbose || false
+	if (isVerbose) {
+		console.log(`[getTerminalForTask] Checking CLI terminal availability...`)
+	}
 	try {
 		const terminal = cline.term
+		if (isVerbose) {
+			console.log(`[getTerminalForTask] cline.term exists:`, !!terminal)
+			console.log(`[getTerminalForTask] cline.term type:`, terminal?.constructor?.name)
+			console.log(
+				`[getTerminalForTask] executeCommand method exists:`,
+				terminal && typeof terminal.executeCommand === "function",
+			)
+		}
+
 		if (terminal && typeof terminal.executeCommand === "function") {
 			// Generate unique ID for CLI terminal adapter
 			const adapterId = Date.now() + Math.floor(Math.random() * 1000)
-			return new CLITerminalAdapter(terminal, workingDir, adapterId, taskId)
+			if (isVerbose) {
+				console.log(`[getTerminalForTask] Using CLITerminalAdapter with ID: ${adapterId}`)
+			}
+			return new CLITerminalAdapter(terminal, workingDir, adapterId, taskId, isVerbose)
 		}
 	} catch (error) {
 		// Terminal not available, fall through to TerminalRegistry
+		if (isVerbose) {
+			console.log(`[getTerminalForTask] Error accessing terminal:`, error)
+		}
 	}
 
 	// Fall back to TerminalRegistry for VSCode context
+	if (isVerbose) {
+		console.log(`[getTerminalForTask] Falling back to TerminalRegistry with provider: ${terminalProvider}`)
+	}
 	const provider = terminalProvider as "vscode" | "execa"
 	return await TerminalRegistry.getOrCreateTerminal(workingDir, requiredCwd, taskId, provider)
 }
@@ -248,7 +270,9 @@ export async function executeCommand(
 			completed = true
 		},
 		onShellExecutionStarted: (pid: number | undefined) => {
-			console.log(`[executeCommand] onShellExecutionStarted: ${pid}`)
+			if (cline.isVerbose) {
+				console.log(`[executeCommand] onShellExecutionStarted: ${pid}`)
+			}
 			const status: CommandExecutionStatus = { executionId, status: "started", pid, command }
 			clineProvider?.postMessageToWebview({ type: "commandExecutionStatus", text: JSON.stringify(status) })
 		},

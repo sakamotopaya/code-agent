@@ -7,6 +7,7 @@ import type { CoreInterfaces } from "../../core/interfaces"
 import { JobManager } from "../jobs/JobManager"
 import { StreamManager } from "../streaming/StreamManager"
 import { SSEOutputAdapter } from "../streaming/SSEOutputAdapter"
+import { ApiQuestionManager } from "../questions/ApiQuestionManager"
 import { Task } from "../../core/task/Task"
 import { createApiAdapters } from "../../core/adapters/api"
 import { TaskExecutionOrchestrator, ApiTaskExecutionHandler } from "../../core/task/execution"
@@ -24,6 +25,7 @@ export class FastifyServer {
 	private requestCount = 0
 	private jobManager: JobManager
 	private streamManager: StreamManager
+	private questionManager: ApiQuestionManager
 	private taskExecutionOrchestrator: TaskExecutionOrchestrator
 
 	constructor(config: ApiConfigManager, adapters: CoreInterfaces) {
@@ -31,6 +33,7 @@ export class FastifyServer {
 		this.adapters = adapters
 		this.jobManager = new JobManager()
 		this.streamManager = new StreamManager()
+		this.questionManager = new ApiQuestionManager()
 		this.taskExecutionOrchestrator = new TaskExecutionOrchestrator()
 		this.app = fastify({
 			logger: {
@@ -154,8 +157,8 @@ export class FastifyServer {
 				// Create SSE stream
 				const stream = this.streamManager.createStream(reply.raw, job.id)
 
-				// Create SSE adapter for this job with verbose flag
-				const sseAdapter = new SSEOutputAdapter(this.streamManager, job.id, verbose)
+				// Create SSE adapter for this job with verbose flag and shared question manager
+				const sseAdapter = new SSEOutputAdapter(this.streamManager, job.id, verbose, this.questionManager)
 
 				// Send initial start event
 				await sseAdapter.emitStart("Task started", task)
@@ -334,6 +337,124 @@ export class FastifyServer {
 			}
 		})
 
+		// Question API endpoints
+		this.app.post("/api/questions/:questionId/answer", async (request: FastifyRequest, reply: FastifyReply) => {
+			try {
+				const { questionId } = request.params as { questionId: string }
+				const body = request.body as { answer: string }
+
+				if (!body.answer) {
+					return reply.status(400).send({
+						error: "Bad Request",
+						message: "Answer is required",
+						timestamp: new Date().toISOString(),
+					})
+				}
+
+				const success = await this.questionManager.submitAnswer(questionId, body.answer)
+
+				if (!success) {
+					return reply.status(404).send({
+						error: "Not Found",
+						message: "Question not found or not pending",
+						timestamp: new Date().toISOString(),
+					})
+				}
+
+				return reply.send({
+					success: true,
+					message: "Answer submitted successfully",
+					questionId,
+					timestamp: new Date().toISOString(),
+				})
+			} catch (error) {
+				console.error("Answer submission error:", error)
+				return reply.status(500).send({
+					error: "Internal Server Error",
+					message: error instanceof Error ? error.message : "Unknown error",
+					timestamp: new Date().toISOString(),
+				})
+			}
+		})
+
+		// Get question status
+		this.app.get("/api/questions/:questionId", async (request: FastifyRequest, reply: FastifyReply) => {
+			try {
+				const { questionId } = request.params as { questionId: string }
+				const question = this.questionManager.getQuestion(questionId)
+
+				if (!question) {
+					return reply.status(404).send({
+						error: "Not Found",
+						message: "Question not found",
+						timestamp: new Date().toISOString(),
+					})
+				}
+
+				return reply.send({
+					id: question.id,
+					jobId: question.jobId,
+					question: question.question,
+					suggestions: question.suggestions,
+					state: question.state,
+					createdAt: question.createdAt,
+					answeredAt: question.answeredAt,
+					answer: question.answer,
+				})
+			} catch (error) {
+				console.error("Get question error:", error)
+				return reply.status(500).send({
+					error: "Internal Server Error",
+					message: error instanceof Error ? error.message : "Unknown error",
+					timestamp: new Date().toISOString(),
+				})
+			}
+		})
+
+		// List questions for a job
+		this.app.get("/api/questions", async (request: FastifyRequest, reply: FastifyReply) => {
+			try {
+				const { jobId, state } = request.query as { jobId?: string; state?: string }
+
+				if (!jobId) {
+					return reply.status(400).send({
+						error: "Bad Request",
+						message: "jobId query parameter is required",
+						timestamp: new Date().toISOString(),
+					})
+				}
+
+				let questions = this.questionManager.getJobQuestions(jobId)
+
+				// Filter by state if provided
+				if (state) {
+					questions = questions.filter((q) => q.state === state)
+				}
+
+				return reply.send({
+					questions: questions.map((q) => ({
+						id: q.id,
+						jobId: q.jobId,
+						question: q.question,
+						suggestions: q.suggestions,
+						state: q.state,
+						createdAt: q.createdAt,
+						answeredAt: q.answeredAt,
+						answer: q.answer,
+					})),
+					total: questions.length,
+					timestamp: new Date().toISOString(),
+				})
+			} catch (error) {
+				console.error("List questions error:", error)
+				return reply.status(500).send({
+					error: "Internal Server Error",
+					message: error instanceof Error ? error.message : "Unknown error",
+					timestamp: new Date().toISOString(),
+				})
+			}
+		})
+
 		// Catch-all for undefined routes (excluding OPTIONS which is handled by CORS)
 		this.app.get("*", async (request: FastifyRequest, reply: FastifyReply) => {
 			return reply.status(404).send({
@@ -402,6 +523,9 @@ export class FastifyServer {
 	 */
 	async stop(): Promise<void> {
 		if (this.isRunning) {
+			// Shutdown question manager first
+			await this.questionManager.shutdown()
+
 			await this.app.close()
 			this.isRunning = false
 			console.log("🛑 API Server stopped")

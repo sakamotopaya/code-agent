@@ -6,9 +6,11 @@ import { ChildProcess } from "child_process"
 
 export class StdioMcpConnection extends BaseMcpConnection {
 	private childProcess?: ChildProcess
+	private verbose: boolean
 
-	constructor(config: McpServerConfig) {
+	constructor(config: McpServerConfig, verbose: boolean = false) {
 		super(config)
+		this.verbose = verbose
 	}
 
 	async setupTransport(): Promise<void> {
@@ -68,62 +70,94 @@ export class StdioMcpConnection extends BaseMcpConnection {
 	 * Force terminate the child process with escalating signals - aggressive CLI mode
 	 */
 	async forceTerminateProcess(): Promise<void> {
-		console.log(`[StdioMcp] forceTerminateProcess called for ${this.config.name}`)
-		console.log(`[StdioMcp] childProcess exists: ${!!this.childProcess}`)
-		console.log(`[StdioMcp] childProcess.killed: ${this.childProcess?.killed}`)
-		console.log(`[StdioMcp] childProcess.pid: ${this.childProcess?.pid}`)
+		if (this.verbose) {
+			console.log(`[StdioMcp] forceTerminateProcess called for ${this.config.name}`)
+			console.log(`[StdioMcp] childProcess exists: ${!!this.childProcess}`)
+			console.log(`[StdioMcp] childProcess.killed: ${this.childProcess?.killed}`)
+			console.log(`[StdioMcp] childProcess.pid: ${this.childProcess?.pid}`)
+		}
 
 		if (!this.childProcess || this.childProcess.killed) {
-			console.log(`[StdioMcp] Early return - no child process or already killed for ${this.config.name}`)
+			if (this.verbose) {
+				console.log(`[StdioMcp] Early return - no child process or already killed for ${this.config.name}`)
+			}
 			return
 		}
 
-		console.log(`[StdioMcp] Force terminating process ${this.childProcess.pid} for ${this.config.name}`)
+		if (this.verbose) {
+			console.log(`[StdioMcp] Force terminating process ${this.childProcess.pid} for ${this.config.name}`)
+		}
 
 		// Immediately unref and destroy streams to prevent event loop blocking
-		console.log(`[StdioMcp] About to unref process ${this.childProcess.pid}`)
+		if (this.verbose) {
+			console.log(`[StdioMcp] About to unref process ${this.childProcess.pid}`)
+		}
 		this.childProcess.unref()
-		console.log(`[StdioMcp] Unref completed for process ${this.childProcess.pid}`)
+		if (this.verbose) {
+			console.log(`[StdioMcp] Unref completed for process ${this.childProcess.pid}`)
+		}
 
 		// Force close stdio streams first
 		try {
-			console.log(`[StdioMcp] About to destroy stdio streams for ${this.childProcess.pid}`)
+			if (this.verbose) {
+				console.log(`[StdioMcp] About to destroy stdio streams for ${this.childProcess.pid}`)
+			}
 			this.childProcess.stdin?.destroy()
-			console.log(`[StdioMcp] Destroyed stdin for ${this.childProcess.pid}`)
+			if (this.verbose) {
+				console.log(`[StdioMcp] Destroyed stdin for ${this.childProcess.pid}`)
+			}
 			this.childProcess.stdout?.destroy()
-			console.log(`[StdioMcp] Destroyed stdout for ${this.childProcess.pid}`)
+			if (this.verbose) {
+				console.log(`[StdioMcp] Destroyed stdout for ${this.childProcess.pid}`)
+			}
 			this.childProcess.stderr?.destroy()
-			console.log(`[StdioMcp] Destroyed stderr for ${this.childProcess.pid}`)
-			console.log(`[StdioMcp] All stdio streams destroyed for ${this.childProcess.pid}`)
+			if (this.verbose) {
+				console.log(`[StdioMcp] Destroyed stderr for ${this.childProcess.pid}`)
+				console.log(`[StdioMcp] All stdio streams destroyed for ${this.childProcess.pid}`)
+			}
 		} catch (error) {
-			console.log(`[StdioMcp] Error destroying stdio streams: ${error}`)
+			if (this.verbose) {
+				console.log(`[StdioMcp] Error destroying stdio streams: ${error}`)
+			}
 		}
 
 		// Kill process immediately with SIGKILL (no graceful SIGTERM in CLI mode)
 		try {
-			console.log(`[StdioMcp] About to send SIGKILL to process ${this.childProcess.pid}`)
+			if (this.verbose) {
+				console.log(`[StdioMcp] About to send SIGKILL to process ${this.childProcess.pid}`)
+			}
 			const killResult = this.childProcess.kill("SIGKILL")
-			console.log(`[StdioMcp] SIGKILL result: ${killResult} for process ${this.childProcess.pid}`)
+			if (this.verbose) {
+				console.log(`[StdioMcp] SIGKILL result: ${killResult} for process ${this.childProcess.pid}`)
+			}
 		} catch (error) {
-			console.log(`[StdioMcp] Error sending SIGKILL: ${error}`)
+			if (this.verbose) {
+				console.log(`[StdioMcp] Error sending SIGKILL: ${error}`)
+			}
 		}
 
 		// Don't wait for process exit - just resolve immediately after cleanup
 		// The unref() and stream destruction should be enough to prevent event loop blocking
-		console.log(`[StdioMcp] Force termination cleanup completed for ${this.config.name}`)
+		if (this.verbose) {
+			console.log(`[StdioMcp] Force termination cleanup completed for ${this.config.name}`)
+		}
 	}
 
 	/**
 	 * Enhanced disconnect with force process termination
 	 */
 	override async disconnect(): Promise<void> {
-		console.log(`[StdioMcp] Starting disconnect for ${this.config.name}`)
+		if (this.verbose) {
+			console.log(`[StdioMcp] Starting disconnect for ${this.config.name}`)
+		}
 
 		// Call parent disconnect method with aggressive timeout for CLI mode
 		const parentDisconnectPromise = super.disconnect()
 
 		try {
-			console.log(`[StdioMcp] Waiting for parent disconnect for ${this.config.name}`)
+			if (this.verbose) {
+				console.log(`[StdioMcp] Waiting for parent disconnect for ${this.config.name}`)
+			}
 			// Wait for parent disconnect with shorter timeout for CLI batch mode
 			await Promise.race([
 				parentDisconnectPromise,
@@ -131,14 +165,25 @@ export class StdioMcpConnection extends BaseMcpConnection {
 					(_, reject) => setTimeout(() => reject(new Error("Parent disconnect timeout")), 1000), // Reduced from 3000ms to 1000ms
 				),
 			])
-			console.log(`[StdioMcp] Parent disconnect completed for ${this.config.name}`)
+			if (this.verbose) {
+				console.log(`[StdioMcp] Parent disconnect completed for ${this.config.name}`)
+			}
 		} catch (error) {
-			console.warn(`Parent disconnect timeout for ${this.config.name}, proceeding with force termination:`, error)
+			if (this.verbose) {
+				console.warn(
+					`Parent disconnect timeout for ${this.config.name}, proceeding with force termination:`,
+					error,
+				)
+			}
 		}
 
 		// Always attempt force termination to ensure child process is killed
-		console.log(`[StdioMcp] Starting force termination for ${this.config.name}`)
+		if (this.verbose) {
+			console.log(`[StdioMcp] Starting force termination for ${this.config.name}`)
+		}
 		await this.forceTerminateProcess()
-		console.log(`[StdioMcp] Force termination completed for ${this.config.name}`)
+		if (this.verbose) {
+			console.log(`[StdioMcp] Force termination completed for ${this.config.name}`)
+		}
 	}
 }

@@ -13,6 +13,7 @@
 
 const http = require("http")
 const https = require("https")
+const readline = require("readline")
 
 // Parse command line arguments
 const args = process.argv.slice(2)
@@ -284,6 +285,82 @@ function getContentTypePrefix(contentType, toolName) {
 }
 
 /**
+ * Submit answer to a question
+ */
+async function submitAnswer(questionId, answer) {
+	const payload = JSON.stringify({ answer })
+
+	try {
+		const response = await makeRequest(
+			{
+				hostname: host,
+				port: port,
+				path: `/api/questions/${questionId}/answer`,
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"Content-Length": Buffer.byteLength(payload),
+				},
+			},
+			payload,
+		)
+
+		if (response.statusCode === 200) {
+			const result = JSON.parse(response.body)
+			if (verbose) {
+				console.log(`✅ Answer submitted successfully: ${result.message}`)
+			}
+			return true
+		} else {
+			console.log(`❌ Failed to submit answer: ${response.body}`)
+			return false
+		}
+	} catch (error) {
+		console.log(`❌ Error submitting answer: ${error.message}`)
+		return false
+	}
+}
+
+/**
+ * Prompt user for input via command line
+ */
+function promptUser(question, choices = []) {
+	return new Promise((resolve) => {
+		const rl = readline.createInterface({
+			input: process.stdin,
+			output: process.stdout,
+		})
+
+		let prompt = `\n❓ Question: ${question}\n`
+
+		if (choices.length > 0) {
+			prompt += `\nChoices:\n`
+			choices.forEach((choice, index) => {
+				prompt += `  ${index + 1}. ${choice}\n`
+			})
+			prompt += `\nEnter your choice (1-${choices.length}) or type your answer: `
+		} else {
+			prompt += `\nYour answer: `
+		}
+
+		rl.question(prompt, (answer) => {
+			rl.close()
+
+			// If choices are provided and user entered a number, return the choice
+			if (choices.length > 0 && !isNaN(answer)) {
+				const choiceIndex = parseInt(answer) - 1
+				if (choiceIndex >= 0 && choiceIndex < choices.length) {
+					resolve(choices[choiceIndex])
+					return
+				}
+			}
+
+			resolve(answer.trim())
+		})
+	})
+}
+
+/**
  * Test SSE streaming endpoint
  */
 function testStreamingEndpoint() {
@@ -353,6 +430,22 @@ function testStreamingEndpoint() {
 										case "start":
 											console.log(`     🚀 [${timestamp}] ${data.message}: ${data.task}`)
 											break
+										case "question_ask":
+											console.log(`     ❓ [${timestamp}] Question: ${data.message}`)
+											if (data.choices && data.choices.length > 0) {
+												console.log(`     📝 Choices: ${data.choices.join(", ")}`)
+											}
+											// Handle interactive question asynchronously
+											;(async () => {
+												try {
+													const answer = await promptUser(data.message, data.choices)
+													console.log(`     💬 You answered: ${answer}`)
+													await submitAnswer(data.questionId, answer)
+												} catch (error) {
+													console.log(`     ❌ Failed to handle question: ${error.message}`)
+												}
+											})()
+											break
 										case "progress":
 											console.log(
 												`     ⏳ [${timestamp}] Step ${data.step}/${data.total}: ${data.message}`,
@@ -395,6 +488,18 @@ function testStreamingEndpoint() {
 									switch (data.type) {
 										case "start":
 											// Don't output anything for start
+											break
+										case "question_ask":
+											// Handle interactive question - prompt user and submit answer
+											;(async () => {
+												try {
+													const answer = await promptUser(data.message, data.choices)
+													console.log(`💬 You answered: ${answer}`)
+													await submitAnswer(data.questionId, answer)
+												} catch (error) {
+													console.log(`❌ Failed to handle question: ${error.message}`)
+												}
+											})()
 											break
 										case "progress":
 											// Stream progress messages with content type filtering

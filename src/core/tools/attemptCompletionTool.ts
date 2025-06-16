@@ -46,7 +46,10 @@ export async function attemptCompletionTool(
 					// we have command string, which means we have the result as well, so finish it (doesnt have to exist yet)
 					await cline.say("completion_result", removeClosingTag("result", result), undefined, false)
 
-					TelemetryService.instance.captureTaskCompleted(cline.taskId)
+					// Use the task's telemetry service instead of a global instance
+					if (cline.telemetry) {
+						cline.telemetry.captureTaskCompleted(cline.taskId)
+					}
 					cline.emit("taskCompleted", cline.taskId, cline.getTokenUsage(), cline.toolUsage)
 
 					await cline.ask("command", removeClosingTag("command", command), block.partial).catch(() => {})
@@ -72,7 +75,10 @@ export async function attemptCompletionTool(
 				if (lastMessage && lastMessage.ask !== "command") {
 					// Haven't sent a command message yet so first send completion_result then command.
 					await cline.say("completion_result", result, undefined, false)
-					TelemetryService.instance.captureTaskCompleted(cline.taskId)
+					// Use the task's telemetry service instead of a global instance
+					if (cline.telemetry) {
+						cline.telemetry.captureTaskCompleted(cline.taskId)
+					}
 					cline.emit("taskCompleted", cline.taskId, cline.getTokenUsage(), cline.toolUsage)
 				}
 
@@ -97,7 +103,10 @@ export async function attemptCompletionTool(
 				commandResult = execCommandResult
 			} else {
 				await cline.say("completion_result", result, undefined, false)
-				TelemetryService.instance.captureTaskCompleted(cline.taskId)
+				// Use the task's telemetry service instead of a global instance
+				if (cline.telemetry) {
+					cline.telemetry.captureTaskCompleted(cline.taskId)
+				}
 				cline.emit("taskCompleted", cline.taskId, cline.getTokenUsage(), cline.toolUsage)
 			}
 

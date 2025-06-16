@@ -3,6 +3,9 @@
  */
 export type ContentType = "content" | "thinking" | "tool_call" | "tool_result" | "system"
 
+// Import LLM content logger
+import { getGlobalLLMContentLogger } from "../../cli/services/streaming/XMLTagLogger"
+
 /**
  * Processed message result from MessageBuffer
  */
@@ -23,6 +26,7 @@ interface BufferState {
 	currentToolName: string | null
 	tagStack: string[] // Track nested tags
 	pendingContent: string // Content waiting for tag completion
+	inAttemptCompletion: boolean // Track when we're inside attempt_completion
 }
 
 /**
@@ -96,6 +100,16 @@ export class MessageBuffer {
 	processMessage(chunk: string): ProcessedMessage[] {
 		const results: ProcessedMessage[] = []
 
+		// Log all incoming content chunks for debugging
+		try {
+			const logger = getGlobalLLMContentLogger()
+			logger.logContent(chunk).catch((error: any) => {
+				// Silently ignore logging errors to not disrupt parsing
+			})
+		} catch (error) {
+			// Silently ignore logger errors to not disrupt parsing
+		}
+
 		// Add new chunk to buffer
 		this.state.buffer += chunk
 
@@ -151,6 +165,7 @@ export class MessageBuffer {
 			currentToolName: null,
 			tagStack: [],
 			pendingContent: "",
+			inAttemptCompletion: false,
 		}
 	}
 
@@ -231,10 +246,20 @@ export class MessageBuffer {
 				this.state.inToolSection = false
 				this.state.currentToolName = null
 				this.state.tagStack = this.state.tagStack.filter((tag) => tag !== tagName)
+
+				// Track when we exit attempt_completion
+				if (tagName === "attempt_completion") {
+					this.state.inAttemptCompletion = false
+				}
 			} else {
 				this.state.inToolSection = true
 				this.state.currentToolName = tagName
 				this.state.tagStack.push(tagName)
+
+				// Track when we enter attempt_completion
+				if (tagName === "attempt_completion") {
+					this.state.inAttemptCompletion = true
+				}
 			}
 			return {}
 		}
@@ -242,6 +267,13 @@ export class MessageBuffer {
 		// Handle system and result tags - these don't change parsing state
 		// but we classify their content appropriately
 		if (MessageBuffer.SYSTEM_TAGS.has(tagName) || MessageBuffer.RESULT_TAGS.has(tagName)) {
+			// Special case: When inside attempt_completion, treat <result> tags as part of the tool content
+			// so their content gets displayed instead of being classified as tool_result
+			if (tagName === "result" && this.state.inAttemptCompletion) {
+				// Don't classify the tag itself, let the content inside be part of attempt_completion
+				return {}
+			}
+
 			// Don't change parsing state, just return tag as system/result content
 			const contentType = MessageBuffer.RESULT_TAGS.has(tagName) ? "tool_result" : "system"
 

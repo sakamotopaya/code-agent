@@ -13,6 +13,7 @@ import { StreamManager } from "./StreamManager"
 import { SSEEvent, SSE_EVENTS } from "./types"
 import { getCLILogger } from "../../cli/services/CLILogger"
 import { MessageBuffer, ProcessedMessage, ContentType } from "./MessageBuffer"
+import { ApiQuestionManager } from "../questions/ApiQuestionManager"
 
 /**
  * SSE Output Adapter that implements IUserInterface to capture Task events
@@ -25,12 +26,19 @@ export class SSEOutputAdapter implements IUserInterface {
 	private questionCounter = 0
 	private messageBuffer: MessageBuffer
 	private verbose: boolean
+	private questionManager: ApiQuestionManager
 
-	constructor(streamManager: StreamManager, jobId: string, verbose: boolean = false) {
+	constructor(
+		streamManager: StreamManager,
+		jobId: string,
+		verbose: boolean = false,
+		questionManager?: ApiQuestionManager,
+	) {
 		this.streamManager = streamManager
 		this.jobId = jobId
 		this.verbose = verbose
 		this.messageBuffer = new MessageBuffer()
+		this.questionManager = questionManager || new ApiQuestionManager()
 	}
 
 	/**
@@ -81,68 +89,143 @@ export class SSEOutputAdapter implements IUserInterface {
 
 	/**
 	 * Ask the user a question and wait for their response
-	 * Note: In SSE streaming mode, questions are sent to client but no response is expected
+	 * Now supports blocking questions that wait for actual user responses via API
 	 */
 	async askQuestion(question: string, options: QuestionOptions): Promise<string | undefined> {
-		const questionId = `q_${this.jobId}_${++this.questionCounter}`
+		try {
+			// Convert choices to suggestions format
+			const suggestions = options.choices.map((choice) => ({ answer: choice }))
 
-		const event: SSEEvent = {
-			type: SSE_EVENTS.QUESTION,
-			jobId: this.jobId,
-			timestamp: new Date().toISOString(),
-			message: question,
-			questionId,
-			...options,
+			// Create blocking question using question manager
+			const { questionId, promise } = await this.questionManager.createQuestion(this.jobId, question, suggestions)
+
+			// Emit question event via SSE
+			const event: SSEEvent = {
+				type: SSE_EVENTS.QUESTION_ASK,
+				jobId: this.jobId,
+				timestamp: new Date().toISOString(),
+				message: question,
+				questionId,
+				choices: options.choices,
+				suggestions,
+			}
+
+			this.emitEvent(event)
+
+			// Wait for user response (this blocks task execution)
+			const answer = await promise
+			return answer
+		} catch (error) {
+			// If question fails (timeout, cancellation, etc.), fall back to default
+			this.logger.warn(`Question failed for job ${this.jobId}: ${error}`)
+
+			// Emit error event
+			const errorEvent: SSEEvent = {
+				type: SSE_EVENTS.ERROR,
+				jobId: this.jobId,
+				timestamp: new Date().toISOString(),
+				message: `Question failed: ${error}`,
+				error: error instanceof Error ? error.message : String(error),
+			}
+			this.emitEvent(errorEvent)
+
+			return options.defaultChoice || options.choices[0]
 		}
-
-		this.emitEvent(event)
-
-		// In streaming mode, we can't wait for user response
-		// Return default choice or first option
-		return options.defaultChoice || options.choices[0]
 	}
 
 	/**
 	 * Ask the user for confirmation (yes/no)
+	 * Now supports blocking confirmation that waits for actual user responses via API
 	 */
 	async askConfirmation(message: string, options?: ConfirmationOptions): Promise<boolean> {
-		const questionId = `c_${this.jobId}_${++this.questionCounter}`
+		try {
+			const yesText = options?.yesText || "Yes"
+			const noText = options?.noText || "No"
+			const choices = [yesText, noText]
+			const suggestions = choices.map((choice) => ({ answer: choice }))
 
-		const event: SSEEvent = {
-			type: SSE_EVENTS.QUESTION,
-			jobId: this.jobId,
-			timestamp: new Date().toISOString(),
-			message,
-			questionId,
-			choices: [options?.yesText || "Yes", options?.noText || "No"],
-			...options,
+			// Create blocking question using question manager
+			const { questionId, promise } = await this.questionManager.createQuestion(this.jobId, message, suggestions)
+
+			// Emit question event via SSE
+			const event: SSEEvent = {
+				type: SSE_EVENTS.QUESTION_ASK,
+				jobId: this.jobId,
+				timestamp: new Date().toISOString(),
+				message,
+				questionId,
+				choices,
+				suggestions,
+			}
+
+			this.emitEvent(event)
+
+			// Wait for user response (this blocks task execution)
+			const answer = await promise
+
+			// Convert answer to boolean (case-insensitive check)
+			return answer.toLowerCase() === yesText.toLowerCase()
+		} catch (error) {
+			// If question fails, fall back to default (true - proceed)
+			this.logger.warn(`Confirmation failed for job ${this.jobId}: ${error}`)
+
+			// Emit error event
+			const errorEvent: SSEEvent = {
+				type: SSE_EVENTS.ERROR,
+				jobId: this.jobId,
+				timestamp: new Date().toISOString(),
+				message: `Confirmation failed: ${error}`,
+				error: error instanceof Error ? error.message : String(error),
+			}
+			this.emitEvent(errorEvent)
+
+			return true
 		}
-
-		this.emitEvent(event)
-
-		// In streaming mode, default to true (proceed)
-		return true
 	}
 
 	/**
 	 * Ask the user for text input
+	 * Now supports blocking input that waits for actual user responses via API
 	 */
 	async askInput(prompt: string, options?: InputOptions): Promise<string | undefined> {
-		const questionId = `i_${this.jobId}_${++this.questionCounter}`
+		try {
+			// For text input, we don't provide specific choices but can include placeholder as suggestion
+			const suggestions = options?.placeholder ? [{ answer: options.placeholder }] : []
 
-		const event: SSEEvent = {
-			type: SSE_EVENTS.QUESTION,
-			jobId: this.jobId,
-			timestamp: new Date().toISOString(),
-			message: prompt,
-			questionId,
-			...options,
+			// Create blocking question using question manager
+			const { questionId, promise } = await this.questionManager.createQuestion(this.jobId, prompt, suggestions)
+
+			// Emit question event via SSE
+			const event: SSEEvent = {
+				type: SSE_EVENTS.QUESTION_ASK,
+				jobId: this.jobId,
+				timestamp: new Date().toISOString(),
+				message: prompt,
+				questionId,
+				suggestions,
+			}
+
+			this.emitEvent(event)
+
+			// Wait for user response (this blocks task execution)
+			const answer = await promise
+			return answer
+		} catch (error) {
+			// If question fails, fall back to default
+			this.logger.warn(`Input failed for job ${this.jobId}: ${error}`)
+
+			// Emit error event
+			const errorEvent: SSEEvent = {
+				type: SSE_EVENTS.ERROR,
+				jobId: this.jobId,
+				timestamp: new Date().toISOString(),
+				message: `Input failed: ${error}`,
+				error: error instanceof Error ? error.message : String(error),
+			}
+			this.emitEvent(errorEvent)
+
+			return options?.defaultValue || ""
 		}
-
-		this.emitEvent(event)
-
-		// Return default value or empty string
-		return options?.defaultValue || ""
 	}
 
 	/**
@@ -402,9 +485,14 @@ export class SSEOutputAdapter implements IUserInterface {
 	}
 
 	/**
-	 * Close the SSE stream
+	 * Close the SSE stream and cleanup questions
 	 */
 	close(): void {
+		// Cancel any pending questions for this job
+		this.questionManager.cancelJobQuestions(this.jobId, "Stream closed").catch((error) => {
+			this.logger.warn(`Failed to cancel questions for job ${this.jobId}: ${error}`)
+		})
+
 		this.streamManager.closeStream(this.jobId)
 	}
 

@@ -285,6 +285,7 @@ program
 					mcpAutoConnect: options.mcpAutoConnect,
 					mcpTimeout: options.mcpTimeout,
 					mcpRetries: options.mcpRetries,
+					verbose: options.verbose,
 				})
 				console.log(formatDebugMessage("CLI: GlobalCLIMcpService.initialize() completed", options.color))
 				if (options.verbose) {

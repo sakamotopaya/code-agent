@@ -142,8 +142,22 @@ export class CLILogger implements IStreamingLogger, IStateManager {
 							)
 						}
 					}
-					// Skip the tool content itself
-					continue
+
+					// Special case: attempt_completion content should be displayed as it's the final response
+					if (message.toolName === "attempt_completion") {
+						// Don't skip - let it fall through to display the content
+						if (this.isVerbose) {
+							console.error(
+								formatDebugMessage(
+									`[CLILogger.streamContent] Displaying attempt_completion content: ${message.content.substring(0, 100)}...`,
+									this.useColor,
+								),
+							)
+						}
+					} else {
+						// Skip the tool content for all other tools
+						continue
+					}
 				}
 
 				// Format the message for display

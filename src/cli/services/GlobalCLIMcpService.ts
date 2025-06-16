@@ -15,6 +15,7 @@ class GlobalCLIMcpService {
 	private mcpAutoConnect = true
 	private mcpTimeout?: number
 	private mcpRetries?: number
+	private verbose = false
 
 	private constructor() {}
 
@@ -33,6 +34,7 @@ class GlobalCLIMcpService {
 		mcpAutoConnect?: boolean
 		mcpTimeout?: number
 		mcpRetries?: number
+		verbose?: boolean
 	}): Promise<void> {
 		// If already initialized or initializing, return the existing promise
 		if (this.initialized) {
@@ -46,6 +48,7 @@ class GlobalCLIMcpService {
 		this.mcpAutoConnect = options.mcpAutoConnect ?? true
 		this.mcpTimeout = options.mcpTimeout
 		this.mcpRetries = options.mcpRetries
+		this.verbose = options.verbose ?? false
 
 		this.initializationPromise = this._initializeInternal()
 		await this.initializationPromise
@@ -55,48 +58,68 @@ class GlobalCLIMcpService {
 		const logger = getCLILogger()
 
 		try {
-			console.log("[GlobalCLIMcpService] DEBUG: Starting MCP service initialization...")
-			console.log("[GlobalCLIMcpService] DEBUG: Config path:", this.configPath || "undefined")
-			console.log("[GlobalCLIMcpService] DEBUG: Auto-connect:", this.mcpAutoConnect)
+			if (this.verbose) {
+				console.log("[GlobalCLIMcpService] DEBUG: Starting MCP service initialization...")
+				console.log("[GlobalCLIMcpService] DEBUG: Config path:", this.configPath || "undefined")
+				console.log("[GlobalCLIMcpService] DEBUG: Auto-connect:", this.mcpAutoConnect)
+			}
 
 			logger.debug("[GlobalCLIMcpService] Initializing MCP service...")
 
-			this.mcpService = new CLIMcpService(this.configPath)
+			this.mcpService = new CLIMcpService(this.configPath, this.verbose)
 
 			// Load and connect to configured servers
-			console.log("[GlobalCLIMcpService] DEBUG: About to load server configs...")
+			if (this.verbose) {
+				console.log("[GlobalCLIMcpService] DEBUG: About to load server configs...")
+			}
 			const serverConfigs = await this.mcpService.loadServerConfigs()
-			console.log(`Loading Roo Code MCP configuration from: ${this.configPath || "default locations"}`)
-			console.log(`Found ${serverConfigs.length} enabled MCP servers`)
+			if (this.verbose) {
+				console.log(`Loading Roo Code MCP configuration from: ${this.configPath || "default locations"}`)
+				console.log(`Found ${serverConfigs.length} enabled MCP servers`)
 
-			// Debug: log server details
-			serverConfigs.forEach((config) => {
-				console.log(`  - Server: ${config.name} (${config.id}) - enabled: ${config.enabled !== false}`)
-			})
+				// Debug: log server details
+				serverConfigs.forEach((config) => {
+					console.log(`  - Server: ${config.name} (${config.id}) - enabled: ${config.enabled !== false}`)
+				})
+			}
 
 			if (this.mcpAutoConnect && serverConfigs.length > 0) {
-				console.log("[GlobalCLIMcpService] DEBUG: Starting server connections...")
+				if (this.verbose) {
+					console.log("[GlobalCLIMcpService] DEBUG: Starting server connections...")
+				}
 				for (const config of serverConfigs) {
 					try {
-						console.log(`CLI MCP: Connecting to server ${config.name}...`)
+						if (this.verbose) {
+							console.log(`CLI MCP: Connecting to server ${config.name}...`)
+						}
 						await this.mcpService.connectToServer(config)
-						console.log(`CLI MCP: Successfully connected to ${config.name}`)
+						if (this.verbose) {
+							console.log(`CLI MCP: Successfully connected to ${config.name}`)
+						}
 					} catch (error) {
 						console.warn(`CLI MCP: Failed to connect to server ${config.name}:`, error)
 					}
 				}
 			} else if (!this.mcpAutoConnect) {
-				console.log("[GlobalCLIMcpService] DEBUG: Auto-connect disabled, servers loaded but not connected")
+				if (this.verbose) {
+					console.log("[GlobalCLIMcpService] DEBUG: Auto-connect disabled, servers loaded but not connected")
+				}
 				logger.debug("CLI MCP: Auto-connect disabled, servers loaded but not connected")
 			} else {
-				console.log("[GlobalCLIMcpService] DEBUG: No servers to connect to")
+				if (this.verbose) {
+					console.log("[GlobalCLIMcpService] DEBUG: No servers to connect to")
+				}
 			}
 
 			this.initialized = true
-			console.log("[GlobalCLIMcpService] DEBUG: MCP service initialization completed successfully")
+			if (this.verbose) {
+				console.log("[GlobalCLIMcpService] DEBUG: MCP service initialization completed successfully")
+			}
 			logger.debug("[GlobalCLIMcpService] MCP service initialized successfully")
 		} catch (error) {
-			console.error("[GlobalCLIMcpService] ERROR: Failed to initialize MCP service:", error)
+			if (this.verbose) {
+				console.error("[GlobalCLIMcpService] ERROR: Failed to initialize MCP service:", error)
+			}
 			logger.warn(`[GlobalCLIMcpService] Failed to initialize MCP service:`, error)
 			// Don't throw - allow CLI to continue without MCP
 		}

@@ -28,6 +28,7 @@ import { ApiHandler, buildApiHandler } from "../../api"
 import { combineApiRequests } from "../../shared/combineApiRequests"
 import { combineCommandSequences } from "../../shared/combineCommandSequences"
 import { t } from "../../i18n"
+import { cleanOutput } from "../../utils/cleanOutput"
 import { ClineAskResponse } from "../../shared/WebviewMessage"
 import { defaultModeSlug } from "../../shared/modes"
 import { DiffStrategy } from "../../shared/tools"
@@ -247,6 +248,10 @@ export class Task extends EventEmitter<ClineEvents> {
 
 	private isCliMode(): boolean {
 		return !this.providerRef
+	}
+
+	get isVerbose(): boolean {
+		return this.verbose
 	}
 
 	// Compatibility properties - delegated to modular components
@@ -821,12 +826,53 @@ export class Task extends EventEmitter<ClineEvents> {
 				if (!this.cliMcpService) {
 					throw new Error("MCP service not available in CLI mode")
 				}
-				const result = await this.cliMcpService.executeTool(
-					params.server_name,
-					params.tool_name,
-					JSON.parse(params.arguments),
-				)
-				return JSON.stringify(result, null, 2)
+
+				if (this.verbose) {
+					console.log(`[CLI MCP] Executing tool: ${params.tool_name} on server: ${params.server_name}`)
+					console.log(`[CLI MCP] Arguments:`, params.arguments)
+				}
+
+				try {
+					const parsedArgs = JSON.parse(params.arguments)
+					if (this.verbose) {
+						console.log(`[CLI MCP] Parsed arguments:`, JSON.stringify(parsedArgs, null, 2))
+					}
+
+					const result = await this.cliMcpService.executeTool(
+						params.server_name,
+						params.tool_name,
+						parsedArgs,
+					)
+
+					if (this.verbose) {
+						console.log(`[CLI MCP] Tool execution result:`, JSON.stringify(result, null, 2))
+					}
+
+					if (!result.success) {
+						const errorMsg = result.error || "Tool execution failed"
+						if (this.verbose) {
+							console.error(`[CLI MCP] Tool execution failed: ${errorMsg}`)
+						}
+						throw new Error(`MCP tool execution failed: ${errorMsg}`)
+					}
+
+					// Format result similar to extension version
+					const formattedResult = result.result
+						? typeof result.result === "string"
+							? result.result
+							: JSON.stringify(result.result, null, 2)
+						: "(No response)"
+
+					if (this.verbose) {
+						console.log(`[CLI MCP] Formatted result:`, formattedResult)
+					}
+					return formattedResult
+				} catch (parseError) {
+					if (this.verbose) {
+						console.error(`[CLI MCP] Failed to parse arguments:`, parseError)
+					}
+					throw new Error(`Invalid JSON arguments for MCP tool: ${parseError.message}`)
+				}
 			}
 
 			case "access_mcp_resource": {
@@ -923,6 +969,80 @@ export class Task extends EventEmitter<ClineEvents> {
 		)
 
 		return toolResult
+	}
+
+	// Public method to execute MCP tools in both CLI and extension contexts
+	async executeMcpTool(
+		serverName: string,
+		toolName: string,
+		args: any,
+	): Promise<{ success: boolean; result?: any; error?: string }> {
+		if (this.verbose) {
+			console.log(`[MCP] executeMcpTool called: server=${serverName}, tool=${toolName}`)
+			console.log(`[MCP] Args:`, JSON.stringify(args, null, 2))
+			console.log(`[MCP] CLI MCP Service available:`, !!this.cliMcpService)
+			console.log(`[MCP] Provider ref available:`, !!this.providerRef?.deref())
+		}
+
+		try {
+			if (this.cliMcpService) {
+				// CLI mode - use CLI MCP service
+				if (this.verbose) {
+					console.log(`[CLI MCP] Using CLI MCP service for tool execution`)
+					console.log(
+						`[CLI MCP] Connected servers:`,
+						this.cliMcpService.getConnectedServers().map((s: any) => s.id),
+					)
+				}
+
+				const result = await this.cliMcpService.executeTool(serverName, toolName, args)
+				if (this.verbose) {
+					console.log(
+						`[CLI MCP] Tool execution completed: ${toolName} -> ${result.success ? "SUCCESS" : "ERROR"}`,
+					)
+					console.log(`[CLI MCP] Result:`, JSON.stringify(result, null, 2))
+				}
+				return result
+			} else if (this.providerRef?.deref()) {
+				// VS Code extension mode - use MCP hub
+				if (this.verbose) {
+					console.log(`[MCP] Using VS Code extension MCP hub`)
+				}
+				const mcpHub = this.providerRef.deref()?.getMcpHub()
+				if (!mcpHub) {
+					console.error(`[MCP] MCP hub not available in extension mode`)
+					return { success: false, error: "MCP hub not available in extension mode" }
+				}
+
+				const toolResult = await mcpHub.callTool(serverName, toolName, args)
+				const success = !toolResult?.isError
+				const result =
+					toolResult?.content
+						?.map((item: any) => {
+							if (item.type === "text") {
+								return item.text
+							}
+							if (item.type === "resource") {
+								const { blob: _, ...rest } = item.resource
+								return JSON.stringify(rest, null, 2)
+							}
+							return ""
+						})
+						.filter(Boolean)
+						.join("\n\n") || "(No response)"
+
+				console.log(`[MCP] Extension tool execution completed: ${success ? "SUCCESS" : "ERROR"}`)
+				return { success, result, error: success ? undefined : result }
+			} else {
+				console.error(`[MCP] No MCP service available in current context`)
+				return { success: false, error: "MCP service not available in current context" }
+			}
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error)
+			console.error(`[MCP] Tool execution failed:`, error)
+			console.error(`[MCP] Error stack:`, error instanceof Error ? error.stack : "No stack trace")
+			return { success: false, error: errorMessage }
+		}
 	}
 
 	// Parse tool uses from text content for CLI mode
@@ -1156,16 +1276,32 @@ export class Task extends EventEmitter<ClineEvents> {
 						// Check for attempt_completion
 						if (block.name === "attempt_completion") {
 							foundAttemptCompletion = true
-							this.logDebug(`[Task] Found attempt_completion tool, task should complete`)
+							this.logDebug(`[Task] Found attempt_completion tool, executing it`)
 
-							// Add completion result to user message content
-							const result = block.params?.result || "Task completed"
-							taskApiHandler.streamingState.userMessageContent.push({
-								type: "text",
-								text: `Task completed: ${result}`,
-							})
-							executedTool = true
-							break
+							try {
+								// Execute the attempt_completion tool properly
+								const toolResult = await this.executeCliTool(block.name, block.params)
+								this.logDebug(`[Task] attempt_completion executed with result:`, toolResult)
+
+								// Get the result for internal processing
+								const result = block.params?.result || "Task completed"
+
+								// Add completion result to user message content
+								taskApiHandler.streamingState.userMessageContent.push({
+									type: "text",
+									text: `Task completed: ${cleanOutput(result)}`,
+								})
+								executedTool = true
+								break
+							} catch (error) {
+								console.error(`[Task] attempt_completion failed:`, error)
+								taskApiHandler.streamingState.userMessageContent.push({
+									type: "text",
+									text: `<tool_result>\nError: ${error.message}\n</tool_result>`,
+								})
+								executedTool = true
+								break
+							}
 						}
 
 						try {
@@ -1210,7 +1346,7 @@ export class Task extends EventEmitter<ClineEvents> {
 								const result = toolUse.params?.result || "Task completed"
 								taskApiHandler.streamingState.userMessageContent.push({
 									type: "text",
-									text: `Task completed: ${result}`,
+									text: `Task completed: ${cleanOutput(result)}`,
 								})
 								executedTool = true
 								break
