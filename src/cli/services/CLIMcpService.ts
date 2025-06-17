@@ -47,9 +47,11 @@ export class CLIMcpService implements ICLIMcpService {
 	private healthCheckers = new Map<string, NodeJS.Timeout>()
 	private configPath?: string
 	private defaults: McpDefaults = DEFAULT_MCP_CONFIG
+	private verbose: boolean = false
 
-	constructor(configPath?: string) {
+	constructor(configPath?: string, verbose: boolean = false) {
 		this.configPath = configPath
+		this.verbose = verbose
 	}
 
 	async discoverServers(): Promise<McpServerInfo[]> {
@@ -86,10 +88,12 @@ export class CLIMcpService implements ICLIMcpService {
 					}
 				} catch (error) {
 					// Log more specific error information
-					if (error.code === -32601) {
-						console.debug(`Tools not supported by ${config.name} - this is normal for some servers`)
-					} else {
-						console.error(`Error discovering tools for ${config.name}:`, error.message || error)
+					if (this.verbose) {
+						if (error.code === -32601) {
+							console.debug(`Tools not supported by ${config.name} - this is normal for some servers`)
+						} else {
+							console.error(`Error discovering tools for ${config.name}:`, error.message || error)
+						}
 					}
 				}
 
@@ -110,14 +114,18 @@ export class CLIMcpService implements ICLIMcpService {
 					}
 				} catch (error) {
 					// Log more specific error information
-					if (error.code === -32601) {
-						console.debug(`Resources not supported by ${config.name} - this is normal for some servers`)
-					} else {
-						console.error(`Error discovering resources for ${config.name}:`, error.message || error)
+					if (this.verbose) {
+						if (error.code === -32601) {
+							console.debug(`Resources not supported by ${config.name} - this is normal for some servers`)
+						} else {
+							console.error(`Error discovering resources for ${config.name}:`, error.message || error)
+						}
 					}
 				}
 			} else if (connection?.status === "connecting" || connection?.status === "handshaking") {
-				console.log(`Server ${config.name} is still connecting/handshaking...`)
+				if (this.verbose) {
+					console.log(`Server ${config.name} is still connecting/handshaking...`)
+				}
 			}
 
 			serverInfos.push(serverInfo)
@@ -141,7 +149,7 @@ export class CLIMcpService implements ICLIMcpService {
 		try {
 			// Create appropriate connection type
 			if (config.type === "stdio") {
-				connection = new StdioMcpConnection(config)
+				connection = new StdioMcpConnection(config, this.verbose)
 			} else {
 				connection = new SseMcpConnection(config)
 			}
@@ -162,19 +170,28 @@ export class CLIMcpService implements ICLIMcpService {
 	}
 
 	async disconnectFromServer(serverId: string): Promise<void> {
+		const { getCLILogger } = await import("../services/CLILogger")
+		const logger = getCLILogger()
+
+		logger.debug(`CLIMcpService: disconnectFromServer called for ${serverId}`)
 		const connection = this.connections.get(serverId)
 		if (!connection) {
+			logger.debug(`CLIMcpService: No connection found for ${serverId}`)
 			return
 		}
 
+		logger.debug(`CLIMcpService: Found connection for ${serverId}, stopping health check`)
 		// Stop health checking
 		this.stopHealthCheck(serverId)
 
+		logger.debug(`CLIMcpService: Calling connection.disconnect() for ${serverId}`)
 		// Disconnect
 		await connection.disconnect()
 
+		logger.debug(`CLIMcpService: Connection.disconnect() completed for ${serverId}, removing from connections`)
 		// Remove from connections
 		this.connections.delete(serverId)
+		logger.debug(`CLIMcpService: Removed ${serverId} from connections map`)
 	}
 
 	getConnectedServers(): McpConnection[] {
@@ -199,12 +216,14 @@ export class CLIMcpService implements ICLIMcpService {
 					tools.push(...serverTools)
 				}
 			} catch (error) {
-				if (error.code === -32601) {
-					console.debug(
-						`Method 'tools/list' not found for ${connection.config.name}. Server may not support this capability.`,
-					)
-				} else {
-					console.error(`Error listing tools for ${connection.config.name}:`, error.message || error)
+				if (this.verbose) {
+					if (error.code === -32601) {
+						console.debug(
+							`Method 'tools/list' not found for ${connection.config.name}. Server may not support this capability.`,
+						)
+					} else {
+						console.error(`Error listing tools for ${connection.config.name}:`, error.message || error)
+					}
 				}
 			}
 		}
@@ -213,25 +232,65 @@ export class CLIMcpService implements ICLIMcpService {
 	}
 
 	async executeTool(serverId: string, toolName: string, args: any): Promise<McpExecutionResult> {
+		if (this.verbose) {
+			console.log(`[CLIMcpService] executeTool called: ${serverId}/${toolName}`)
+		}
+
 		const connection = this.connections.get(serverId)
-		if (!connection || !connection.client || connection.status !== "connected" || !connection.isCapabilityReady()) {
+		if (this.verbose) {
+			console.log(`[CLIMcpService] Connection found:`, !!connection)
+		}
+
+		if (!connection) {
+			if (this.verbose) {
+				console.error(`[CLIMcpService] No connection found for server: ${serverId}`)
+				console.log(`[CLIMcpService] Available connections:`, Array.from(this.connections.keys()))
+			}
+			throw new McpToolExecutionError(`Server ${serverId} not found`, toolName, serverId)
+		}
+
+		if (this.verbose) {
+			console.log(`[CLIMcpService] Connection status:`, connection.status)
+			console.log(`[CLIMcpService] Client available:`, !!connection.client)
+			console.log(`[CLIMcpService] Capability ready:`, connection.isCapabilityReady())
+		}
+
+		if (!connection.client || connection.status !== "connected" || !connection.isCapabilityReady()) {
+			if (this.verbose) {
+				console.error(`[CLIMcpService] Server ${serverId} is not ready for tool execution`)
+			}
 			throw new McpToolExecutionError(`Server ${serverId} is not ready for tool execution`, toolName, serverId)
 		}
 
 		try {
+			if (this.verbose) {
+				console.log(`[CLIMcpService] Calling tool with args:`, JSON.stringify(args, null, 2))
+			}
+
 			const result = await connection.client.callTool({
 				name: toolName,
 				arguments: args,
 			})
 
+			if (this.verbose) {
+				console.log(`[CLIMcpService] Tool call result:`, JSON.stringify(result, null, 2))
+			}
 			connection.lastActivity = Date.now()
 
-			return {
+			const executionResult = {
 				success: !result.isError,
 				result: result.content,
 				metadata: result._meta,
 			}
+
+			if (this.verbose) {
+				console.log(`[CLIMcpService] Returning execution result:`, JSON.stringify(executionResult, null, 2))
+			}
+			return executionResult
 		} catch (error) {
+			if (this.verbose) {
+				console.error(`[CLIMcpService] Tool execution error:`, error)
+			}
 			connection.errorCount++
 			if (error.code === -32601) {
 				throw new McpToolExecutionError(
@@ -279,12 +338,14 @@ export class CLIMcpService implements ICLIMcpService {
 					resources.push(...serverResources)
 				}
 			} catch (error) {
-				if (error.code === -32601) {
-					console.debug(
-						`Method 'resources/list' not found for ${connection.config.name}. Server may not support this capability.`,
-					)
-				} else {
-					console.error(`Error listing resources for ${connection.config.name}:`, error.message || error)
+				if (this.verbose) {
+					if (error.code === -32601) {
+						console.debug(
+							`Method 'resources/list' not found for ${connection.config.name}. Server may not support this capability.`,
+						)
+					} else {
+						console.error(`Error listing resources for ${connection.config.name}:`, error.message || error)
+					}
 				}
 			}
 		}
@@ -320,7 +381,9 @@ export class CLIMcpService implements ICLIMcpService {
 
 			if (configData.mcpServers) {
 				// Roo Code format: convert mcpServers object to array
-				console.log(`Loading Roo Code MCP configuration from: ${resolvedPath}`)
+				if (this.verbose) {
+					console.log(`Loading Roo Code MCP configuration from: ${resolvedPath}`)
+				}
 				servers = Object.entries(configData.mcpServers).map(([id, config]: [string, any]) => ({
 					id,
 					name: config.name || id,
@@ -347,12 +410,16 @@ export class CLIMcpService implements ICLIMcpService {
 				}
 			} else if (configData.servers) {
 				// CLI format: use servers array directly
-				console.log(`Loading CLI MCP configuration from: ${resolvedPath}`)
+				if (this.verbose) {
+					console.log(`Loading CLI MCP configuration from: ${resolvedPath}`)
+				}
 				servers = configData.servers
 				this.defaults = { ...DEFAULT_MCP_CONFIG, ...configData.defaults }
 			} else {
 				// Empty or invalid configuration
-				console.log(`No MCP servers found in configuration: ${resolvedPath}`)
+				if (this.verbose) {
+					console.log(`No MCP servers found in configuration: ${resolvedPath}`)
+				}
 				return []
 			}
 
@@ -367,12 +434,16 @@ export class CLIMcpService implements ICLIMcpService {
 				}))
 				.filter((server) => server.enabled !== false)
 
-			console.log(`Found ${configuredServers.length} enabled MCP servers`)
+			if (this.verbose) {
+				console.log(`Found ${configuredServers.length} enabled MCP servers`)
+			}
 			return configuredServers
 		} catch (error) {
 			if (error.code === "ENOENT") {
 				// Config file doesn't exist, return empty array
-				console.log(`No MCP configuration file found at: ${resolvedPath}`)
+				if (this.verbose) {
+					console.log(`No MCP configuration file found at: ${resolvedPath}`)
+				}
 				return []
 			}
 			throw new McpConfigurationError(`Failed to load configuration: ${error.message}`, resolvedPath)
@@ -448,6 +519,7 @@ export class CLIMcpService implements ICLIMcpService {
 		// Disconnect all servers with aggressive timeout for CLI batch mode
 		const disconnectPromises = Array.from(this.connections.keys()).map(async (serverId) => {
 			try {
+				logger.debug(`CLIMcpService: Starting disconnect for ${serverId}`)
 				const timeoutPromise = new Promise(
 					(_, reject) => setTimeout(() => reject(new Error("Disconnect timeout")), 1000), // Reduced from 3000ms to 1000ms
 				)
@@ -456,8 +528,23 @@ export class CLIMcpService implements ICLIMcpService {
 
 				logger.debug(`CLIMcpService: Disconnected from ${serverId}`)
 			} catch (error) {
-				logger.debug(`CLIMcpService: Force disconnect ${serverId}:`, error)
-				// Force remove connection
+				logger.debug(`CLIMcpService: Force disconnect ${serverId} due to timeout:`, error)
+				// Force remove connection and kill process directly
+				const connection = this.connections.get(serverId)
+				if (connection) {
+					logger.debug(`CLIMcpService: Force killing connection for ${serverId}`)
+					// For stdio connections, force kill the child process
+					if ((connection as any).childProcess) {
+						const childProcess = (connection as any).childProcess
+						logger.debug(`CLIMcpService: Force killing child process ${childProcess.pid} for ${serverId}`)
+						try {
+							childProcess.kill("SIGKILL")
+							childProcess.unref()
+						} catch (killError) {
+							logger.debug(`CLIMcpService: Error force killing process:`, killError)
+						}
+					}
+				}
 				this.connections.delete(serverId)
 			}
 		})

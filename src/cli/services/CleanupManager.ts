@@ -1,4 +1,5 @@
 import { getCLILogger } from "./CLILogger"
+import { DebugTimer } from "./CLILogger"
 
 /**
  * Centralized cleanup manager for CLI process exit.
@@ -58,8 +59,14 @@ export class CleanupManager {
 
 		logger.debug(`[CleanupManager] Starting graceful shutdown with ${this.cleanupTasks.length} cleanup tasks...`)
 
+		// Log active handles before cleanup
+		this.logActiveHandles("Before cleanup")
+
 		try {
-			// Execute all cleanup tasks with timeout
+			// First, run terminal cleanup using existing mechanisms
+			await this.cleanupTerminalResources()
+
+			// Then execute all other cleanup tasks with timeout
 			const cleanupPromise = Promise.allSettled(
 				this.cleanupTasks.map(async (task, index) => {
 					try {
@@ -80,6 +87,9 @@ export class CleanupManager {
 
 			await Promise.race([cleanupPromise, timeoutPromise])
 
+			// Log active handles after cleanup
+			this.logActiveHandles("After cleanup")
+
 			logger.debug("[CleanupManager] Graceful shutdown completed successfully")
 
 			// Mark as disposed
@@ -92,6 +102,123 @@ export class CleanupManager {
 					process.exitCode = 0
 				}
 				logger.debug("[CleanupManager] Process exit code set, allowing natural exit")
+
+				// Diagnostic logging to identify what's keeping the process alive
+				const activeHandles = (process as any)._getActiveHandles?.() || []
+				const activeRequests = (process as any)._getActiveRequests?.() || []
+
+				logger.debug(`[CleanupManager] Active handles: ${activeHandles.length}`)
+				logger.debug(`[CleanupManager] Active requests: ${activeRequests.length}`)
+
+				if (activeHandles.length > 0) {
+					logger.debug(
+						`[CleanupManager] Handle types: ${activeHandles.map((h: any) => h.constructor?.name || "Unknown").join(", ")}`,
+					)
+				}
+
+				if (activeRequests.length > 0) {
+					logger.debug(
+						`[CleanupManager] Request types: ${activeRequests.map((r: any) => r.constructor?.name || "Unknown").join(", ")}`,
+					)
+				}
+
+				// Log detailed handle information for debugging and FORCE KILL any child processes
+				activeHandles.forEach((handle: any, index: number) => {
+					try {
+						const handleInfo = {
+							type: handle.constructor?.name || "Unknown",
+							ref: handle._ref !== undefined ? handle._ref : "unknown",
+							destroyed: handle.destroyed || false,
+						}
+
+						// Add specific details for common handle types
+						if (handle.constructor?.name === "Timer") {
+							handleInfo.ref = handle._idleTimeout || "unknown timeout"
+						} else if (handle.constructor?.name === "ChildProcess") {
+							handleInfo.ref = `pid:${handle.pid || "unknown"}`
+							// FORCE KILL any remaining child processes
+							logger.debug(
+								`[CleanupManager] Found child process - PID: ${handle.pid}, killed: ${handle.killed}`,
+							)
+							if (handle.pid) {
+								logger.debug(`[CleanupManager] Force killing untracked child process ${handle.pid}`)
+								try {
+									const killResult = handle.kill("SIGKILL")
+									logger.debug(
+										`[CleanupManager] SIGKILL result: ${killResult} for process ${handle.pid}`,
+									)
+
+									// Try to disconnect if it's connected
+									if (typeof handle.disconnect === "function" && handle.connected) {
+										handle.disconnect()
+										logger.debug(`[CleanupManager] Disconnected process ${handle.pid}`)
+									}
+
+									// Remove all event listeners to fully release the handle
+									if (typeof handle.removeAllListeners === "function") {
+										handle.removeAllListeners()
+										logger.debug(`[CleanupManager] Removed all listeners for process ${handle.pid}`)
+									}
+
+									handle.unref()
+									logger.debug(`[CleanupManager] Unref completed for process ${handle.pid}`)
+
+									// Also destroy stdio streams
+									if (handle.stdin) {
+										handle.stdin.destroy()
+										if (typeof handle.stdin.removeAllListeners === "function") {
+											handle.stdin.removeAllListeners()
+										}
+										logger.debug(`[CleanupManager] Destroyed stdin for process ${handle.pid}`)
+									}
+									if (handle.stdout) {
+										handle.stdout.destroy()
+										if (typeof handle.stdout.removeAllListeners === "function") {
+											handle.stdout.removeAllListeners()
+										}
+										logger.debug(`[CleanupManager] Destroyed stdout for process ${handle.pid}`)
+									}
+									if (handle.stderr) {
+										handle.stderr.destroy()
+										if (typeof handle.stderr.removeAllListeners === "function") {
+											handle.stderr.removeAllListeners()
+										}
+										logger.debug(`[CleanupManager] Destroyed stderr for process ${handle.pid}`)
+									}
+									logger.debug(`[CleanupManager] Killed and cleaned up process ${handle.pid}`)
+								} catch (killError) {
+									logger.debug(`[CleanupManager] Error killing process ${handle.pid}: ${killError}`)
+								}
+							} else {
+								logger.debug(`[CleanupManager] Child process has no PID, skipping kill`)
+							}
+						} else if (handle.constructor?.name === "Socket") {
+							handleInfo.ref = `${handle.remoteAddress || "unknown"}:${handle.remotePort || "unknown"}`
+							// Try to close socket handles
+							logger.debug(`[CleanupManager] Found socket - attempting to close`)
+							try {
+								if (typeof handle.destroy === "function") {
+									handle.destroy()
+									logger.debug(`[CleanupManager] Destroyed socket`)
+								}
+								if (typeof handle.removeAllListeners === "function") {
+									handle.removeAllListeners()
+									logger.debug(`[CleanupManager] Removed all socket listeners`)
+								}
+								if (typeof handle.unref === "function") {
+									handle.unref()
+									logger.debug(`[CleanupManager] Unref socket`)
+								}
+							} catch (socketError) {
+								logger.debug(`[CleanupManager] Error closing socket: ${socketError}`)
+							}
+						}
+
+						logger.debug(`[CleanupManager] Handle ${index + 1}: ${JSON.stringify(handleInfo)}`)
+					} catch (error) {
+						logger.debug(`[CleanupManager] Handle ${index + 1}: Error inspecting handle - ${error}`)
+					}
+				})
 			})
 		} catch (error) {
 			logger.warn("[CleanupManager] Cleanup timeout or error, using fallback exit:", error)
@@ -150,6 +277,57 @@ export class CleanupManager {
 	 */
 	getCleanupTaskCount(): number {
 		return this.cleanupTasks.length
+	}
+
+	/**
+	 * Cleanup terminal resources using existing TerminalRegistry.cleanup()
+	 * This leverages the same cleanup mechanism used in VSCode extension deactivation
+	 */
+	private async cleanupTerminalResources(): Promise<void> {
+		const logger = getCLILogger()
+		logger.debug("[CleanupManager] Starting terminal cleanup using existing mechanisms...")
+
+		try {
+			// Use existing TerminalRegistry cleanup (same as VSCode extension deactivation)
+			const { TerminalRegistry } = await import("../../integrations/terminal/TerminalRegistry")
+			TerminalRegistry.cleanup()
+
+			logger.debug("[CleanupManager] TerminalRegistry cleanup completed")
+		} catch (error) {
+			logger.debug(`[CleanupManager] Terminal cleanup error: ${error}`)
+		}
+	}
+
+	/**
+	 * Log active handles for diagnostic purposes (non-intrusive)
+	 */
+	private logActiveHandles(stage: string): void {
+		const logger = getCLILogger()
+
+		try {
+			const activeHandles = (process as any)._getActiveHandles?.() || []
+			const activeRequests = (process as any)._getActiveRequests?.() || []
+
+			logger.debug(
+				`[CleanupManager] ${stage} - Active handles: ${activeHandles.length}, Active requests: ${activeRequests.length}`,
+			)
+
+			// Log handle types for debugging (non-intrusive)
+			const handleTypes = activeHandles.map((handle: any) => handle.constructor.name)
+			const handleCounts = handleTypes.reduce(
+				(acc: any, type: any) => {
+					acc[type] = (acc[type] || 0) + 1
+					return acc
+				},
+				{} as Record<string, number>,
+			)
+
+			if (Object.keys(handleCounts).length > 0) {
+				logger.debug(`[CleanupManager] ${stage} - Handle types:`, JSON.stringify(handleCounts))
+			}
+		} catch (error) {
+			logger.debug(`[CleanupManager] Handle diagnostic error: ${error}`)
+		}
 	}
 
 	/**

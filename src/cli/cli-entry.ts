@@ -309,6 +309,7 @@ program
 						mcpAutoConnect: options.mcpAutoConnect,
 						mcpTimeout: options.mcpTimeout,
 						mcpRetries: options.mcpRetries,
+						verbose: options.verbose,
 					})
 					getCLILogger().debug("[cli-entry] GlobalCLIMcpService initialized successfully")
 				} catch (error) {

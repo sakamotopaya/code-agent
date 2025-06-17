@@ -1,11 +1,22 @@
 import { ServerResponse } from "http"
+import { ContentType } from "./MessageBuffer"
 
 /**
  * SSE event type definitions for Task execution streaming
  */
 
 export interface SSEEvent {
-	type: "start" | "progress" | "tool_use" | "completion" | "error" | "log" | "question" | "warning" | "information"
+	type:
+		| "start"
+		| "progress"
+		| "tool_use"
+		| "completion"
+		| "error"
+		| "log"
+		| "question"
+		| "warning"
+		| "information"
+		| "question_ask"
 	jobId: string
 	timestamp: string
 	// Flatten all properties to top level for client compatibility
@@ -20,6 +31,10 @@ export interface SSEEvent {
 	progress?: number
 	questionId?: string
 	choices?: string[]
+	suggestions?: Array<{ answer: string }>
+	// New fields for content type classification
+	contentType?: ContentType
+	isComplete?: boolean
 }
 
 export interface SSEStream {
@@ -52,6 +67,7 @@ export const SSE_EVENTS = {
 	ERROR: "error",
 	LOG: "log",
 	QUESTION: "question",
+	QUESTION_ASK: "question_ask",
 	WARNING: "warning",
 	INFORMATION: "information",
 } as const

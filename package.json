@@ -20,7 +20,8 @@
 		"clean": "turbo clean --log-order grouped --output-logs new-only && rimraf dist out bin .vite-port .turbo",
 		"changeset:version": "cp CHANGELOG.md src/CHANGELOG.md && changeset version && cp -vf src/CHANGELOG.md .",
 		"knip": "knip --include files",
-		"update-contributors": "node scripts/update-contributors.js"
+		"update-contributors": "node scripts/update-contributors.js",
+		"cli": "cd src && npm run cli"
 	},
 	"devDependencies": {
 		"@changesets/cli": "^2.27.10",

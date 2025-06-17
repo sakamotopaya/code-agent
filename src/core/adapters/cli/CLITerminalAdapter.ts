@@ -1,4 +1,5 @@
 import EventEmitter from "events"
+import { spawn, ChildProcess } from "child_process"
 import { ITerminal, CommandResult, ExecuteCommandOptions } from "../../interfaces/ITerminal"
 import {
 	RooTerminal,
@@ -29,6 +30,7 @@ export class CLITerminalAdapter implements RooTerminal {
 		initialCwd: string,
 		id: number = Date.now(),
 		taskId?: string,
+		private readonly verbose: boolean = false,
 	) {
 		this.id = id
 		this.taskId = taskId
@@ -48,7 +50,7 @@ export class CLITerminalAdapter implements RooTerminal {
 		this.busy = true
 		this.running = true
 
-		const process = new CLITerminalProcess(command, this.cliTerminal, this._cwd)
+		const process = new CLITerminalProcess(command, this.cliTerminal, this._cwd, this.verbose)
 		this.process = process
 
 		// Set up event listeners to bridge to callbacks
@@ -112,6 +114,7 @@ class CLITerminalProcess extends EventEmitter<RooTerminalProcessEvents> implemen
 		command: string,
 		private readonly cliTerminal: ITerminal,
 		private readonly cwd: string,
+		private readonly verbose: boolean = false,
 	) {
 		super()
 		this.command = command
@@ -122,41 +125,77 @@ class CLITerminalProcess extends EventEmitter<RooTerminalProcessEvents> implemen
 		this.isHot = true
 
 		try {
-			// Signal execution started
-			this.emit("shell_execution_started", undefined)
-
-			// Execute command using CLI terminal
-			const options: ExecuteCommandOptions = {
+			// Use spawn to get access to actual PID
+			const childProcess: ChildProcess = spawn(command, [], {
+				shell: true,
 				cwd: this.cwd,
-				captureStdout: true,
-				captureStderr: true,
+				stdio: ["pipe", "pipe", "pipe"],
+				env: process.env,
+			})
+
+			// Signal execution started with actual PID
+			if (this.verbose) {
+				console.log(`[CLITerminalProcess] Process started with PID: ${childProcess.pid}`)
 			}
+			this.emit("shell_execution_started", childProcess.pid)
 
-			const result: CommandResult = await this.cliTerminal.executeCommand(command, options)
+			let stdout = ""
+			let stderr = ""
 
-			// Store output for retrieval
-			this._output = result.stdout + result.stderr
-			this._retrieved = false
-
-			// Emit line-by-line output for real-time feedback
-			if (this._output) {
-				const lines = this._output.split("\n")
-				for (const line of lines) {
-					if (line.trim()) {
-						this.emit("line", line + "\n")
+			// Capture stdout
+			if (childProcess.stdout) {
+				childProcess.stdout.on("data", (data: Buffer) => {
+					const output = data.toString()
+					stdout += output
+					// Emit line-by-line output for real-time feedback
+					const lines = output.split("\n")
+					for (const line of lines) {
+						if (line.trim()) {
+							this.emit("line", line + "\n")
+						}
 					}
-				}
+				})
 			}
 
-			// Signal completion
-			const exitDetails: ExitCodeDetails = {
-				exitCode: result.exitCode,
-				signal: result.signal ? parseInt(result.signal) : undefined,
-				signalName: result.signal,
+			// Capture stderr
+			if (childProcess.stderr) {
+				childProcess.stderr.on("data", (data: Buffer) => {
+					const output = data.toString()
+					stderr += output
+					// Also emit stderr as lines
+					const lines = output.split("\n")
+					for (const line of lines) {
+						if (line.trim()) {
+							this.emit("line", line + "\n")
+						}
+					}
+				})
 			}
 
-			this.emit("shell_execution_complete", exitDetails)
-			this.emit("completed", this._output)
+			// Wait for process completion
+			await new Promise<void>((resolve, reject) => {
+				childProcess.on("close", (code, signal) => {
+					// Store output for retrieval
+					this._output = stdout + stderr
+					this._retrieved = false
+
+					// Signal completion
+					const exitDetails: ExitCodeDetails = {
+						exitCode: code || 0,
+						signal: signal ? parseInt(signal) : undefined,
+						signalName: signal || undefined,
+					}
+
+					this.emit("shell_execution_complete", exitDetails)
+					this.emit("completed", this._output)
+					resolve()
+				})
+
+				childProcess.on("error", (error) => {
+					this.emit("error", error)
+					reject(error)
+				})
+			})
 		} catch (error) {
 			this.emit("error", error as Error)
 		} finally {

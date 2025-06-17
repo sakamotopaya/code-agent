@@ -1,49 +1,57 @@
 import chalk from "chalk"
+import { createDefaultCLILogger, CLILogger as SOLIDCLILogger } from "./streaming"
+
+/**
+ * Global debug timing tracker
+ */
+export class DebugTimer {
+	private static instance: DebugTimer | null = null
+	private lastDebugTime: number | null = null
+
+	static getInstance(): DebugTimer {
+		if (!DebugTimer.instance) {
+			DebugTimer.instance = new DebugTimer()
+		}
+		return DebugTimer.instance
+	}
+
+	getElapsedAndUpdate(): number | null {
+		const now = Date.now()
+		const elapsed = this.lastDebugTime ? now - this.lastDebugTime : null
+		this.lastDebugTime = now
+		return elapsed
+	}
+
+	reset(): void {
+		this.lastDebugTime = null
+	}
+}
+
+/**
+ * Format debug message with elapsed milliseconds
+ */
+export function formatDebugMessage(message: string, useColor: boolean = true): string {
+	const timer = DebugTimer.getInstance()
+	const elapsed = timer.getElapsedAndUpdate()
+	const elapsedStr = elapsed !== null ? `+${elapsed}ms` : "+0ms"
+
+	if (useColor) {
+		return `${chalk.gray("[DEBUG]")} ${chalk.dim(`[${elapsedStr}]`)} ${message}`
+	} else {
+		return `[DEBUG] [${elapsedStr}] ${message}`
+	}
+}
 
 /**
  * CLI-aware logger that handles output formatting for terminal display
+ * Updated to use SOLID-based MessageBuffer integration while maintaining backward compatibility
  */
 export class CLILogger {
+	private solidLogger: SOLIDCLILogger
 	private isVerbose: boolean
 	private isQuiet: boolean
 	private useColor: boolean
 	private showThinking: boolean
-
-	// State tracking for streaming content filtering
-	private inThinkingSection: boolean = false
-	private displayedToolNames = new Set<string>() // Track which tool names we've already displayed
-	private systemTags = new Set([
-		"attempt_completion",
-		"result",
-		"read_file",
-		"write_to_file",
-		"args",
-		"path",
-		"content",
-		"line_count",
-		"tool_use",
-	])
-
-	// Comprehensive list of all possible tool names
-	private toolNames = new Set([
-		"read_file",
-		"write_to_file",
-		"apply_diff",
-		"search_files",
-		"list_files",
-		"list_code_definition_names",
-		"execute_command",
-		"browser_action",
-		"insert_content",
-		"search_and_replace",
-		"ask_followup_question",
-		"attempt_completion",
-		"use_mcp_tool",
-		"access_mcp_resource",
-		"switch_mode",
-		"new_task",
-		"fetch_instructions",
-	])
 
 	constructor(
 		verbose: boolean = false,
@@ -55,6 +63,14 @@ export class CLILogger {
 		this.isQuiet = quiet
 		this.useColor = useColor
 		this.showThinking = showThinking
+
+		// Create the SOLID-based logger with same options
+		this.solidLogger = createDefaultCLILogger({
+			verbose,
+			quiet,
+			useColor,
+			showThinking,
+		})
 	}
 
 	/**
@@ -62,8 +78,8 @@ export class CLILogger {
 	 */
 	debug(message: string, ...args: any[]): void {
 		if (this.isVerbose && !this.isQuiet) {
-			const prefix = this.useColor ? chalk.gray("[DEBUG]") : "[DEBUG]"
-			console.error(`${prefix} ${message}`, ...args)
+			const formattedMessage = formatDebugMessage(message, this.useColor)
+			console.error(formattedMessage, ...args)
 		}
 	}
 
@@ -123,32 +139,15 @@ export class CLILogger {
 
 	/**
 	 * Format markdown content for terminal display
+	 * Delegates to SOLID display formatter
 	 */
 	formatMarkdown(content: string): string {
-		if (!this.useColor) {
-			// Just clean up the content without colors but preserve spaces
-			return content
-				.replace(/\n\n+/g, "\n\n") // Normalize multiple newlines
-				.replace(/`([^`]+)`/g, "$1") // Remove backticks
-				.replace(/\*\*([^*]+)\*\*/g, "$1") // Remove bold markers
-				.replace(/\*([^*]+)\*/g, "$1") // Remove italic markers
-				.replace(/#{1,6}\s*([^\n]+)/g, "$1") // Remove headers
-				.trim()
-		}
-
-		// Apply terminal formatting with careful space preservation
-		return content
-			.replace(/\n\n+/g, "\n\n") // Normalize multiple newlines
-			.replace(/`([^`]+)`/g, chalk.cyan("$1")) // Code spans
-			.replace(/\*\*([^*]+)\*\*/g, chalk.bold("$1")) // Bold
-			.replace(/\*([^*]+)\*/g, chalk.italic("$1")) // Italic
-			.replace(/#{1,6}\s*([^\n]+)/g, chalk.bold.blue("$1")) // Headers
-			.replace(/^\s*[-*+]\s+(.+)$/gm, chalk.gray("•") + " $1") // List items
-			.trim()
+		return this.solidLogger.formatMarkdown(content)
 	}
 
 	/**
-	 * Stream LLM output with state-based filtering for CLI mode
+	 * Stream LLM output with MessageBuffer-based processing
+	 * UPDATED: Now uses SOLID-based MessageBuffer integration instead of manual parsing
 	 */
 	streamLLMOutput(content: string): void {
 		// Debug output if verbose
@@ -156,93 +155,29 @@ export class CLILogger {
 			console.error(`[CLILogger.streamLLMOutput] Processing content: ${content.substring(0, 100)}...`)
 		}
 
-		let i = 0
-		let output = ""
-
-		while (i < content.length) {
-			const char = content[i]
-
-			// Check for start of XML tag
-			if (char === "<") {
-				// Look ahead to see if this is a system tag or tool
-				const remainingContent = content.slice(i)
-				const tagMatch = remainingContent.match(/^<(\/?[a-zA-Z_][a-zA-Z0-9_-]*)[^>]*>/)
-
-				if (tagMatch) {
-					const fullTagName = tagMatch[1] // Keep the full name with potential "/"
-					const isClosingTag = fullTagName.startsWith("/")
-					const tagName = isClosingTag ? fullTagName.slice(1) : fullTagName
-					const isSystemTag = this.systemTags.has(tagName)
-					const isToolName = this.toolNames.has(tagName)
-
-					if (this.isVerbose) {
-						console.error(
-							`[CLILogger.streamLLMOutput] Found tag: ${tagName}, isToolName: ${isToolName}, isClosingTag: ${isClosingTag}`,
-						)
-					}
-
-					if (tagName === "thinking") {
-						if (isClosingTag) {
-							this.inThinkingSection = false
-						} else {
-							this.inThinkingSection = true
-						}
-						// Skip the entire tag
-						i += tagMatch[0].length
-						continue
-					} else if (isToolName && !isClosingTag && !this.displayedToolNames.has(tagName)) {
-						// Display tool name in yellow when first encountered
-						const toolDisplay = this.useColor ? chalk.yellow(`${tagName}...`) : `${tagName}...`
-						process.stdout.write(`\n${toolDisplay}\n`)
-						this.displayedToolNames.add(tagName)
-
-						if (this.isVerbose) {
-							console.error(`[CLILogger.streamLLMOutput] Displayed tool: ${tagName}`)
-						}
-
-						// Skip the tool tag
-						i += tagMatch[0].length
-						continue
-					} else if (isSystemTag || isToolName) {
-						// Skip system tags and tool tags entirely
-						i += tagMatch[0].length
-						continue
-					}
-				}
-			}
-
-			// Only output if we're not in a thinking section (unless thinking is enabled)
-			// and not in a system tag
-			if (!this.inThinkingSection || this.showThinking) {
-				output += char
-			}
-
-			i++
-		}
-
-		if (output) {
-			process.stdout.write(output)
-		}
+		// Delegate to SOLID-based streaming logger
+		this.solidLogger.streamContent(content)
 	}
 
 	/**
 	 * Reset tool display tracking (call at start of new requests)
+	 * UPDATED: Now delegates to SOLID state manager
 	 */
 	resetToolDisplay(): void {
-		this.displayedToolNames.clear()
+		this.solidLogger.reset()
 	}
 
 	/**
 	 * Clear current line (for progress updates)
+	 * Delegates to SOLID output writer
 	 */
 	clearLine(): void {
-		if (!this.isQuiet) {
-			process.stdout.write("\r\x1b[K")
-		}
+		this.solidLogger.clearLine()
 	}
 
 	/**
 	 * Create a new logger with different settings
+	 * UPDATED: Creates new SOLID-based logger with settings
 	 */
 	withSettings(verbose?: boolean, quiet?: boolean, useColor?: boolean, showThinking?: boolean): CLILogger {
 		return new CLILogger(
@@ -251,6 +186,13 @@ export class CLILogger {
 			useColor ?? this.useColor,
 			showThinking ?? this.showThinking,
 		)
+	}
+
+	/**
+	 * Get the underlying SOLID logger (for testing/advanced usage)
+	 */
+	getSOLIDLogger(): SOLIDCLILogger {
+		return this.solidLogger
 	}
 }
 

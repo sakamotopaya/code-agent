@@ -20,3 +20,5 @@ echo "Testing complete!"
 npm run start:cli --silent -- --config ~/.agentz/agent-config.json --batch "Create a TypeScript file at 'test-run-output/sample-code.ts' with various code definitions including classes, functions, interfaces, and enums. Then use list_code_definition_names to extract all the definitions and verify they are correctly identified."
 
 npm run start:cli --silent -- --config ~/.agentz/agent-config.json --batch "list your MCP servers"
+
+npm run start:cli --silent -- --config ~/.agentz/agent-config.json --batch "use the github mcp server to summarize issue #8. you can run git status or git remote to get the repo name"

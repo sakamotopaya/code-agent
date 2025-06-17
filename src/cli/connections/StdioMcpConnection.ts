@@ -6,9 +6,11 @@ import { ChildProcess } from "child_process"
 
 export class StdioMcpConnection extends BaseMcpConnection {
 	private childProcess?: ChildProcess
+	private verbose: boolean
 
-	constructor(config: McpServerConfig) {
+	constructor(config: McpServerConfig, verbose: boolean = false) {
 		super(config)
+		this.verbose = verbose
 	}
 
 	async setupTransport(): Promise<void> {
@@ -68,66 +70,94 @@ export class StdioMcpConnection extends BaseMcpConnection {
 	 * Force terminate the child process with escalating signals - aggressive CLI mode
 	 */
 	async forceTerminateProcess(): Promise<void> {
+		if (this.verbose) {
+			console.log(`[StdioMcp] forceTerminateProcess called for ${this.config.name}`)
+			console.log(`[StdioMcp] childProcess exists: ${!!this.childProcess}`)
+			console.log(`[StdioMcp] childProcess.killed: ${this.childProcess?.killed}`)
+			console.log(`[StdioMcp] childProcess.pid: ${this.childProcess?.pid}`)
+		}
+
 		if (!this.childProcess || this.childProcess.killed) {
+			if (this.verbose) {
+				console.log(`[StdioMcp] Early return - no child process or already killed for ${this.config.name}`)
+			}
 			return
 		}
 
-		console.log(`[StdioMcp] Force terminating process ${this.childProcess.pid} for ${this.config.name}`)
+		if (this.verbose) {
+			console.log(`[StdioMcp] Force terminating process ${this.childProcess.pid} for ${this.config.name}`)
+		}
 
-		return new Promise<void>((resolve) => {
-			const pid = this.childProcess!.pid
-			let terminated = false
+		// Immediately unref and destroy streams to prevent event loop blocking
+		if (this.verbose) {
+			console.log(`[StdioMcp] About to unref process ${this.childProcess.pid}`)
+		}
+		this.childProcess.unref()
+		if (this.verbose) {
+			console.log(`[StdioMcp] Unref completed for process ${this.childProcess.pid}`)
+		}
 
-			const onExit = () => {
-				if (!terminated) {
-					terminated = true
-					console.log(`[StdioMcp] Process ${pid} terminated for ${this.config.name}`)
-					resolve()
-				}
+		// Force close stdio streams first
+		try {
+			if (this.verbose) {
+				console.log(`[StdioMcp] About to destroy stdio streams for ${this.childProcess.pid}`)
 			}
-
-			// Listen for process exit
-			this.childProcess!.on("exit", onExit)
-
-			// In CLI batch mode, be more aggressive - try SIGTERM briefly then SIGKILL
-			try {
-				this.childProcess!.kill("SIGTERM")
-				console.log(`[StdioMcp] Sent SIGTERM to process ${pid}`)
-			} catch (error) {
-				console.log(`[StdioMcp] Error sending SIGTERM: ${error}`)
+			this.childProcess.stdin?.destroy()
+			if (this.verbose) {
+				console.log(`[StdioMcp] Destroyed stdin for ${this.childProcess.pid}`)
 			}
+			this.childProcess.stdout?.destroy()
+			if (this.verbose) {
+				console.log(`[StdioMcp] Destroyed stdout for ${this.childProcess.pid}`)
+			}
+			this.childProcess.stderr?.destroy()
+			if (this.verbose) {
+				console.log(`[StdioMcp] Destroyed stderr for ${this.childProcess.pid}`)
+				console.log(`[StdioMcp] All stdio streams destroyed for ${this.childProcess.pid}`)
+			}
+		} catch (error) {
+			if (this.verbose) {
+				console.log(`[StdioMcp] Error destroying stdio streams: ${error}`)
+			}
+		}
 
-			// Much shorter wait before SIGKILL in CLI mode (500ms instead of 2000ms)
-			setTimeout(() => {
-				if (!terminated && !this.childProcess!.killed) {
-					try {
-						this.childProcess!.kill("SIGKILL")
-						console.log(`[StdioMcp] Sent SIGKILL to process ${pid}`)
-					} catch (error) {
-						console.log(`[StdioMcp] Error sending SIGKILL: ${error}`)
-					}
-				}
+		// Kill process immediately with SIGKILL (no graceful SIGTERM in CLI mode)
+		try {
+			if (this.verbose) {
+				console.log(`[StdioMcp] About to send SIGKILL to process ${this.childProcess.pid}`)
+			}
+			const killResult = this.childProcess.kill("SIGKILL")
+			if (this.verbose) {
+				console.log(`[StdioMcp] SIGKILL result: ${killResult} for process ${this.childProcess.pid}`)
+			}
+		} catch (error) {
+			if (this.verbose) {
+				console.log(`[StdioMcp] Error sending SIGKILL: ${error}`)
+			}
+		}
 
-				// Quick resolution after force kill (250ms instead of 1000ms)
-				setTimeout(() => {
-					if (!terminated) {
-						terminated = true
-						console.log(`[StdioMcp] Force termination completed for ${this.config.name}`)
-						resolve()
-					}
-				}, 250)
-			}, 500)
-		})
+		// Don't wait for process exit - just resolve immediately after cleanup
+		// The unref() and stream destruction should be enough to prevent event loop blocking
+		if (this.verbose) {
+			console.log(`[StdioMcp] Force termination cleanup completed for ${this.config.name}`)
+		}
 	}
 
 	/**
 	 * Enhanced disconnect with force process termination
 	 */
 	override async disconnect(): Promise<void> {
+		if (this.verbose) {
+			console.log(`[StdioMcp] Starting disconnect for ${this.config.name}`)
+		}
+
 		// Call parent disconnect method with aggressive timeout for CLI mode
 		const parentDisconnectPromise = super.disconnect()
 
 		try {
+			if (this.verbose) {
+				console.log(`[StdioMcp] Waiting for parent disconnect for ${this.config.name}`)
+			}
 			// Wait for parent disconnect with shorter timeout for CLI batch mode
 			await Promise.race([
 				parentDisconnectPromise,
@@ -135,11 +165,25 @@ export class StdioMcpConnection extends BaseMcpConnection {
 					(_, reject) => setTimeout(() => reject(new Error("Parent disconnect timeout")), 1000), // Reduced from 3000ms to 1000ms
 				),
 			])
+			if (this.verbose) {
+				console.log(`[StdioMcp] Parent disconnect completed for ${this.config.name}`)
+			}
 		} catch (error) {
-			console.warn(`Parent disconnect timeout for ${this.config.name}, proceeding with force termination:`, error)
+			if (this.verbose) {
+				console.warn(
+					`Parent disconnect timeout for ${this.config.name}, proceeding with force termination:`,
+					error,
+				)
+			}
 		}
 
 		// Always attempt force termination to ensure child process is killed
+		if (this.verbose) {
+			console.log(`[StdioMcp] Starting force termination for ${this.config.name}`)
+		}
 		await this.forceTerminateProcess()
+		if (this.verbose) {
+			console.log(`[StdioMcp] Force termination completed for ${this.config.name}`)
+		}
 	}
 }

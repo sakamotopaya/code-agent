@@ -6,6 +6,9 @@ import type { ProviderSettings, RooCodeSettings } from "@roo-code/types"
 import { CliConfigManager } from "../config/CliConfigManager"
 import { getCLILogger } from "../services/CLILogger"
 import { CLIUIService } from "../services/CLIUIService"
+import { initializeGlobalLLMContentLogger, closeGlobalLLMContentLogger } from "../services/streaming/XMLTagLogger"
+import { CLIContentProcessor } from "../services/streaming/CLIContentProcessor"
+import { CLIDisplayFormatter } from "../services/streaming/CLIDisplayFormatter"
 
 interface BatchOptions extends CliAdapterOptions {
 	cwd: string
@@ -26,10 +29,14 @@ export class BatchProcessor {
 	private options: BatchOptions
 	private configManager?: CliConfigManager
 	private currentTask?: Task
+	private contentProcessor: CLIContentProcessor
+	private displayFormatter: CLIDisplayFormatter
 
 	constructor(options: BatchOptions, configManager?: CliConfigManager) {
 		this.options = options
 		this.configManager = configManager
+		this.contentProcessor = new CLIContentProcessor()
+		this.displayFormatter = new CLIDisplayFormatter(options.color, false) // Don't show thinking in batch mode
 	}
 
 	private logDebug(message: string, ...args: any[]): void {
@@ -104,6 +111,11 @@ export class BatchProcessor {
 			this.logDebug(`[BatchProcessor] Working directory: ${this.options.cwd}`)
 			this.logDebug(`[BatchProcessor] Task: ${taskDescription}`)
 
+			// Initialize LLM content logger for debugging
+			this.logDebug("[BatchProcessor] Initializing LLM content logger...")
+			await initializeGlobalLLMContentLogger()
+			this.logDebug("[BatchProcessor] LLM content logger initialized")
+
 			// Detect if this is an informational query
 			const isInfoQuery = this.isInformationalQuery(taskDescription)
 			this.logDebug(`[BatchProcessor] Task type - Informational query: ${isInfoQuery}`)
@@ -152,12 +164,42 @@ export class BatchProcessor {
 			// Store task reference for completion detection
 			this.currentTask = task
 
-			this.logDebug("[BatchProcessor] Task created, starting execution...")
+			// Register task disposal with CleanupManager as a safety net
+			const { CleanupManager } = await import("../services/CleanupManager")
+			const cleanupManager = CleanupManager.getInstance()
+
+			cleanupManager.registerCleanupTask(async () => {
+				try {
+					this.logDebug("[BatchProcessor] CleanupManager disposing task using existing Task.dispose()...")
+					if (typeof task.dispose === "function") {
+						await task.dispose()
+						this.logDebug("[BatchProcessor] CleanupManager task disposal completed")
+					}
+				} catch (error) {
+					this.logDebug("[BatchProcessor] CleanupManager task disposal error:", error)
+				}
+
+				// Also cleanup LLM content logger
+				try {
+					this.logDebug("[BatchProcessor] CleanupManager closing LLM content logger...")
+					await closeGlobalLLMContentLogger()
+					this.logDebug("[BatchProcessor] CleanupManager LLM content logger closed")
+				} catch (error) {
+					this.logDebug("[BatchProcessor] CleanupManager LLM content logger disposal error:", error)
+				}
+			})
+
+			this.logDebug("[BatchProcessor] Task created and registered with CleanupManager, starting execution...")
 
 			// Execute the task with enhanced completion detection
 			this.logDebug("[BatchProcessor] About to call executeTaskWithCompletionDetection...")
 			await this.executeTaskWithCompletionDetection(task, taskPromise, isInfoQuery)
 			this.logDebug("[BatchProcessor] executeTaskWithCompletionDetection returned")
+
+			// Close LLM content logger
+			this.logDebug("[BatchProcessor] Closing LLM content logger...")
+			await closeGlobalLLMContentLogger()
+			this.logDebug("[BatchProcessor] LLM content logger closed")
 
 			// Immediately dispose of MCP connections to allow process exit
 			this.logDebug("[BatchProcessor] Disposing MCP connections...")
@@ -168,6 +210,13 @@ export class BatchProcessor {
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error)
 			this.logError("Batch execution failed:", message)
+
+			// Cleanup LLM content logger even on error
+			try {
+				await closeGlobalLLMContentLogger()
+			} catch (xmlError) {
+				this.logDebug("Error closing LLM content logger after error:", xmlError)
+			}
 
 			// Cleanup MCP connections even on error
 			try {
@@ -362,9 +411,9 @@ export class BatchProcessor {
 			// Emergency timeout for all tasks
 			emergencyTimeout = setTimeout(() => {
 				if (!isCompleted) {
-					rejectOnce(new Error("Emergency timeout after 60 seconds"))
+					rejectOnce(new Error("Emergency timeout after 5 minutes"))
 				}
-			}, 60000) // 60 seconds emergency timeout
+			}, 300000) // 5 minutes emergency timeout
 		})
 	}
 
@@ -395,12 +444,28 @@ export class BatchProcessor {
 		task.on("message", (event: any) => {
 			if (isCompleted) return
 
-			if (event.action === "response" || event.action === "say") {
-				const content = event.message?.text || event.content || ""
+			if (event.message?.type === "say") {
+				const content = event.message?.text || ""
+				const messageType = event.message?.say
+
 				responseBuffer += content
 				lastResponseTime = Date.now()
 
 				this.logDebug(`[BatchProcessor] Response content captured: ${content.substring(0, 100)}...`)
+				this.logDebug(`[BatchProcessor] Message type: ${messageType}`)
+
+				// Display completion_result messages immediately - this is the final response the user wants to see
+				if (messageType === "completion_result" && content.trim()) {
+					// Process content through XML tag parsing pipeline to remove tags
+					const processedMessages = this.contentProcessor.processContent(content)
+					for (const processedMessage of processedMessages) {
+						const formattedContent = this.displayFormatter.formatContent(processedMessage)
+						if (formattedContent) {
+							console.log(formattedContent)
+						}
+					}
+					this.logDebug(`[BatchProcessor] Displayed processed completion_result content to user`)
+				}
 
 				// Clear existing timer
 				cleanupCompletionTimer()

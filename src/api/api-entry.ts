@@ -43,6 +43,7 @@ export async function startApiServer(options: ApiServerOptions = {}): Promise<Fa
 				mcpAutoConnect: mcpAutoConnect,
 				mcpTimeout: finalConfig.mcpTimeout || 30000,
 				mcpRetries: finalConfig.mcpRetries || 3,
+				verbose: finalConfig.verbose || false,
 			})
 			console.log("[API] GlobalCLIMcpService initialized successfully")
 		} catch (error) {
