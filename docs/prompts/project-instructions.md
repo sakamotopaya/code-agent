@@ -12,7 +12,7 @@ WE are only testing the CLI and API durring development:
 You can run the CLI by changing to src folder and then run:
 npm run start:cli --silent -- --config ~/.agentz/agent-config.json --batch "use the github mcp server to summarize issue #8. you can run git status or git remote to get the repo name" --verbose
 
-you can run the api by changing to the root of the probject and running:
+you can run the api by changing to the root of the project and running:
 ./run-api.sh
 
 This is the test http client that is used for running the api endpoints. From the project root, run:
