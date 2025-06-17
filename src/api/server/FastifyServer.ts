@@ -66,7 +66,7 @@ export class FastifyServer {
 		this.app.addHook("onRequest", async (request: FastifyRequest) => {
 			this.requestCount++
 			if (serverConfig.verbose) {
-				console.log(`[${new Date().toISOString()}] ${request.method} ${request.url}`)
+				this.app.log.info(`[${new Date().toISOString()}] ${request.method} ${request.url}`)
 			}
 		})
 
@@ -75,7 +75,7 @@ export class FastifyServer {
 
 		// Add global error handler
 		this.app.setErrorHandler(async (error: Error, request: FastifyRequest, reply: FastifyReply) => {
-			console.error("API Error:", error)
+			this.app.log.error("API Error:", error)
 
 			await reply.status(500).send({
 				error: "Internal Server Error",
@@ -119,7 +119,7 @@ export class FastifyServer {
 					timestamp: new Date().toISOString(),
 				})
 			} catch (error) {
-				console.error("Execute error:", error)
+				this.app.log.error("Execute error:", error)
 				return reply.status(500).send({
 					success: false,
 					error: error instanceof Error ? error.message : "Unknown error",
@@ -176,7 +176,7 @@ export class FastifyServer {
 				}
 
 				// Create Task instance with proper configuration
-				console.log(`Creating Task for job ${job.id} with task: "${task}"`)
+				this.app.log.info(`Creating Task for job ${job.id} with task: "${task}"`)
 
 				// Load CLI configuration from API_CLI_CONFIG_PATH
 				let apiConfiguration: any
@@ -185,7 +185,7 @@ export class FastifyServer {
 					const cliConfigPath = process.env.API_CLI_CONFIG_PATH
 
 					if (cliConfigPath) {
-						console.log(`Loading CLI configuration from: ${cliConfigPath}`)
+						this.app.log.info(`Loading CLI configuration from: ${cliConfigPath}`)
 						const configManager = new CliConfigManager({ configPath: cliConfigPath })
 						const config = await configManager.loadConfiguration()
 
@@ -202,14 +202,14 @@ export class FastifyServer {
 							openRouterModelId: config.openRouterModelId,
 						}
 
-						console.log(
+						this.app.log.info(
 							`Configuration loaded - Provider: ${config.apiProvider}, Model: ${config.apiModelId}`,
 						)
 						if (config.apiKey) {
-							console.log(`API key loaded: ${config.apiKey.substring(0, 10)}...`)
+							this.app.log.info(`API key loaded: ${config.apiKey.substring(0, 10)}...`)
 						}
 					} else {
-						console.warn(`No API_CLI_CONFIG_PATH found, falling back to environment variables`)
+						this.app.log.warn(`No API_CLI_CONFIG_PATH found, falling back to environment variables`)
 						apiConfiguration = {
 							apiProvider: "anthropic" as const,
 							apiKey: process.env.ANTHROPIC_API_KEY || "",
@@ -217,8 +217,8 @@ export class FastifyServer {
 						}
 					}
 				} catch (error) {
-					console.error(`Failed to load CLI configuration:`, error)
-					console.warn(`Falling back to environment variables`)
+					this.app.log.error(`Failed to load CLI configuration:`, error)
+					this.app.log.warn(`Falling back to environment variables`)
 					apiConfiguration = {
 						apiProvider: "anthropic" as const,
 						apiKey: process.env.ANTHROPIC_API_KEY || "",
@@ -247,16 +247,16 @@ export class FastifyServer {
 					cliUIService: sseAdapter,
 				}
 
-				console.log(`Task options prepared for job ${job.id}`)
+				this.app.log.info(`Task options prepared for job ${job.id}`)
 
 				// Create and start the task - this returns [instance, promise]
 				const [taskInstance, taskPromise] = Task.create(taskOptions)
-				console.log(`Task.create() completed for job ${job.id}`)
-				console.log(`Task instance created:`, taskInstance ? "SUCCESS" : "FAILED")
+				this.app.log.info(`Task.create() completed for job ${job.id}`)
+				this.app.log.info(`Task instance created:`, taskInstance ? "SUCCESS" : "FAILED")
 
 				// Start job tracking (for job status management)
 				await this.jobManager.startJob(job.id, taskInstance)
-				console.log(`JobManager.startJob() completed for job ${job.id}`)
+				this.app.log.info(`JobManager.startJob() completed for job ${job.id}`)
 
 				// Create API task execution handler
 				const executionHandler = new ApiTaskExecutionHandler(
@@ -278,14 +278,14 @@ export class FastifyServer {
 					taskIdentifier: job.id,
 				}
 
-				console.log(`Starting task execution for job ${job.id}, isInfoQuery: ${isInfoQuery}`)
+				this.app.log.info(`Starting task execution for job ${job.id}, isInfoQuery: ${isInfoQuery}`)
 
 				// Execute task with orchestrator (this replaces all the custom timeout/monitoring logic)
 				this.taskExecutionOrchestrator
 					.executeTask(taskInstance, taskPromise, executionHandler, executionOptions)
 					.then(async (result) => {
-						console.log(`Task execution completed for job ${job.id}:`, result.reason)
-						console.log(`Task execution result:`, {
+						this.app.log.info(`Task execution completed for job ${job.id}:`, result.reason)
+						this.app.log.info(`Task execution result:`, {
 							success: result.success,
 							reason: result.reason,
 							durationMs: result.durationMs,
@@ -298,8 +298,8 @@ export class FastifyServer {
 						this.streamManager.closeStream(job.id)
 					})
 					.catch(async (error: any) => {
-						console.error(`Task execution orchestrator failed for job ${job.id}:`, error)
-						console.error(`Error details:`, {
+						this.app.log.error(`Task execution orchestrator failed for job ${job.id}:`, error)
+						this.app.log.error(`Error details:`, {
 							message: error?.message,
 							stack: error?.stack,
 							name: error?.name,
@@ -310,15 +310,15 @@ export class FastifyServer {
 						try {
 							await sseAdapter.emitError(error)
 						} catch (emitError) {
-							console.error(`Failed to emit error for job ${job.id}:`, emitError)
+							this.app.log.error(`Failed to emit error for job ${job.id}:`, emitError)
 						}
 
 						this.streamManager.closeStream(job.id)
 					})
 
-				console.log(`Task execution orchestrator started for job ${job.id}`)
+				this.app.log.info(`Task execution orchestrator started for job ${job.id}`)
 			} catch (error) {
-				console.error("Stream execute error:", error)
+				this.app.log.error("Stream execute error:", error)
 
 				// Try to send error through SSE if possible
 				try {
@@ -330,7 +330,7 @@ export class FastifyServer {
 						})}\n\n`,
 					)
 				} catch (writeError) {
-					console.error("Failed to write error to stream:", writeError)
+					this.app.log.error("Failed to write error to stream:", writeError)
 				}
 
 				reply.raw.end()
@@ -368,7 +368,7 @@ export class FastifyServer {
 					timestamp: new Date().toISOString(),
 				})
 			} catch (error) {
-				console.error("Answer submission error:", error)
+				this.app.log.error("Answer submission error:", error)
 				return reply.status(500).send({
 					error: "Internal Server Error",
 					message: error instanceof Error ? error.message : "Unknown error",
@@ -402,7 +402,7 @@ export class FastifyServer {
 					answer: question.answer,
 				})
 			} catch (error) {
-				console.error("Get question error:", error)
+				this.app.log.error("Get question error:", error)
 				return reply.status(500).send({
 					error: "Internal Server Error",
 					message: error instanceof Error ? error.message : "Unknown error",
@@ -446,7 +446,7 @@ export class FastifyServer {
 					timestamp: new Date().toISOString(),
 				})
 			} catch (error) {
-				console.error("List questions error:", error)
+				this.app.log.error("List questions error:", error)
 				return reply.status(500).send({
 					error: "Internal Server Error",
 					message: error instanceof Error ? error.message : "Unknown error",
@@ -504,16 +504,16 @@ export class FastifyServer {
 			this.isRunning = true
 			this.startTime = new Date()
 
-			console.log(`🚀 API Server started at ${address}`)
-			console.log(`📁 Workspace: ${serverConfig.workspaceRoot}`)
+			this.app.log.info(`🚀 API Server started at ${address}`)
+			this.app.log.info(`📁 Workspace: ${serverConfig.workspaceRoot}`)
 
 			if (serverConfig.verbose) {
-				console.log(`🔧 Debug mode: ${serverConfig.debug ? "enabled" : "disabled"}`)
-				console.log(`🌐 CORS: ${serverConfig.cors ? "enabled" : "disabled"}`)
-				console.log(`🛡️  Security: ${serverConfig.security?.enableHelmet ? "enabled" : "disabled"}`)
+				this.app.log.info(`🔧 Debug mode: ${serverConfig.debug ? "enabled" : "disabled"}`)
+				this.app.log.info(`🌐 CORS: ${serverConfig.cors ? "enabled" : "disabled"}`)
+				this.app.log.info(`🛡️  Security: ${serverConfig.security?.enableHelmet ? "enabled" : "disabled"}`)
 			}
 		} catch (error) {
-			console.error("Failed to start server:", error)
+			this.app.log.error("Failed to start server:", error)
 			throw error
 		}
 	}
@@ -528,7 +528,7 @@ export class FastifyServer {
 
 			await this.app.close()
 			this.isRunning = false
-			console.log("🛑 API Server stopped")
+			this.app.log.info("🛑 API Server stopped")
 		}
 	}
 
@@ -647,7 +647,7 @@ export class FastifyServer {
 			// Note: JobManager.startJob() already handles the execution
 			// This method is just for setup and monitoring
 		} catch (error) {
-			console.error(`Task execution error for job ${jobId}:`, error)
+			this.app.log.error(`Task execution error for job ${jobId}:`, error)
 			await sseAdapter.emitError(error instanceof Error ? error : new Error(String(error)))
 		}
 		// Note: Don't close the stream here - let JobManager handle it
