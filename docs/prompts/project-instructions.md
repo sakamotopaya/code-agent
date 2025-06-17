@@ -8,7 +8,7 @@ All code paths have to be able to use the tools and mcp server functionality.
 
 all along, our solution when, for instance, the CLI needs console, the API needs SSE, and the VS code extension uses UI.. is to use interfaces and adapters. it seems to me you are going beyond that and reimpleting core code when really the core code needs to use the interface
 
-WE are only testing the CLI and API durring development:
+WE are only testing the CLI and API during development:
 You can run the CLI by changing to src folder and then run:
 npm run start:cli --silent -- --config ~/.agentz/agent-config.json --batch "use the github mcp server to summarize issue #8. you can run git status or git remote to get the repo name" --verbose
 
