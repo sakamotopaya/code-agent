@@ -110,6 +110,10 @@ export interface CoreInterfaces {
 	storage: IStorageService
 }
 
+// Re-export data layer abstractions
+export type * from "../data/interfaces"
+export type * from "../data/types/entities"
+
 /**
  * Factory function type for creating platform-specific implementations
  * of the core interfaces.
