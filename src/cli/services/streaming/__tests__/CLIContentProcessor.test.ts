@@ -192,6 +192,7 @@ describe("CLIContentProcessor", () => {
 				currentToolName: "read_file",
 				tagStack: ["read_file"],
 				pendingContent: "",
+				inAttemptCompletion: false,
 			}
 			mockMessageBuffer.getState.mockReturnValue(expectedState)
 
