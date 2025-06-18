@@ -53,6 +53,10 @@ export interface RepositoryContainer {
 	provider: IProviderRepository
 	context: IContextRepository
 	task: ITaskRepository
+
+	// Lifecycle methods
+	initialize?(): Promise<void>
+	dispose?(): Promise<void>
 }
 
 import type { IWorkspaceRepository } from "./IWorkspaceRepository"

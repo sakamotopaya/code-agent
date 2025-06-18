@@ -1,5 +1,14 @@
 /**
- * External data adapter interface for communicating with external applications
+ * External data adapter interface for NPM package integration
+ *
+ * When code-agent is used as an NPM package dependency, the external application
+ * implements this interface to provide data layer access to code-agent.
+ *
+ * Usage:
+ * 1. External app: npm install code-agent
+ * 2. External app: implements IExternalDataAdapter
+ * 3. External app: passes adapter to code-agent's RepositoryFactory
+ * 4. Code-agent: uses adapter to access external app's data layer
  */
 
 import { QueryOptions, SearchOptions } from "../interfaces/IRepository"

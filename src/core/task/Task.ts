@@ -90,6 +90,9 @@ import { IFileSystem } from "../interfaces/IFileSystem"
 import { ITerminal } from "../interfaces/ITerminal"
 import { IBrowser } from "../interfaces/IBrowser"
 
+// Data layer imports
+import { RepositoryContainer } from "../data/interfaces"
+
 // Modular components
 import { TaskMessaging } from "./TaskMessaging"
 import { TaskLifecycle } from "./TaskLifecycle"
@@ -141,6 +144,8 @@ export type TaskOptions = {
 	mcpAutoConnect?: boolean
 	mcpTimeout?: number
 	mcpRetries?: number
+	// Data layer support
+	repositories?: RepositoryContainer
 }
 
 export class Task extends EventEmitter<ClineEvents> {
@@ -212,6 +217,9 @@ export class Task extends EventEmitter<ClineEvents> {
 	private messaging: TaskMessaging
 	private lifecycle: TaskLifecycle
 	private apiHandler: TaskApiHandler
+
+	// Data layer support (optional)
+	private repositories?: RepositoryContainer
 
 	// Logging methods
 	private logDebug(message: string, ...args: any[]): void {
@@ -400,6 +408,15 @@ export class Task extends EventEmitter<ClineEvents> {
 		return this.telemetryService
 	}
 
+	// Data layer access
+	get dataRepositories(): RepositoryContainer | undefined {
+		return this.repositories
+	}
+
+	get hasDataLayer(): boolean {
+		return !!this.repositories
+	}
+
 	// Messaging compatibility
 	get lastMessageTs() {
 		return this.messaging.lastMessageTs
@@ -435,6 +452,7 @@ export class Task extends EventEmitter<ClineEvents> {
 		mcpAutoConnect = true,
 		mcpTimeout,
 		mcpRetries,
+		repositories,
 	}: TaskOptions) {
 		super()
 
@@ -456,6 +474,7 @@ export class Task extends EventEmitter<ClineEvents> {
 		this.telemetryService = telemetry
 		this.cliUIService = cliUIService
 		this.verbose = verbose
+		this.repositories = repositories
 
 		// Store MCP configuration
 		this.mcpConfigPath = mcpConfigPath
@@ -592,6 +611,16 @@ export class Task extends EventEmitter<ClineEvents> {
 		if (this.cliMcpService) {
 			this.logDebug("[Task] Releasing reference to shared MCP service...")
 			this.cliMcpService = undefined
+		}
+
+		// Clean up data layer repositories if present
+		if (this.repositories?.dispose) {
+			try {
+				await this.repositories.dispose()
+				this.logDebug("[Task] Data layer repositories disposed")
+			} catch (error) {
+				this.logError("[Task] Error disposing data layer repositories:", error)
+			}
 		}
 	}
 
