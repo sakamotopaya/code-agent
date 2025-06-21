@@ -30,7 +30,7 @@ export default [
 		},
 	},
 	{
-		files: ["test-run-output/**/*.js", "**/__tests__/**/*.js", "temp/**/*.js"],
+		files: ["test-run-output/**/*.js", "**/__tests__/**/*.js", "temp/**/*.js", "test-cli-simple.js"],
 		languageOptions: {
 			globals: {
 				require: "readonly",

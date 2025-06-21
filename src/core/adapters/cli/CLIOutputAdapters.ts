@@ -91,11 +91,12 @@ export class CLIOutputAdapter implements IOutputAdapter {
 			case "tool_use":
 				console.log(`🔧 Tool: ${message.toolName || "Unknown"} - ${message.text || message.message || ""}`)
 				break
-			case "state":
+			case "state": {
 				// Don't spam console with full state, but show key info
 				const state = message.state || message
 				console.log(`📊 State updated - Mode: ${state?.mode}, Tasks: ${state?.taskHistory?.length || 0}`)
 				break
+			}
 			case "reasoning":
 				if (this.useColor) {
 					console.log(chalk.gray(`🤔 ${message.text || message.message || ""}`))
