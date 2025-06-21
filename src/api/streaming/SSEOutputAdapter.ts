@@ -21,7 +21,7 @@ import { ApiQuestionManager } from "../questions/ApiQuestionManager"
  */
 export class SSEOutputAdapter implements IUserInterface {
 	private streamManager: StreamManager
-	private jobId: string
+	public readonly jobId: string
 	private logger = getCLILogger()
 	private questionCounter = 0
 	private messageBuffer: MessageBuffer
@@ -395,8 +395,16 @@ export class SSEOutputAdapter implements IUserInterface {
 	 * Emit a completion event
 	 */
 	async emitCompletion(message: string = "Task completed", result?: any): Promise<void> {
+		const startTime = Date.now()
+		console.log(`[SSE-COMPLETION] 🎯 emitCompletion() called at ${new Date().toISOString()}`)
+		console.log(
+			`[SSE-COMPLETION] 📝 Message content: "${message.substring(0, 200)}${message.length > 200 ? "..." : ""}" (${message.length} chars)`,
+		)
+		console.log(`[SSE-COMPLETION] 🔧 Verbose mode: ${this.verbose}`)
+
 		if (this.verbose) {
 			// In verbose mode, pass through unchanged
+			console.log(`[SSE-COMPLETION] 📤 Verbose mode - emitting single event`)
 			const event: SSEEvent = {
 				type: SSE_EVENTS.COMPLETION,
 				jobId: this.jobId,
@@ -404,12 +412,29 @@ export class SSEOutputAdapter implements IUserInterface {
 				message,
 				result,
 			}
+			console.log(`[SSE-COMPLETION] 📤 About to emit single event with timestamp: ${event.timestamp}`)
 			this.emitEvent(event)
 		} else {
 			// In non-verbose mode, use MessageBuffer to filter content
+			console.log(`[SSE-COMPLETION] 🔄 Non-verbose mode - processing through MessageBuffer`)
+			const bufferStartTime = Date.now()
 			const processedMessages = this.messageBuffer.processMessage(message)
+			const bufferEndTime = Date.now()
 
+			console.log(`[SSE-COMPLETION] 🔄 MessageBuffer processing took ${bufferEndTime - bufferStartTime}ms`)
+			console.log(`[SSE-COMPLETION] 📊 Generated ${processedMessages.length} processed messages`)
+
+			let eventIndex = 0
 			for (const processedMessage of processedMessages) {
+				const eventStartTime = Date.now()
+				console.log(`[SSE-COMPLETION] 📋 Processing message ${eventIndex + 1}/${processedMessages.length}:`)
+				console.log(
+					`[SSE-COMPLETION] 📋   Content: "${processedMessage.content.substring(0, 100)}${processedMessage.content.length > 100 ? "..." : ""}" (${processedMessage.content.length} chars)`,
+				)
+				console.log(`[SSE-COMPLETION] 📋   ContentType: ${processedMessage.contentType}`)
+				console.log(`[SSE-COMPLETION] 📋   IsComplete: ${processedMessage.isComplete}`)
+				console.log(`[SSE-COMPLETION] 📋   ToolName: ${processedMessage.toolName}`)
+
 				// Only emit events for content that should be shown to users
 				if (this.shouldEmitContentType(processedMessage.contentType)) {
 					const event: SSEEvent = {
@@ -422,10 +447,25 @@ export class SSEOutputAdapter implements IUserInterface {
 						isComplete: processedMessage.isComplete,
 						toolName: processedMessage.toolName,
 					}
+					console.log(
+						`[SSE-COMPLETION] 📤 About to emit event ${eventIndex + 1} with timestamp: ${event.timestamp}`,
+					)
 					this.emitEvent(event)
+					const eventEndTime = Date.now()
+					console.log(
+						`[SSE-COMPLETION] ✅ Event ${eventIndex + 1} emitted in ${eventEndTime - eventStartTime}ms`,
+					)
+				} else {
+					console.log(
+						`[SSE-COMPLETION] ❌ Skipping event ${eventIndex + 1} - content type ${processedMessage.contentType} not allowed`,
+					)
 				}
+				eventIndex++
 			}
 		}
+
+		const endTime = Date.now()
+		console.log(`[SSE-COMPLETION] ✅ emitCompletion() completed in ${endTime - startTime}ms`)
 	}
 
 	/**
@@ -485,6 +525,30 @@ export class SSEOutputAdapter implements IUserInterface {
 	}
 
 	/**
+	 * Emit raw content immediately via SSE with proper verbose filtering
+	 * Used specifically for immediate LLM response streaming
+	 */
+	async emitRawChunk(chunk: string): Promise<void> {
+		// Bypass MessageBuffer filtering and emit immediately for real-time streaming
+		const event: SSEEvent = {
+			type: SSE_EVENTS.PROGRESS,
+			jobId: this.jobId,
+			timestamp: new Date().toISOString(),
+			message: chunk,
+			contentType: "content", // Assume content type for raw streaming
+		}
+		this.emitEvent(event)
+	}
+
+	/**
+	 * Public method to emit SSE events
+	 * Used by output adapters to send processed content
+	 */
+	async emitSSEEvent(event: SSEEvent): Promise<void> {
+		this.emitEvent(event)
+	}
+
+	/**
 	 * Close the SSE stream and cleanup questions
 	 */
 	close(): void {
@@ -514,7 +578,7 @@ export class SSEOutputAdapter implements IUserInterface {
 	 * Configure which content types should be shown to users
 	 * Can be called to customize filtering behavior beyond the default
 	 */
-	private allowedContentTypes = new Set<ContentType>(["content", "tool_result"])
+	private allowedContentTypes = new Set<ContentType>(["content", "tool_call", "tool_result"])
 
 	/**
 	 * Update content filtering configuration
@@ -555,6 +619,6 @@ export class SSEOutputAdapter implements IUserInterface {
 	 * Reset to default content filtering (only content and tool_result)
 	 */
 	resetContentFilter(): void {
-		this.allowedContentTypes = new Set(["content", "tool_result"])
+		this.allowedContentTypes = new Set(["content", "tool_call", "tool_result"])
 	}
 }

@@ -18,6 +18,8 @@ import { ClineApiReqCancelReason, ClineApiReqInfo } from "../../shared/Extension
 import { findLastIndex } from "../../shared/array"
 import { formatResponse } from "../prompts/responses"
 import { getCLILogger } from "../../cli/services/CLILogger"
+import { IStreamingAdapter, IContentOutputAdapter } from "../interfaces/IOutputAdapter"
+import { IContentProcessor } from "../interfaces/IContentProcessor"
 
 /**
  * Handles API requests and streaming for the Task class
@@ -49,6 +51,7 @@ export class TaskApiHandler {
 		private onMessage?: (action: "created" | "updated", message: any) => void,
 		private cliMode: boolean = false,
 		private cliApiConfiguration?: any,
+		private taskRef?: WeakRef<any>, // Task reference to access userInterface
 	) {
 		// Detect CLI mode if no provider is available
 		if (!providerRef) {
@@ -604,13 +607,27 @@ export class TaskApiHandler {
 								`[TaskApiHandler] Assistant message content updated, length: ${this.assistantMessageContent.length}`,
 							)
 
-							// Stream LLM output to terminal in CLI mode
-							if (this.cliMode && chunk.text) {
-								getCLILogger().streamLLMOutput(chunk.text)
+							// Stream chunk through unified output adapter (CLI, API, or VSCode)
+							if (chunk.text) {
+								try {
+									await this.messaging.streamChunk(chunk.text)
+									this.log(
+										`[TaskApiHandler] Streamed chunk through unified messaging system: ${chunk.text.substring(0, 100)}...`,
+									)
+								} catch (error) {
+									this.log(`[TaskApiHandler] Error streaming chunk through messaging system:`, error)
+								}
 							}
 
-							// Always stream AI response text through messaging system for SSE/userInterface
+							// Still send through messaging system for persistence (but not for immediate streaming)
 							if (chunk.text) {
+								console.log(
+									`[MESSAGING-PERSISTENCE] 📦 About to send chunk to messaging system for persistence`,
+								)
+								console.log(
+									`[MESSAGING-PERSISTENCE] 📝 Chunk: "${chunk.text.substring(0, 100)}${chunk.text.length > 100 ? "..." : ""}" (${chunk.text.length} chars)`,
+								)
+
 								try {
 									// Send AI response text through messaging system with proper callback for Task event emission
 									this.messaging
@@ -627,12 +644,18 @@ export class TaskApiHandler {
 											this.onMessage,
 										)
 										.catch((error) => {
+											console.log(
+												`[MESSAGING-PERSISTENCE] ❌ Error in messaging say call:`,
+												error,
+											)
 											this.log(`[TaskApiHandler] Error in say call:`, error)
 										})
+									console.log(`[MESSAGING-PERSISTENCE] ✅ Sent to messaging system successfully`)
 									this.log(
-										`[TaskApiHandler] Streamed text chunk to messaging system: ${chunk.text.substring(0, 100)}...`,
+										`[TaskApiHandler] Sent to messaging system for persistence: ${chunk.text.substring(0, 100)}...`,
 									)
 								} catch (error) {
+									console.log(`[MESSAGING-PERSISTENCE] ❌ Error in messaging system:`, error)
 									this.log(`[TaskApiHandler] Error streaming text to messaging:`, error)
 								}
 							}

@@ -89,6 +89,9 @@ import { type AssistantMessageContent } from "../assistant-message"
 import { IFileSystem } from "../interfaces/IFileSystem"
 import { ITerminal } from "../interfaces/ITerminal"
 import { IBrowser } from "../interfaces/IBrowser"
+import { IUserInterface } from "../interfaces/IUserInterface"
+import { IStreamingAdapter, IContentOutputAdapter } from "../interfaces/IOutputAdapter"
+import { IContentProcessor } from "../interfaces/IContentProcessor"
 
 // Data layer imports
 import { RepositoryContainer } from "../data/interfaces"
@@ -133,6 +136,7 @@ export type TaskOptions = {
 	fileSystem?: IFileSystem
 	terminal?: ITerminal
 	browser?: IBrowser
+	userInterface?: IUserInterface
 	telemetry?: ITelemetryService
 	globalStoragePath?: string
 	workspacePath?: string
@@ -203,6 +207,7 @@ export class Task extends EventEmitter<ClineEvents> {
 	private terminal?: ITerminal
 	private browser?: IBrowser
 	private telemetryService?: ITelemetryService
+	private _userInterface?: IUserInterface
 	private cliUIService?: any // CLIUIService instance for CLI mode
 	private verbose: boolean = false
 
@@ -368,6 +373,15 @@ export class Task extends EventEmitter<ClineEvents> {
 		return this.browser
 	}
 
+	get userInterface(): IUserInterface {
+		if (!this._userInterface) {
+			throw new Error(
+				"UserInterface interface not available. Make sure the Task was initialized with a userInterface interface.",
+			)
+		}
+		return this._userInterface
+	}
+
 	get telemetry(): ITelemetryService {
 		if (!this.telemetryService) {
 			// Fallback to global telemetry service for compatibility
@@ -443,6 +457,7 @@ export class Task extends EventEmitter<ClineEvents> {
 		fileSystem,
 		terminal,
 		browser,
+		userInterface,
 		telemetry,
 		globalStoragePath,
 		workspacePath,
@@ -471,6 +486,7 @@ export class Task extends EventEmitter<ClineEvents> {
 		this.fileSystem = fileSystem
 		this.terminal = terminal
 		this.browser = browser
+		this._userInterface = userInterface
 		this.telemetryService = telemetry
 		this.cliUIService = cliUIService
 		this.verbose = verbose
@@ -490,6 +506,29 @@ export class Task extends EventEmitter<ClineEvents> {
 			this.globalStoragePath = globalStoragePath || path.join(os.homedir(), ".roo-code")
 		}
 
+		// Create appropriate output adapter based on mode
+		let outputAdapter: import("../interfaces/IOutputAdapter").IOutputAdapter | undefined
+
+		try {
+			if (provider) {
+				// VSCode Extension mode - will implement VSCode adapter later
+				console.log("[Task] VSCode mode detected - using legacy provider methods for now")
+				outputAdapter = undefined // Will fall back to legacy provider methods
+			} else if (userInterface) {
+				// API mode - will implement SSE adapter later
+				console.log("[Task] API mode detected - using legacy userInterface for now")
+				outputAdapter = undefined // Will implement SSE adapter later
+			} else {
+				// CLI mode - use CLI output adapter
+				console.log("[Task] CLI mode detected - using CLI output adapter")
+				const { CLIOutputAdapter } = require("../adapters/cli/CLIOutputAdapters")
+				outputAdapter = new CLIOutputAdapter(this.globalStoragePath)
+			}
+		} catch (error) {
+			console.error("[Task] Error creating output adapter:", error)
+			outputAdapter = undefined // Fall back to legacy methods
+		}
+
 		// Initialize modular components
 		this.messaging = new TaskMessaging(
 			this.taskId,
@@ -498,6 +537,7 @@ export class Task extends EventEmitter<ClineEvents> {
 			this.globalStoragePath,
 			this.workspacePath,
 			this.providerRef,
+			outputAdapter,
 		)
 
 		this.lifecycle = new TaskLifecycle(
@@ -539,8 +579,9 @@ export class Task extends EventEmitter<ClineEvents> {
 			(taskId, tokenUsage) => this.emit("taskTokenUsageUpdated", taskId, tokenUsage),
 			(taskId, tool, error) => this.emit("taskToolFailed", taskId, tool, error),
 			(action, message) => this.emit("message", { action, message }), // onMessage callback
-			!provider, // cliMode - true if no provider
-			apiConfiguration, // cliApiConfiguration
+			!provider && !this._userInterface, // cliMode - true only if no provider AND no userInterface (true CLI mode)
+			undefined, // cliApiConfiguration
+			new WeakRef(this), // taskRef - reference to this Task instance
 		)
 
 		// For backward compatibility with VS Code extension

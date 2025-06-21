@@ -152,6 +152,10 @@ export class StdioMcpConnection extends BaseMcpConnection {
 		}
 
 		// Call parent disconnect method with aggressive timeout for CLI mode
+		if (this.verbose) {
+			console.log(`[StdioMcp] About to call super.disconnect() for ${this.config.name}`)
+		}
+		const parentDisconnectStartTime = Date.now()
 		const parentDisconnectPromise = super.disconnect()
 
 		try {
@@ -165,8 +169,11 @@ export class StdioMcpConnection extends BaseMcpConnection {
 					(_, reject) => setTimeout(() => reject(new Error("Parent disconnect timeout")), 1000), // Reduced from 3000ms to 1000ms
 				),
 			])
+			const parentDisconnectDuration = Date.now() - parentDisconnectStartTime
 			if (this.verbose) {
-				console.log(`[StdioMcp] Parent disconnect completed for ${this.config.name}`)
+				console.log(
+					`[StdioMcp] Parent disconnect completed for ${this.config.name} in ${parentDisconnectDuration}ms`,
+				)
 			}
 		} catch (error) {
 			if (this.verbose) {

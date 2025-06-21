@@ -77,6 +77,10 @@ export type {
 export type { ITelemetryService } from "./ITelemetryService"
 export type { IStorageService } from "./IStorageService"
 
+// Content processing and output interfaces
+export type { IContentProcessor, ProcessedContent } from "./IContentProcessor"
+export type { IStreamingAdapter, IContentOutputAdapter } from "./IOutputAdapter"
+
 // Import the interfaces for use in CoreInterfaces
 import type { IUserInterface } from "./IUserInterface"
 import type { IFileSystem } from "./IFileSystem"

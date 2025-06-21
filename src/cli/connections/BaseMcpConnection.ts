@@ -91,12 +91,42 @@ export abstract class BaseMcpConnection implements McpConnection {
 
 			// Close client connection
 			if (this.client) {
-				await this.client.close()
+				console.log(`[BaseMcp] About to call client.close() for ${this.config.name}`)
+				const clientCloseStartTime = Date.now()
+				try {
+					await this.client.close()
+					const clientCloseDuration = Date.now() - clientCloseStartTime
+					console.log(
+						`[BaseMcp] client.close() completed for ${this.config.name} in ${clientCloseDuration}ms`,
+					)
+				} catch (error) {
+					const clientCloseDuration = Date.now() - clientCloseStartTime
+					console.log(
+						`[BaseMcp] client.close() failed for ${this.config.name} after ${clientCloseDuration}ms:`,
+						error,
+					)
+					throw error
+				}
 			}
 
 			// Close transport
 			if (this.transport) {
-				await this.transport.close()
+				console.log(`[BaseMcp] About to call transport.close() for ${this.config.name}`)
+				const transportCloseStartTime = Date.now()
+				try {
+					await this.transport.close()
+					const transportCloseDuration = Date.now() - transportCloseStartTime
+					console.log(
+						`[BaseMcp] transport.close() completed for ${this.config.name} in ${transportCloseDuration}ms`,
+					)
+				} catch (error) {
+					const transportCloseDuration = Date.now() - transportCloseStartTime
+					console.log(
+						`[BaseMcp] transport.close() failed for ${this.config.name} after ${transportCloseDuration}ms:`,
+						error,
+					)
+					throw error
+				}
 			}
 
 			this.status = "disconnected"

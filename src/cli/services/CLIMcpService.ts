@@ -185,8 +185,26 @@ export class CLIMcpService implements ICLIMcpService {
 		this.stopHealthCheck(serverId)
 
 		logger.debug(`CLIMcpService: Calling connection.disconnect() for ${serverId}`)
-		// Disconnect
-		await connection.disconnect()
+		// Disconnect with detailed timing logging
+		const disconnectStartTime = Date.now()
+		logger.debug(
+			`[DISCONNECT-DEBUG] Starting connection.disconnect() for ${serverId} at ${new Date().toISOString()}`,
+		)
+
+		try {
+			await connection.disconnect()
+			const disconnectDuration = Date.now() - disconnectStartTime
+			logger.debug(
+				`[DISCONNECT-DEBUG] Connection.disconnect() completed for ${serverId} in ${disconnectDuration}ms`,
+			)
+		} catch (error) {
+			const disconnectDuration = Date.now() - disconnectStartTime
+			logger.debug(
+				`[DISCONNECT-DEBUG] Connection.disconnect() failed for ${serverId} after ${disconnectDuration}ms:`,
+				error,
+			)
+			throw error
+		}
 
 		logger.debug(`CLIMcpService: Connection.disconnect() completed for ${serverId}, removing from connections`)
 		// Remove from connections

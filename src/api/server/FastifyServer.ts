@@ -12,6 +12,8 @@ import { Task } from "../../core/task/Task"
 import { createApiAdapters } from "../../core/adapters/api"
 import { TaskExecutionOrchestrator, ApiTaskExecutionHandler } from "../../core/task/execution"
 import { getStoragePath } from "../../shared/paths"
+import { SharedContentProcessor } from "../../core/content/SharedContentProcessor"
+import { SSEStreamingAdapter, SSEContentOutputAdapter } from "../../core/adapters/api/SSEOutputAdapters"
 
 /**
  * Fastify-based API server implementation
@@ -154,11 +156,21 @@ export class FastifyServer {
 					"Access-Control-Allow-Headers": "Cache-Control",
 				})
 
+				// Disable TCP buffering for immediate streaming
+				if ((reply.raw as any).socket) {
+					;(reply.raw as any).socket.setNoDelay(true)
+				}
+
 				// Create SSE stream
 				const stream = this.streamManager.createStream(reply.raw, job.id)
 
 				// Create SSE adapter for this job with verbose flag and shared question manager
 				const sseAdapter = new SSEOutputAdapter(this.streamManager, job.id, verbose, this.questionManager)
+
+				// Create shared content processing components for SSE
+				const sharedContentProcessor = new SharedContentProcessor()
+				const sseStreamingAdapter = new SSEStreamingAdapter(sseAdapter)
+				const sseContentOutputAdapter = new SSEContentOutputAdapter(sseAdapter)
 
 				// Send initial start event
 				await sseAdapter.emitStart("Task started", task)
@@ -245,6 +257,10 @@ export class FastifyServer {
 					mcpRetries: this.config.getConfiguration().mcpRetries || 3,
 					// Use SSE adapter as CLI UI service equivalent for question handling
 					cliUIService: sseAdapter,
+					// Disable new adapters for now - go back to existing working logic
+					// streamingAdapter: sseStreamingAdapter,
+					// contentProcessor: sharedContentProcessor,
+					// contentOutputAdapter: sseContentOutputAdapter,
 				}
 
 				this.app.log.info(`Task options prepared for job ${job.id}`)
