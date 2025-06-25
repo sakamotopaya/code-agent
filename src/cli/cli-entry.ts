@@ -299,21 +299,22 @@ program
 			// Initialize MCP service if auto-connect is enabled
 			if (options.mcpAutoConnect) {
 				try {
-					getCLILogger().debug("[cli-entry] Initializing GlobalCLIMcpService...")
-					const { GlobalCLIMcpService } = await import("./services/GlobalCLIMcpService")
-					const globalMcpService = GlobalCLIMcpService.getInstance()
+					getCLILogger().debug("[cli-entry] Initializing UnifiedMcpService...")
+					const { UnifiedMcpService } = await import("./services/UnifiedMcpService")
+					const mcpService = UnifiedMcpService.getInstance()
 
 					// Initialize with MCP-specific options
-					await globalMcpService.initialize({
+					await mcpService.initialize({
 						mcpConfigPath: options.mcpConfig,
 						mcpAutoConnect: options.mcpAutoConnect,
 						mcpTimeout: options.mcpTimeout,
 						mcpRetries: options.mcpRetries,
 						verbose: options.verbose,
+						workingDirectory: options.cwd,
 					})
-					getCLILogger().debug("[cli-entry] GlobalCLIMcpService initialized successfully")
+					getCLILogger().debug("[cli-entry] UnifiedMcpService initialized successfully")
 				} catch (error) {
-					getCLILogger().warn("[cli-entry] Failed to initialize GlobalCLIMcpService:", error)
+					getCLILogger().warn("[cli-entry] Failed to initialize UnifiedMcpService:", error)
 					if (options.verbose) {
 						console.warn(
 							chalk.yellow("Warning: MCP initialization failed:"),
@@ -373,12 +374,12 @@ program
 						cleanupManager.registerCleanupTask(async () => {
 							if (options.mcpAutoConnect) {
 								try {
-									const { GlobalCLIMcpService } = await import("./services/GlobalCLIMcpService")
-									const globalMcpService = GlobalCLIMcpService.getInstance()
-									await globalMcpService.dispose()
-									getCLILogger().debug("[cli-entry] GlobalCLIMcpService disposed successfully")
+									const { UnifiedMcpService } = await import("./services/UnifiedMcpService")
+									const mcpService = UnifiedMcpService.getInstance()
+									await mcpService.dispose()
+									getCLILogger().debug("[cli-entry] UnifiedMcpService disposed successfully")
 								} catch (error) {
-									getCLILogger().warn("[cli-entry] Failed to dispose GlobalCLIMcpService:", error)
+									getCLILogger().warn("[cli-entry] Failed to dispose UnifiedMcpService:", error)
 								}
 							}
 						})
@@ -428,9 +429,9 @@ program
 						const cleanupManager = CleanupManager.getInstance()
 						cleanupManager.registerCleanupTask(async () => {
 							if (options.mcpAutoConnect) {
-								const { GlobalCLIMcpService } = await import("./services/GlobalCLIMcpService")
-								const globalMcpService = GlobalCLIMcpService.getInstance()
-								await globalMcpService.dispose()
+								const { UnifiedMcpService } = await import("./services/UnifiedMcpService")
+								const mcpService = UnifiedMcpService.getInstance()
+								await mcpService.dispose()
 							}
 						})
 						cleanupManager.registerCleanupTask(async () => {
@@ -487,9 +488,9 @@ program
 
 				cleanupManager.registerCleanupTask(async () => {
 					if (options.mcpAutoConnect) {
-						const { GlobalCLIMcpService } = await import("./services/GlobalCLIMcpService")
-						const globalMcpService = GlobalCLIMcpService.getInstance()
-						await globalMcpService.dispose()
+						const { UnifiedMcpService } = await import("./services/UnifiedMcpService")
+						const mcpService = UnifiedMcpService.getInstance()
+						await mcpService.dispose()
 					}
 				})
 

@@ -10,7 +10,6 @@ import { initializeGlobalLLMContentLogger, closeGlobalLLMContentLogger } from ".
 import { CLIContentProcessor } from "../services/streaming/CLIContentProcessor"
 import { CLIDisplayFormatter } from "../services/streaming/CLIDisplayFormatter"
 import { SharedContentProcessor } from "../../core/content/SharedContentProcessor"
-import { CLIStreamingAdapter, CLIContentOutputAdapter } from "../../core/adapters/cli/CLIOutputAdapters"
 
 interface BatchOptions extends CliAdapterOptions {
 	cwd: string
@@ -35,8 +34,6 @@ export class BatchProcessor {
 	private displayFormatter: CLIDisplayFormatter
 	// New shared components
 	private sharedContentProcessor: SharedContentProcessor
-	private cliStreamingAdapter: CLIStreamingAdapter
-	private cliContentOutputAdapter: CLIContentOutputAdapter
 
 	constructor(options: BatchOptions, configManager?: CliConfigManager) {
 		this.options = options
@@ -46,8 +43,6 @@ export class BatchProcessor {
 
 		// Initialize shared content processing components
 		this.sharedContentProcessor = new SharedContentProcessor()
-		this.cliStreamingAdapter = new CLIStreamingAdapter()
-		this.cliContentOutputAdapter = new CLIContentOutputAdapter(options.color)
 	}
 
 	private logDebug(message: string, ...args: any[]): void {
@@ -502,17 +497,11 @@ export class BatchProcessor {
 				this.logDebug(`[BatchProcessor] Response content captured: ${content.substring(0, 100)}...`)
 				this.logDebug(`[BatchProcessor] Message type: ${messageType}`)
 
-				// Display completion_result messages immediately - this is the final response the user wants to see
+				// Task's CLIOutputAdapter already handles output, no need to duplicate here
 				if (messageType === "completion_result" && content.trim()) {
-					// Process content through XML tag parsing pipeline to remove tags
-					const processedMessages = this.contentProcessor.processContent(content)
-					for (const processedMessage of processedMessages) {
-						const formattedContent = this.displayFormatter.formatContent(processedMessage)
-						if (formattedContent) {
-							console.log(formattedContent)
-						}
-					}
-					this.logDebug(`[BatchProcessor] Displayed processed completion_result content to user`)
+					this.logDebug(
+						`[BatchProcessor] Completion result detected - Task CLIOutputAdapter will handle output`,
+					)
 				}
 
 				// Clear existing timer
@@ -587,15 +576,15 @@ export class BatchProcessor {
 	 */
 	private async disposeMcpConnections(): Promise<void> {
 		try {
-			const { GlobalCLIMcpService } = await import("../services/GlobalCLIMcpService")
-			const globalMcpService = GlobalCLIMcpService.getInstance()
+			const { UnifiedMcpService } = await import("../services/UnifiedMcpService")
+			const mcpService = UnifiedMcpService.getInstance()
 
-			if (globalMcpService.isInitialized()) {
-				this.logDebug("[BatchProcessor] Disposing global MCP service...")
-				await globalMcpService.dispose()
-				this.logDebug("[BatchProcessor] Global MCP service disposed successfully")
+			if (mcpService.isInitialized()) {
+				this.logDebug("[BatchProcessor] Disposing unified MCP service...")
+				await mcpService.dispose()
+				this.logDebug("[BatchProcessor] Unified MCP service disposed successfully")
 			} else {
-				this.logDebug("[BatchProcessor] Global MCP service not initialized, nothing to dispose")
+				this.logDebug("[BatchProcessor] Unified MCP service not initialized, nothing to dispose")
 			}
 		} catch (error) {
 			this.logDebug("[BatchProcessor] Error disposing MCP connections:", error)

@@ -21,7 +21,6 @@ class MockTelemetryService {
 	captureSchemaValidationError() {}
 }
 
-// eslint-disable-next-line no-undef
 module.exports = {
 	BaseTelemetryClient,
 	TelemetryService: MockTelemetryService,

@@ -12,6 +12,7 @@ import { McpHub } from "../../services/mcp/McpHub"
 import { defaultModeSlug } from "../../shared/modes"
 import { ProviderSettingsManager } from "../config/ProviderSettingsManager"
 import { CustomModesManager } from "../config/CustomModesManager"
+import { ILogger, NoOpLogger } from "../interfaces/ILogger"
 
 export type CoreProviderEvents = {
 	taskCreated: [task: Task]
@@ -28,6 +29,7 @@ export class CoreProvider extends EventEmitter<CoreProviderEvents> {
 	protected mcpHub?: McpHub
 	protected providerSettingsManager?: ProviderSettingsManager
 	protected customModesManager?: CustomModesManager
+	protected logger: ILogger = new NoOpLogger()
 
 	constructor(
 		protected context: IProviderContext,
@@ -39,7 +41,7 @@ export class CoreProvider extends EventEmitter<CoreProviderEvents> {
 
 	// Task Stack Management
 	async addTaskToStack(task: Task) {
-		console.log(`[CoreProvider] Adding task ${task.taskId}.${task.instanceId} to stack`)
+		this.logger.debug(`[CoreProvider] Adding task ${task.taskId}.${task.instanceId} to stack`)
 		this.taskStack.push(task)
 
 		// Ensure state is properly synchronized
@@ -55,12 +57,12 @@ export class CoreProvider extends EventEmitter<CoreProviderEvents> {
 
 		const task = this.taskStack.pop()
 		if (task) {
-			console.log(`[CoreProvider] Removing task ${task.taskId}.${task.instanceId} from stack`)
+			this.logger.debug(`[CoreProvider] Removing task ${task.taskId}.${task.instanceId} from stack`)
 
 			try {
 				await task.abortTask(true)
 			} catch (error) {
-				console.error(`[CoreProvider] Error aborting task ${task.taskId}.${task.instanceId}:`, error)
+				this.logger.error(`[CoreProvider] Error aborting task ${task.taskId}.${task.instanceId}:`, error)
 			}
 		}
 
@@ -213,12 +215,13 @@ export class CoreProvider extends EventEmitter<CoreProviderEvents> {
 			globalStoragePath: this.context.getGlobalStoragePath(),
 			workspacePath: this.context.getWorkspacePath(),
 			telemetry: this.telemetry,
+			outputAdapter: this.outputAdapter, // Pass the provider's output adapter to prevent duplicate creation
 			...taskConfig.options,
 		})
 
 		await this.addTaskToStack(task)
 
-		console.log(
+		this.logger.debug(
 			`[CoreProvider] ${task.parentTask ? "child" : "parent"} task ${task.taskId}.${task.instanceId} created`,
 		)
 
@@ -227,7 +230,7 @@ export class CoreProvider extends EventEmitter<CoreProviderEvents> {
 
 	// Finish subtask (for task hierarchy)
 	async finishSubTask(lastMessage: string) {
-		console.log(`[CoreProvider] Finishing subtask: ${lastMessage}`)
+		this.logger.debug(`[CoreProvider] Finishing subtask: ${lastMessage}`)
 		await this.removeTaskFromStack()
 		await this.getCurrentTask()?.resumePausedTask(lastMessage)
 	}
@@ -275,6 +278,20 @@ export class CoreProvider extends EventEmitter<CoreProviderEvents> {
 
 	// Utility methods
 	protected log(message: string, ...args: any[]): void {
-		console.log(`[CoreProvider] ${message}`, ...args)
+		this.logger.debug(`[CoreProvider] ${message}`, ...args)
+	}
+
+	/**
+	 * Set or update the logger instance
+	 */
+	setLogger(logger: ILogger): void {
+		this.logger = logger
+	}
+
+	/**
+	 * Get the current logger instance
+	 */
+	getLogger(): ILogger {
+		return this.logger
 	}
 }

@@ -20,6 +20,7 @@ import { formatResponse } from "../prompts/responses"
 import { getCLILogger } from "../../cli/services/CLILogger"
 import { IStreamingAdapter, IContentOutputAdapter } from "../interfaces/IOutputAdapter"
 import { IContentProcessor } from "../interfaces/IContentProcessor"
+import { ILogger, NoOpLogger } from "../interfaces/ILogger"
 
 /**
  * Handles API requests and streaming for the Task class
@@ -38,6 +39,7 @@ export class TaskApiHandler {
 	private didRejectTool = false
 	private didAlreadyUseTool = false
 	private didCompleteReadingStream = false
+	private logger: ILogger
 
 	constructor(
 		private taskId: string,
@@ -52,7 +54,11 @@ export class TaskApiHandler {
 		private cliMode: boolean = false,
 		private cliApiConfiguration?: any,
 		private taskRef?: WeakRef<any>, // Task reference to access userInterface
+		logger?: ILogger,
 	) {
+		// Initialize logger
+		this.logger = logger || new NoOpLogger()
+
 		// Detect CLI mode if no provider is available
 		if (!providerRef) {
 			this.cliMode = true
@@ -60,11 +66,14 @@ export class TaskApiHandler {
 	}
 
 	private log(message: string, ...args: any[]): void {
-		if (this.cliMode) {
-			getCLILogger().debug(message, ...args)
-		} else {
-			console.log(message, ...args)
-		}
+		this.logger.debug(message, ...args)
+	}
+
+	/**
+	 * Set or update the logger instance
+	 */
+	setLogger(logger: ILogger): void {
+		this.logger = logger
 	}
 
 	async *attemptApiRequest(
@@ -151,33 +160,35 @@ export class TaskApiHandler {
 
 			// Determine API handler to use for condensing
 			if (condensingApiConfigId && listApiConfigMeta && Array.isArray(listApiConfigMeta)) {
-				console.log(
+				this.logger.debug(
 					`[TaskApiHandler.attemptApiRequest] Looking for condensing config with ID: ${condensingApiConfigId}`,
 				)
 				const matchingConfig = listApiConfigMeta.find((config: any) => config.id === condensingApiConfigId)
-				console.log(`[TaskApiHandler.attemptApiRequest] Matching config found: ${!!matchingConfig}`)
+				this.logger.debug(`[TaskApiHandler.attemptApiRequest] Matching config found: ${!!matchingConfig}`)
 
 				if (matchingConfig) {
-					console.log(`[TaskApiHandler.attemptApiRequest] Getting profile for condensing config`)
+					this.logger.debug(`[TaskApiHandler.attemptApiRequest] Getting profile for condensing config`)
 					const profile = await this.providerRef?.deref()?.providerSettingsManager.getProfile({
 						id: condensingApiConfigId,
 					})
-					console.log(`[TaskApiHandler.attemptApiRequest] Profile retrieved:`, {
+					this.logger.debug(`[TaskApiHandler.attemptApiRequest] Profile retrieved:`, {
 						hasProfile: !!profile,
 						apiProvider: profile?.apiProvider,
 					})
 
 					if (profile && profile.apiProvider) {
-						console.log(`[TaskApiHandler.attemptApiRequest] Building condensing API handler`)
+						this.logger.debug(`[TaskApiHandler.attemptApiRequest] Building condensing API handler`)
 						try {
 							const { buildApiHandler } = await import("../../api")
-							console.log(`[TaskApiHandler.attemptApiRequest] buildApiHandler imported successfully`)
+							this.logger.debug(
+								`[TaskApiHandler.attemptApiRequest] buildApiHandler imported successfully`,
+							)
 							condensingApiHandler = buildApiHandler(profile)
-							console.log(
+							this.logger.debug(
 								`[TaskApiHandler.attemptApiRequest] Condensing API handler created: ${!!condensingApiHandler}`,
 							)
 						} catch (error) {
-							console.error(
+							this.logger.error(
 								`[TaskApiHandler.attemptApiRequest] Failed to build condensing API handler:`,
 								error,
 							)
@@ -203,7 +214,7 @@ export class TaskApiHandler {
 
 		// Only show rate limiting message if we're not retrying
 		if (rateLimitDelay > 0 && retryAttempt === 0) {
-			console.log(`[TaskApiHandler.attemptApiRequest] Applying rate limit delay`)
+			this.logger.debug(`[TaskApiHandler.attemptApiRequest] Applying rate limit delay`)
 			for (let i = rateLimitDelay; i > 0; i--) {
 				const delayMessage = `Rate limiting for ${i} seconds...`
 				await this.messaging.say(
@@ -621,11 +632,11 @@ export class TaskApiHandler {
 
 							// Still send through messaging system for persistence (but not for immediate streaming)
 							if (chunk.text) {
-								console.log(
-									`[MESSAGING-PERSISTENCE] 📦 About to send chunk to messaging system for persistence`,
+								this.logger.debug(
+									`[MESSAGING-PERSISTENCE] About to send chunk to messaging system for persistence`,
 								)
-								console.log(
-									`[MESSAGING-PERSISTENCE] 📝 Chunk: "${chunk.text.substring(0, 100)}${chunk.text.length > 100 ? "..." : ""}" (${chunk.text.length} chars)`,
+								this.logger.debug(
+									`[MESSAGING-PERSISTENCE] Chunk: "${chunk.text.substring(0, 100)}${chunk.text.length > 100 ? "..." : ""}" (${chunk.text.length} chars)`,
 								)
 
 								try {
@@ -644,18 +655,18 @@ export class TaskApiHandler {
 											this.onMessage,
 										)
 										.catch((error) => {
-											console.log(
-												`[MESSAGING-PERSISTENCE] ❌ Error in messaging say call:`,
+											this.logger.error(
+												`[MESSAGING-PERSISTENCE] Error in messaging say call:`,
 												error,
 											)
 											this.log(`[TaskApiHandler] Error in say call:`, error)
 										})
-									console.log(`[MESSAGING-PERSISTENCE] ✅ Sent to messaging system successfully`)
+									this.logger.debug(`[MESSAGING-PERSISTENCE] Sent to messaging system successfully`)
 									this.log(
 										`[TaskApiHandler] Sent to messaging system for persistence: ${chunk.text.substring(0, 100)}...`,
 									)
 								} catch (error) {
-									console.log(`[MESSAGING-PERSISTENCE] ❌ Error in messaging system:`, error)
+									this.logger.error(`[MESSAGING-PERSISTENCE] Error in messaging system:`, error)
 									this.log(`[TaskApiHandler] Error streaming text to messaging:`, error)
 								}
 							}

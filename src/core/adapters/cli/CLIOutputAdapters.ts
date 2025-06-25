@@ -5,6 +5,9 @@ import { IOutputAdapter, IStreamingAdapter, IContentOutputAdapter } from "../../
 import { ProcessedContent, IContentProcessor } from "../../interfaces/IContentProcessor"
 import { ClineMessage, HistoryItem } from "@roo-code/types"
 import { SharedContentProcessor } from "../../content/SharedContentProcessor"
+import { ILogger, NoOpLogger } from "../../interfaces/ILogger"
+import { CLIOutputLogger, getGlobalCLIOutputLogger } from "./CLIOutputLogger"
+import { CLIStreamProcessor, CLIStreamOptions } from "./CLIStreamProcessor"
 
 /**
  * Comprehensive CLI output adapter implementing all functionality
@@ -15,12 +18,34 @@ export class CLIOutputAdapter implements IOutputAdapter {
 	private useColor: boolean
 	private configFile: string
 	private historyFile: string
+	private logger: ILogger
+	private outputLogger: CLIOutputLogger
+	private streamProcessor: CLIStreamProcessor
 
-	constructor(globalStoragePath: string, useColor: boolean = true) {
+	constructor(
+		globalStoragePath: string,
+		useColor: boolean = true,
+		logger?: ILogger,
+		cliOptions?: { showThinking?: boolean; showTools?: boolean },
+	) {
 		this.useColor = useColor
 		this.contentProcessor = new SharedContentProcessor()
 		this.configFile = path.join(globalStoragePath, "cli-state.json")
 		this.historyFile = path.join(globalStoragePath, "task-history.json")
+		this.logger = logger || new NoOpLogger()
+		this.outputLogger = getGlobalCLIOutputLogger()
+
+		// Initialize XML-aware stream processor
+		this.streamProcessor = new CLIStreamProcessor({
+			showThinking: cliOptions?.showThinking || false,
+			showTools: cliOptions?.showTools || false,
+			useColor,
+		})
+
+		// Initialize the output logger
+		this.outputLogger.initialize().catch((error) => {
+			console.error(`Failed to initialize CLI output logger: ${error}`)
+		})
 
 		// Ensure storage directory exists
 		this.ensureStorageDirectory(globalStoragePath)
@@ -30,47 +55,73 @@ export class CLIOutputAdapter implements IOutputAdapter {
 		try {
 			await fs.mkdir(storagePath, { recursive: true })
 		} catch (error) {
-			console.error(`❌ Failed to create storage directory: ${error}`)
+			this.logger.error(`Failed to create storage directory: ${error}`)
 		}
 	}
 
 	// Content Output
 	async outputContent(message: ClineMessage): Promise<void> {
-		if (!message.text) return
-
-		// 1. Immediate console output for user feedback
-		process.stdout.write(message.text)
-
-		// 2. Process content for structured display if needed
-		try {
-			const processedContent = await this.contentProcessor.processContent(message.text)
-			for (const item of processedContent) {
-				if (item.shouldDisplay) {
-					const formatted = this.applyCLIFormatting(item)
-					if (formatted && formatted !== message.text) {
-						console.log(formatted)
-					}
-				}
-			}
-		} catch (error) {
-			// If processing fails, continue with raw output
-			console.error(`Warning: Content processing failed: ${error}`)
-		}
+		// Log the method call
+		// await this.outputLogger.logMethodCall('outputContent', message.text, { type: message.type })
+		// if (!message.text) return
+		// // 1. Immediate console output for user feedback
+		//process.stdout.write(<string>message.text);
+		// // 2. Process content for structured display if needed
+		// try {
+		// 	const processedContent = await this.contentProcessor.processContent(message.text)
+		// 	for (const item of processedContent) {
+		// 		if (item.shouldDisplay) {
+		// 			const formatted = this.applyCLIFormatting(item)
+		// 			if (formatted && formatted !== message.text) {
+		// 				console.log(formatted)
+		// 			}
+		// 		}
+		// 	}
+		// } catch (error) {
+		// 	// If processing fails, continue with raw output
+		// 	console.error(`Warning: Content processing failed: ${error}`)
+		// }
 	}
 
 	async outputPartialContent(partialMessage: ClineMessage): Promise<void> {
+		// Log the method call
+		await this.outputLogger.logMethodCall("outputPartialContent", partialMessage.text, {
+			type: partialMessage.type,
+		})
+
 		if (!partialMessage.text) return
-		// For CLI, partial content is the same as regular content
-		process.stdout.write(partialMessage.text)
+
+		// Process content through XML-aware stream processor
+		const result = this.streamProcessor.processChunk(partialMessage.text)
+
+		// Only output if there's actual user-visible content
+		if (result.hasOutput) {
+			process.stdout.write(result.content)
+		}
 	}
 
 	async streamChunk(chunk: string): Promise<void> {
-		// Direct console output for immediate real-time streaming
-		process.stdout.write(chunk)
+		// Log the method call
+		//await this.outputLogger.logMethodCall('streamChunk', chunk)
+
+		// Process content through XML-aware stream processor
+		const result = this.streamProcessor.processChunk(chunk)
+
+		// Only output if there's actual user-visible content
+		if (result.hasOutput) {
+			process.stdout.write(result.content)
+		}
 	}
 
 	// Message Communication
 	async sendMessage(message: any): Promise<void> {
+		// Log the method call
+		const messageText = message.text || message.message || JSON.stringify(message)
+		await this.outputLogger.logMethodCall("sendMessage", messageText, {
+			type: message.type,
+			toolName: message.toolName,
+		})
+
 		// Output ALL messages appropriately to console
 		switch (message.type) {
 			case "error":
@@ -110,34 +161,64 @@ export class CLIOutputAdapter implements IOutputAdapter {
 	}
 
 	async sendPartialUpdate(partialMessage: any): Promise<void> {
+		// Log the method call
+		//await this.outputLogger.logMethodCall('sendPartialUpdate', partialMessage.text, { type: partialMessage.type })
+
 		// CLI doesn't need separate partial message handling
-		// Just output the content
+		// This is handled by streamChunk - avoid duplication
 		if (partialMessage.text) {
-			process.stdout.write(partialMessage.text)
+			//process.stdout.write(`[CLIOutputAdapter.sendPartialUpdate] SKIPPED - ${partialMessage.text.substring(0, 20)}...`)
+			//process.stdout.write(partialMessage.text);
 		}
 	}
 
 	// State Management
 	async syncState(state: any): Promise<void> {
+		// Log the method call
+		// await this.outputLogger.logMethodCall('syncState', 'State synchronization', {
+		// 	mode: state.mode,
+		// 	apiProvider: state.apiConfiguration?.apiProvider
+		// })
+
 		try {
 			// Save complete state to file for persistence
 			await fs.writeFile(this.configFile, JSON.stringify(state, null, 2))
 
-			// Show key state info to console
-			console.log(
-				`📊 State synchronized - Mode: ${state.mode}, API: ${state.apiConfiguration?.apiProvider || "None"}`,
+			// Show key state info only in verbose mode
+			this.logger.debug(
+				`State synchronized - Mode: ${state.mode}, API: ${state.apiConfiguration?.apiProvider || "None"}`,
 			)
 		} catch (error) {
-			console.error(`❌ Failed to save state: ${error}`)
+			this.logger.error(`Failed to save state: ${error}`)
 		}
 	}
 
 	async notifyStateChange(changeType: string, data?: any): Promise<void> {
-		console.log(`📊 State changed: ${changeType}${data ? ` - ${JSON.stringify(data)}` : ""}`)
+		// Log the method call
+		await this.outputLogger.logMethodCall("notifyStateChange", `State changed: ${changeType}`, data)
+
+		this.logger.debug(`State changed: ${changeType}${data ? ` - ${JSON.stringify(data)}` : ""}`)
+	}
+
+	/**
+	 * Set or update the logger instance
+	 */
+	setLogger(logger: ILogger): void {
+		this.logger = logger
+	}
+
+	/**
+	 * Get the current logger instance
+	 */
+	getLogger(): ILogger {
+		return this.logger
 	}
 
 	// Data Persistence
 	async updateTaskHistory(item: HistoryItem): Promise<HistoryItem[]> {
+		// Log the method call
+		await this.outputLogger.logMethodCall("updateTaskHistory", item.task, { id: item.id })
+
 		try {
 			// Load existing history
 			const history = await this.loadHistory()
@@ -169,6 +250,12 @@ export class CLIOutputAdapter implements IOutputAdapter {
 	}
 
 	async updatePersistentData(key: string, data: any): Promise<void> {
+		// Log the method call
+		await this.outputLogger.logMethodCall("updatePersistentData", `Updating persistent data for key: ${key}`, {
+			key,
+			dataType: typeof data,
+		})
+
 		try {
 			// Load current state
 			let currentState: any = {}
@@ -190,6 +277,11 @@ export class CLIOutputAdapter implements IOutputAdapter {
 	}
 
 	getPersistentData<T>(key: string): T | undefined {
+		// Log the method call (not awaited since this is a sync method)
+		this.outputLogger
+			.logMethodCall("getPersistentData", `Getting persistent data for key: ${key}`, { key })
+			.catch(() => {})
+
 		try {
 			// This is sync because it's a getter, but we'll need to implement async loading
 			// For now, return undefined and rely on async state loading
@@ -248,12 +340,21 @@ export class CLIOutputAdapter implements IOutputAdapter {
 
 	// Lifecycle
 	reset(): void {
+		// Log the method call (not awaited since this is a sync method)
+		this.outputLogger.logMethodCall("reset", "Resetting CLI output adapter").catch(() => {})
 		this.contentProcessor.reset()
+		this.streamProcessor.reset()
 	}
 
 	async dispose(): Promise<void> {
+		// Log the method call
+		await this.outputLogger.logMethodCall("dispose", "Disposing CLI output adapter")
+
 		// CLI doesn't need special disposal, but we could flush any pending writes
 		this.reset()
+
+		// Close the output logger
+		await this.outputLogger.close()
 	}
 }
 
@@ -264,11 +365,19 @@ export class CLIOutputAdapter implements IOutputAdapter {
  */
 export class CLIStreamingAdapter implements IStreamingAdapter {
 	async streamRawChunk(chunk: string): Promise<void> {
+		// Log the method call using global logger
+		const logger = getGlobalCLIOutputLogger()
+		await logger.logMethodCall("CLIStreamingAdapter.streamRawChunk", chunk)
+
 		// Direct console output for immediate feedback
-		process.stdout.write(chunk)
+		process.stdout.write(`[CLIStreamingAdapter.streamRawChunk] ${chunk}`)
 	}
 
 	reset(): void {
+		// Log the method call using global logger (not awaited since this is a sync method)
+		const logger = getGlobalCLIOutputLogger()
+		logger.logMethodCall("CLIStreamingAdapter.reset", "Resetting streaming adapter").catch(() => {})
+
 		// No state to reset for raw streaming
 	}
 }
@@ -286,6 +395,13 @@ export class CLIContentOutputAdapter implements IContentOutputAdapter {
 	}
 
 	async outputProcessedContent(content: ProcessedContent[]): Promise<void> {
+		// Log the method call using global logger
+		const logger = getGlobalCLIOutputLogger()
+		await logger.logMethodCall(
+			"CLIContentOutputAdapter.outputProcessedContent",
+			`Processing ${content.length} content items`,
+		)
+
 		for (const item of content) {
 			if (item.shouldDisplay) {
 				// Apply CLI-specific formatting (colors, etc.)
@@ -298,6 +414,10 @@ export class CLIContentOutputAdapter implements IContentOutputAdapter {
 	}
 
 	reset(): void {
+		// Log the method call using global logger (not awaited since this is a sync method)
+		const logger = getGlobalCLIOutputLogger()
+		logger.logMethodCall("CLIContentOutputAdapter.reset", "Resetting content output adapter").catch(() => {})
+
 		// No state to reset for CLI output
 	}
 
