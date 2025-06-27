@@ -3,6 +3,7 @@ import * as path from "path"
 import * as os from "os"
 import { z } from "zod"
 import { parse as parseYaml } from "yaml"
+import { getGlobalStoragePath } from "../../shared/paths"
 import {
 	type RooCodeSettings,
 	type ProviderSettings,
@@ -114,7 +115,7 @@ export class CliConfigManager {
 		this.options = {
 			cwd: process.cwd(),
 			verbose: false,
-			userConfigDir: path.join(os.homedir(), ".agentz"), // Default to CLI mode
+			userConfigDir: getGlobalStoragePath(), // Default to CLI mode
 			...options,
 		}
 	}

@@ -1,6 +1,7 @@
 import * as fs from "fs/promises"
 import * as path from "path"
 import * as os from "os"
+import { getGlobalStoragePath } from "../../shared/paths"
 import {
 	McpServerConfig,
 	McpServerInfo,
@@ -587,9 +588,9 @@ export class CLIMcpService implements ICLIMcpService {
 			// 2. Project Roo config
 			path.join(process.cwd(), ".agentz", "mcp_settings.json"),
 			// 3. Global Roo config
-			path.join(os.homedir(), ".agentz", "mcp_settings.json"),
+			path.join(getGlobalStoragePath(), "mcp_settings.json"),
 			// 4. Global CLI config
-			path.join(os.homedir(), ".agentz", MCP_CONFIG_FILENAME),
+			path.join(getGlobalStoragePath(), MCP_CONFIG_FILENAME),
 		]
 
 		// Try each path in order
@@ -603,7 +604,7 @@ export class CLIMcpService implements ICLIMcpService {
 		}
 
 		// If no config found, return the global CLI config path (will be created if needed)
-		return path.join(os.homedir(), ".agentz", MCP_CONFIG_FILENAME)
+		return path.join(getGlobalStoragePath(), MCP_CONFIG_FILENAME)
 	}
 
 	private startHealthCheck(serverId: string, interval: number): void {

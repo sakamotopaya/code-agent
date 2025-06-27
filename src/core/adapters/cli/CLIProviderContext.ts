@@ -1,6 +1,7 @@
 import * as fs from "fs/promises"
 import * as path from "path"
 import * as os from "os"
+import { getGlobalStoragePath } from "../../../shared/paths"
 import { IProviderContext } from "../../interfaces/IProviderContext"
 
 /**
@@ -17,7 +18,7 @@ export class CLIProviderContext implements IProviderContext {
 	private config: any = {}
 
 	constructor(options: { globalStoragePath?: string; workspacePath?: string; extensionPath?: string }) {
-		this.globalStoragePath = options.globalStoragePath || path.join(os.homedir(), ".agentz")
+		this.globalStoragePath = options.globalStoragePath || getGlobalStoragePath()
 		this.workspacePath = options.workspacePath || process.cwd()
 		this.extensionPath = options.extensionPath || __dirname
 		this.stateFile = path.join(this.globalStoragePath, "global-state.json")

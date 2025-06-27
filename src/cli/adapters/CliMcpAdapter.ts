@@ -1,6 +1,7 @@
 import * as fs from "fs/promises"
 import * as path from "path"
 import * as os from "os"
+import { getGlobalStoragePath as getSharedGlobalStoragePath } from "../../shared/paths"
 import { BaseMcpService, ServerConfig, McpConnection } from "../../services/mcp/BaseMcpService"
 import type {
 	IPlatformServices,
@@ -41,7 +42,7 @@ class CliFileSystemService implements IFileSystemService {
 	}
 
 	getGlobalStoragePath(): string {
-		return path.join(os.homedir(), ".agentz")
+		return getSharedGlobalStoragePath()
 	}
 
 	joinPath(...segments: string[]): string {

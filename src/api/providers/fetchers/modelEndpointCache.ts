@@ -1,5 +1,6 @@
 import * as path from "path"
 import fs from "fs/promises"
+import { getGlobalStoragePath } from "../../../shared/paths"
 
 import NodeCache from "node-cache"
 import sanitize from "sanitize-filename"
@@ -24,8 +25,7 @@ async function writeModelEndpoints(key: string, data: ModelRecord) {
 		globalStoragePath = ContextProxy.instance.globalStorageUri.fsPath
 	} catch (error) {
 		// Fallback for CLI usage
-		const os = require("os")
-		globalStoragePath = path.join(os.homedir(), ".roo-code")
+		globalStoragePath = getGlobalStoragePath()
 	}
 
 	const cacheDir = await getCacheDirectoryPath(globalStoragePath)
@@ -41,8 +41,7 @@ async function readModelEndpoints(key: string): Promise<ModelRecord | undefined>
 		globalStoragePath = ContextProxy.instance.globalStorageUri.fsPath
 	} catch (error) {
 		// Fallback for CLI usage
-		const os = require("os")
-		globalStoragePath = path.join(os.homedir(), ".roo-code")
+		globalStoragePath = getGlobalStoragePath()
 	}
 
 	const cacheDir = await getCacheDirectoryPath(globalStoragePath)

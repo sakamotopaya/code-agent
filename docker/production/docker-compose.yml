@@ -1,0 +1,159 @@
+# Roo Code Agent API - Production Docker Compose
+# Production-ready orchestration with security, monitoring, and SSE optimization
+
+services:
+  roo-api:
+    build:
+      context: ../../
+      dockerfile: docker/production/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-3000}:3000"
+    environment:
+      # Core Configuration
+      - NODE_ENV=production
+      - API_PORT=${API_PORT:-3000}
+      - API_HOST=0.0.0.0
+      - API_VERBOSE=${API_VERBOSE:-false}
+      - API_DEBUG=${API_DEBUG:-false}
+      
+      # Workspace Configuration
+      - API_WORKSPACE_ROOT=/app/workspace
+      - API_CLI_CONFIG_PATH=/app/config/agent-config.json
+      
+      # Storage Configuration (CRITICAL for state persistence)
+      - ROO_GLOBAL_STORAGE_PATH=/app/.roo-storage
+      - ROO_CLI_STORAGE_PATH=/app/.roo-cli
+      - API_STORAGE_ROOT=/app/.roo-storage
+      
+      # CORS Configuration
+      - API_CORS_ORIGIN=${API_CORS_ORIGIN:-*}
+      - API_CORS_CREDENTIALS=${API_CORS_CREDENTIALS:-true}
+      
+      # Security Configuration
+      - API_ENABLE_HELMET=${API_ENABLE_HELMET:-true}
+      - API_RATE_LIMIT_MAX=${API_RATE_LIMIT_MAX:-100}
+      - API_RATE_LIMIT_WINDOW=${API_RATE_LIMIT_WINDOW:-15m}
+      
+      # SSE Configuration
+      - API_SSE_HEARTBEAT_INTERVAL=${API_SSE_HEARTBEAT_INTERVAL:-30000}
+      - API_SSE_RETRY_TIMEOUT=${API_SSE_RETRY_TIMEOUT:-3000}
+      - API_SSE_MAX_CONNECTIONS=${API_SSE_MAX_CONNECTIONS:-100}
+      - API_STREAM_BUFFER_SIZE=${API_STREAM_BUFFER_SIZE:-1024}
+      
+      # Timeout Configuration
+      - API_REQUEST_TIMEOUT=${API_REQUEST_TIMEOUT:-30000}
+      - API_KEEP_ALIVE_TIMEOUT=${API_KEEP_ALIVE_TIMEOUT:-5000}
+      - API_TASK_TIMEOUT=${API_TASK_TIMEOUT:-600000}
+      
+      # MCP Configuration
+      - MCP_CONFIG_PATH=/app/config/mcp-config.json
+      - MCP_AUTO_CONNECT=${MCP_AUTO_CONNECT:-true}
+      - MCP_TIMEOUT=${MCP_TIMEOUT:-30000}
+      - MCP_RETRIES=${MCP_RETRIES:-3}
+      
+      # Health Check Configuration (separate from API_HOST)
+      - HEALTH_CHECK_HOST=localhost
+      - HEALTH_CHECK_PORT=3000
+      - HEALTH_CHECK_TIMEOUT=10
+      - HEALTH_CHECK_VERBOSE=false
+      
+      # External API Keys (from host environment)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DATABASE_URL=${DATABASE_URL}
+      - MSSQL_CONNECTION_STRING=${MSSQL_CONNECTION_STRING}
+    
+    volumes:
+      # Workspace (read-write)
+      - ${WORKSPACE_PATH:-./workspace}:/app/workspace:rw
+      
+      # Configuration (read-write for MCP server configs)
+      - ${CONFIG_PATH:-./config}:/app/config:rw
+      
+      # Global storage mounting (CRITICAL: Puppeteer, checkpoints, cache, MCP state)
+      - ${ROO_STORAGE_PATH:-./storage}:/app/.roo-storage:rw
+      
+      # CLI storage mounting (session history, REPL state)
+      - ${ROO_CLI_STORAGE_PATH:-./cli-storage}:/app/.roo-cli:rw
+      
+      # Logs (persistent)
+      - api-logs:/app/logs:rw
+      
+      # Temporary files (tmpfs for performance)
+      - type: tmpfs
+        target: /app/tmp
+        tmpfs:
+          size: 100M
+    
+    networks:
+      - roo-api-network
+    
+    # Resource limits and reservations (increased for production workloads)
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '2.0'
+        reservations:
+          memory: 512M
+          cpus: '1.0'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+    
+    # Increase file descriptor limits for SSE connections
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    
+    # Health check configuration
+    healthcheck:
+      test: ["CMD", "sh", "/app/health-check.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "service=roo-api,environment=production"
+
+  # Optional: Nginx reverse proxy (ready for TLS)
+  # Uncomment and configure when TLS is needed
+  # roo-api-nginx:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ${SSL_CERT_PATH:-./ssl}:/etc/ssl:ro
+  #   depends_on:
+  #     - roo-api
+  #   networks:
+  #     - roo-api-network
+  #   restart: unless-stopped
+
+volumes:
+  api-logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${LOGS_PATH:-./logs}
+
+networks:
+  roo-api-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

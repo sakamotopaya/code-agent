@@ -6,6 +6,7 @@ import NodeCache from "node-cache"
 import { getCacheDirectoryPath } from "../../../utils/storage"
 import { RouterName, ModelRecord } from "../../../shared/api"
 import { fileExistsAtPath } from "../../../utils/fs"
+import { getGlobalStoragePath } from "../../../shared/paths"
 
 import { getOpenRouterModels } from "./openrouter"
 import { getRequestyModels } from "./requesty"
@@ -25,8 +26,7 @@ async function writeModels(router: RouterName, data: ModelRecord) {
 		globalStoragePath = ContextProxy.instance.globalStorageUri.fsPath
 	} catch (error) {
 		// Fallback for CLI usage
-		const os = require("os")
-		globalStoragePath = path.join(os.homedir(), ".roo-code")
+		globalStoragePath = getGlobalStoragePath()
 	}
 
 	const cacheDir = await getCacheDirectoryPath(globalStoragePath)
@@ -43,8 +43,7 @@ async function readModels(router: RouterName): Promise<ModelRecord | undefined> 
 		globalStoragePath = ContextProxy.instance.globalStorageUri.fsPath
 	} catch (error) {
 		// Fallback for CLI usage
-		const os = require("os")
-		globalStoragePath = path.join(os.homedir(), ".roo-code")
+		globalStoragePath = getGlobalStoragePath()
 	}
 
 	const cacheDir = await getCacheDirectoryPath(globalStoragePath)

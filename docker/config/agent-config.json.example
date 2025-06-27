@@ -1,0 +1,83 @@
+{
+  "_comment": "Roo Code Agent Configuration - API Integration",
+  "_description": "This configuration file integrates with the CLI agent for API compatibility",
+  
+  "apiProvider": "anthropic",
+  "apiKey": "your-anthropic-api-key",
+  "apiModelId": "claude-3-5-sonnet-20241022",
+  
+  "openAiBaseUrl": "https://api.openai.com/v1",
+  "openAiApiKey": "your-openai-api-key",
+  "openAiModelId": "gpt-4",
+  
+  "anthropicBaseUrl": "https://api.anthropic.com",
+  "anthropicApiKey": "your-anthropic-api-key",
+  
+  "openRouterApiKey": "your-openrouter-api-key",
+  "openRouterModelId": "anthropic/claude-3.5-sonnet",
+  
+  "glamaApiKey": "your-glama-api-key",
+  "glamaModelId": "claude-3-sonnet",
+  
+  "mcpEnabled": true,
+  "mcpAutoConnect": true,
+  "mcpConfigPath": "/app/config/mcp-config.json",
+  "mcpTimeout": 30000,
+  "mcpRetries": 3,
+  
+  "verbose": false,
+  "debug": false,
+  
+  "features": {
+    "codeIndex": true,
+    "browser": true,
+    "terminal": true,
+    "mcp": true,
+    "streaming": true,
+    "questionAnswering": true
+  },
+  
+  "preferences": {
+    "maxTokens": 8192,
+    "temperature": 0.7,
+    "topP": 1.0,
+    "maxRetries": 3,
+    "retryDelay": 1000
+  },
+  
+  "telemetry": {
+    "enabled": true,
+    "endpoint": "",
+    "apiKey": ""
+  },
+  
+  "logging": {
+    "level": "info",
+    "enableFileLogging": true,
+    "logDirectory": "/app/logs",
+    "maxLogFiles": 5,
+    "maxLogSize": "10MB"
+  },
+  
+  "_instructions": {
+    "setup": [
+      "1. Replace 'your-*-api-key' placeholders with actual API keys",
+      "2. Choose your preferred API provider (anthropic, openai, openrouter, glama)",
+      "3. Adjust model IDs based on your preferences and access",
+      "4. Configure MCP settings if using MCP servers",
+      "5. Set appropriate logging and telemetry preferences"
+    ],
+    "security": [
+      "Never commit API keys to version control",
+      "Use environment variables for sensitive data",
+      "Rotate API keys regularly",
+      "Monitor API usage and costs"
+    ],
+    "apiProviders": {
+      "anthropic": "Primary provider, requires ANTHROPIC_API_KEY",
+      "openai": "Alternative provider, requires OPENAI_API_KEY", 
+      "openrouter": "Unified API access, requires OPENROUTER_API_KEY",
+      "glama": "Alternative provider, requires GLAMA_API_KEY"
+    }
+  }
+}

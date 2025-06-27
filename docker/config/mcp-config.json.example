@@ -1,0 +1,163 @@
+{
+  "_comment": "MCP (Model Context Protocol) Server Configuration for Docker",
+  "_description": "Configure MCP servers for enhanced API capabilities",
+  
+  "mcpServers": {
+    "github": {
+      "_description": "GitHub MCP server for repository operations",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "timeout": 30000,
+      "retries": 3,
+      "autoRestart": true
+    },
+    
+    "filesystem": {
+      "_description": "Filesystem MCP server for file operations within workspace",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/app/workspace"],
+      "env": {},
+      "timeout": 30000,
+      "retries": 3,
+      "autoRestart": true
+    },
+    
+    "postgres": {
+      "_description": "PostgreSQL MCP server for database operations",
+      "_disabled": true,
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "${DATABASE_URL}"
+      },
+      "timeout": 45000,
+      "retries": 5,
+      "autoRestart": true
+    },
+    
+    "mssql-dpsp": {
+      "_description": "Microsoft SQL Server MCP server using .NET implementation",
+      "_disabled": true,
+      "command": "dotnet",
+      "args": ["/app/mcp-servers/mssql/Core.Infrastructure.McpServer.dll"],
+      "env": {
+        "CONNECTION_STRING": "${MSSQL_CONNECTION_STRING}",
+        "LOG_LEVEL": "Info"
+      },
+      "cwd": "/app/mcp-servers/mssql",
+      "timeout": 45000,
+      "retries": 5,
+      "autoRestart": true
+    },
+    
+    "slack": {
+      "_description": "Slack MCP server for team communication",
+      "_disabled": true,
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-slack"],
+      "env": {
+        "SLACK_BOT_TOKEN": "${SLACK_BOT_TOKEN}",
+        "SLACK_TEAM_ID": "${SLACK_TEAM_ID}"
+      },
+      "timeout": 30000,
+      "retries": 3,
+      "autoRestart": true
+    },
+    
+    "google-drive": {
+      "_description": "Google Drive MCP server for document access",
+      "_disabled": true,
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-gdrive"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/app/config/google-credentials.json"
+      },
+      "timeout": 30000,
+      "retries": 3,
+      "autoRestart": true
+    },
+    
+    "custom-local": {
+      "_description": "Example custom local MCP server",
+      "_disabled": true,
+      "command": "node",
+      "args": ["/app/custom-mcp/index.js"],
+      "env": {
+        "CONFIG_PATH": "/app/config/custom-mcp.json",
+        "LOG_LEVEL": "debug"
+      },
+      "cwd": "/app/custom-mcp",
+      "timeout": 45000,
+      "retries": 5,
+      "autoRestart": true
+    }
+  },
+  
+  "global": {
+    "_description": "Global MCP configuration settings",
+    "timeout": 30000,
+    "retries": 3,
+    "autoRestart": true,
+    "logLevel": "info",
+    "enableMetrics": true,
+    "maxConcurrentConnections": 10,
+    "healthCheck": {
+      "enabled": true,
+      "interval": 60000,
+      "timeout": 5000
+    }
+  },
+  
+  "_instructions": {
+    "setup": [
+      "1. Enable desired MCP servers by removing '_disabled': true",
+      "2. Set required environment variables (GITHUB_TOKEN, DATABASE_URL, etc.)",
+      "3. Adjust timeouts and retries based on your network conditions",
+      "4. For custom MCP servers, mount the server code as volumes in Docker Compose"
+    ],
+    "environmentVariables": {
+      "GITHUB_TOKEN": "GitHub Personal Access Token with repo permissions",
+      "DATABASE_URL": "PostgreSQL connection string (postgresql://user:pass@host:port/db)",
+      "MSSQL_CONNECTION_STRING": "SQL Server connection string",
+      "SLACK_BOT_TOKEN": "Slack bot token for team integration",
+      "SLACK_TEAM_ID": "Slack team/workspace ID"
+    },
+    "customServers": [
+      "To add custom MCP servers:",
+      "1. Mount your server code as a volume in docker-compose.yml",
+      "2. Add server configuration to mcpServers section",
+      "3. Set appropriate command, args, and environment variables",
+      "4. Test server connectivity with health checks"
+    ],
+    "troubleshooting": [
+      "Check MCP server logs: docker-compose logs roo-api | grep -i mcp",
+      "Test individual servers by enabling only one at a time",
+      "Verify environment variables are properly set",
+      "Check network connectivity for remote services",
+      "Monitor timeout and retry settings for problematic servers"
+    ]
+  },
+  
+  "_examples": {
+    "development": {
+      "_comment": "Typical development setup",
+      "enabledServers": ["github", "filesystem"],
+      "environmentVariables": {
+        "GITHUB_TOKEN": "ghp_xxxxxxxxxxxxxxxxxxxx"
+      }
+    },
+    "production": {
+      "_comment": "Production setup with database integration",
+      "enabledServers": ["github", "filesystem", "postgres", "slack"],
+      "environmentVariables": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}",
+        "DATABASE_URL": "${DATABASE_URL}",
+        "SLACK_BOT_TOKEN": "${SLACK_BOT_TOKEN}",
+        "SLACK_TEAM_ID": "${SLACK_TEAM_ID}"
+      }
+    }
+  }
+}

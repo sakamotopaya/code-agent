@@ -11,6 +11,15 @@ import * as path from "path"
  * Uses .agentz directory for consistency with CLI config
  */
 export function getGlobalStoragePath(): string {
+	// Check for container/environment override first (Docker, etc.)
+	if (process.env.ROO_GLOBAL_STORAGE_PATH) {
+		return process.env.ROO_GLOBAL_STORAGE_PATH
+	}
+	if (process.env.API_STORAGE_ROOT) {
+		return process.env.API_STORAGE_ROOT
+	}
+
+	// Default behavior (backwards compatible)
 	const homeDir = os.homedir()
 	return path.join(homeDir, ".agentz")
 }

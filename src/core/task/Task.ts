@@ -2,6 +2,7 @@ import * as path from "path"
 import os from "os"
 import crypto from "crypto"
 import EventEmitter from "events"
+import { getGlobalStoragePath } from "../../shared/paths"
 
 import { Anthropic } from "@anthropic-ai/sdk"
 import pWaitFor from "p-wait-for"
@@ -513,7 +514,7 @@ export class Task extends EventEmitter<ClineEvents> {
 			this.providerRef = new WeakRef(provider)
 			this.globalStoragePath = provider.context.globalStorageUri.fsPath
 		} else {
-			this.globalStoragePath = globalStoragePath || path.join(os.homedir(), ".roo-code")
+			this.globalStoragePath = globalStoragePath || getGlobalStoragePath()
 		}
 
 		// Use provided output adapter or create one based on mode

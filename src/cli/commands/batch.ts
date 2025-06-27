@@ -8,6 +8,7 @@ import { getCLILogger } from "../services/CLILogger"
 import { CLIUIService } from "../services/CLIUIService"
 import { initializeGlobalLLMContentLogger, closeGlobalLLMContentLogger } from "../services/streaming/XMLTagLogger"
 import { CLIContentProcessor } from "../services/streaming/CLIContentProcessor"
+import { getGlobalStoragePath } from "../../shared/paths"
 import { CLIDisplayFormatter } from "../services/streaming/CLIDisplayFormatter"
 import { SharedContentProcessor } from "../../core/content/SharedContentProcessor"
 
@@ -150,7 +151,7 @@ export class BatchProcessor {
 			const { CLIProvider } = await import("../../core/adapters/cli/CLIProvider")
 
 			const cliProvider = new CLIProvider({
-				globalStoragePath: process.env.HOME ? `${process.env.HOME}/.agentz` : "/tmp/.agentz",
+				globalStoragePath: getGlobalStoragePath(),
 				workspacePath: this.options.cwd,
 				useColor: this.options.color,
 				telemetry: adapters.telemetry,

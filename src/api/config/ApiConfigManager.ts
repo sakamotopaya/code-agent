@@ -4,6 +4,7 @@ import * as os from "os"
 import { z } from "zod"
 import { parse as parseYaml } from "yaml"
 import type { ApiServerOptions } from "../types/server"
+import { getGlobalStoragePath } from "../../shared/paths"
 
 /**
  * API environment configuration schema
@@ -249,7 +250,7 @@ export class ApiConfigManager {
 		const cliConfigPath =
 			this.options.cliConfigPath ||
 			process.env.API_CLI_CONFIG_PATH ||
-			path.join(os.homedir(), ".agentz", "agent-config.json")
+			path.join(getGlobalStoragePath(), "agent-config.json")
 
 		const cliConfig = await this.loadCliConfig(cliConfigPath)
 		if (cliConfig) {
