@@ -97,7 +97,7 @@ export ROO_API_KEY="your-api-key"
 export ROO_CONFIG_PATH="$HOME/.roo-cli/config.json"
 
 # Add to shell profile (.bashrc, .zshrc, etc.)
-echo 'export ROO_API_KEY="your-api-key"' >> ~/.zshrc
+echo 'export ROO_API_KEY="your-api-key"' >> $HOME/.zshrc
 ```
 
 ### Linux (Ubuntu/Debian)
@@ -121,8 +121,8 @@ export ROO_API_KEY="your-api-key"
 export ROO_CONFIG_PATH="$HOME/.roo-cli/config.json"
 
 # Add to shell profile
-echo 'export ROO_API_KEY="your-api-key"' >> ~/.bashrc
-source ~/.bashrc
+echo 'export ROO_API_KEY="your-api-key"' >> $HOME/.bashrc
+source $HOME/.bashrc
 ```
 
 ### Linux (CentOS/RHEL)
@@ -145,7 +145,7 @@ roo-cli --version
 
 ```bash
 # Generate config in user directory
-roo-cli --generate-config ~/.roo-cli/config.json
+roo-cli --generate-config $HOME/.roo-cli/config.json
 
 # Generate config in project directory
 roo-cli --generate-config ./.roo-cli.json
@@ -217,29 +217,29 @@ roo-cli
 
 ```bash
 # Generate completion script
-roo-cli completion bash > ~/.roo-cli-completion.bash
+roo-cli completion bash > $HOME/.roo-cli-completion.bash
 
 # Add to .bashrc
-echo 'source ~/.roo-cli-completion.bash' >> ~/.bashrc
-source ~/.bashrc
+echo 'source $HOME/.roo-cli-completion.bash' >> $HOME/.bashrc
+source $HOME/.bashrc
 ```
 
 ### Zsh
 
 ```bash
 # Generate completion script
-roo-cli completion zsh > ~/.roo-cli-completion.zsh
+roo-cli completion zsh > $HOME/.roo-cli-completion.zsh
 
 # Add to .zshrc
-echo 'source ~/.roo-cli-completion.zsh' >> ~/.zshrc
-source ~/.zshrc
+echo 'source $HOME/.roo-cli-completion.zsh' >> $HOME/.zshrc
+source $HOME/.zshrc
 ```
 
 ### Fish
 
 ```bash
 # Generate completion script
-roo-cli completion fish > ~/.config/fish/completions/roo-cli.fish
+roo-cli completion fish > $HOME/.config/fish/completions/roo-cli.fish
 ```
 
 ## Troubleshooting Installation
@@ -250,8 +250,8 @@ roo-cli completion fish > ~/.config/fish/completions/roo-cli.fish
 
 ```bash
 # Use npm prefix to avoid global permission issues
-npm config set prefix ~/.npm-global
-export PATH=~/.npm-global/bin:$PATH
+npm config set prefix $HOME/.npm-global
+export PATH=$HOME/.npm-global/bin:$PATH
 
 # Or use npx instead of global installation
 npx roo-cli
@@ -324,7 +324,7 @@ npm uninstall roo-cli
 
 ```bash
 # Remove user configuration
-rm -rf ~/.roo-cli
+rm -rf $HOME/.roo-cli
 
 # Remove project configuration
 rm -f ./.roo-cli.json ./.roo-cli.yaml ./.roo-cli.yml

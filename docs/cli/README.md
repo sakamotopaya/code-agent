@@ -64,7 +64,7 @@ echo "Fix the bug in user.js" | roo-cli --stdin
 
 ```bash
 # Generate default configuration
-roo-cli --generate-config ~/.roo-cli/config.json
+roo-cli --generate-config $HOME/.roo-cli/config.json
 
 # Show current configuration
 roo-cli config --show

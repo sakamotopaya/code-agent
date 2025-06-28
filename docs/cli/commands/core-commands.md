@@ -92,7 +92,7 @@ roo-cli config --validate
 roo-cli config --validate ./my-config.json
 
 # Generate default configuration
-roo-cli config --generate ~/.roo-cli/config.json
+roo-cli config --generate $HOME/.roo-cli/config.json
 
 # Create project-specific config
 roo-cli config --generate .roo-cli.json --template project

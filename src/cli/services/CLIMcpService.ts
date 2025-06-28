@@ -1,7 +1,7 @@
 import * as fs from "fs/promises"
 import * as path from "path"
 import * as os from "os"
-import { getGlobalStoragePath } from "../../shared/paths"
+import { getGlobalStoragePath, AGENTZ_DIR_NAME } from "../../shared/paths"
 import {
 	McpServerConfig,
 	McpServerInfo,
@@ -586,7 +586,7 @@ export class CLIMcpService implements ICLIMcpService {
 			// 1. Local CLI config
 			path.join(process.cwd(), MCP_CONFIG_FILENAME),
 			// 2. Project Roo config
-			path.join(process.cwd(), ".agentz", "mcp_settings.json"),
+			path.join(process.cwd(), AGENTZ_DIR_NAME, "mcp_settings.json"),
 			// 3. Global Roo config
 			path.join(getGlobalStoragePath(), "mcp_settings.json"),
 			// 4. Global CLI config

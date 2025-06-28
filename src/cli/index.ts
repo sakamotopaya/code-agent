@@ -18,6 +18,7 @@ import { PerformanceConfigManager } from "./config/performance-config"
 import { initializeCLILogger, getCLILogger, formatDebugMessage } from "./services/CLILogger"
 import { UnifiedMcpService } from "./services/UnifiedMcpService"
 import { LoggerFactory } from "../core/services/LoggerFactory"
+import { AGENTZ_DIR_NAME } from "../shared/paths"
 import { LoggerPlatform } from "../core/interfaces/ILogger"
 import { createCLILoggerFromOptions } from "../core/adapters/cli/CLILoggerAdapter"
 import chalk from "chalk"
@@ -159,7 +160,11 @@ program
 	.option("--dry-run", "Show what would be executed without running commands")
 	.option("--quiet", "Suppress non-essential output")
 	.option("--generate-config <path>", "Generate default configuration file at specified path", validatePath)
-	.option("--session-directory <path>", "Directory for storing session files (default: ~/.agentz)", validatePath)
+	.option(
+		"--session-directory <path>",
+		`Directory for storing session files (default: ~/${AGENTZ_DIR_NAME})`,
+		validatePath,
+	)
 	.option("--headless", "Run browser in headless mode (default: true)", true)
 	.option("--no-headless", "Run browser in headed mode")
 	.option("--browser-viewport <size>", "Browser viewport size (e.g., 1920x1080)", validateBrowserViewport)

@@ -23,7 +23,7 @@ The default and most common format:
 	"session": {
 		"autoSave": true,
 		"maxHistory": 100,
-		"saveLocation": "~/.roo-cli/sessions"
+		"saveLocation": "$HOME/.roo-cli/sessions"
 	},
 	"mcp": {
 		"servers": {
@@ -60,7 +60,7 @@ browser:
 session:
     autoSave: true
     maxHistory: 100
-    saveLocation: "~/.roo-cli/sessions"
+    saveLocation: "$HOME/.roo-cli/sessions"
 
 mcp:
     servers:
@@ -104,12 +104,12 @@ tools:
 
 ### Session Configuration
 
-| Property       | Type    | Default               | Description                 |
-| -------------- | ------- | --------------------- | --------------------------- |
-| `autoSave`     | boolean | `true`                | Automatically save sessions |
-| `maxHistory`   | number  | `100`                 | Maximum history entries     |
-| `saveLocation` | string  | `~/.roo-cli/sessions` | Session storage directory   |
-| `compression`  | boolean | `true`                | Compress session files      |
+| Property       | Type    | Default                   | Description                 |
+| -------------- | ------- | ------------------------- | --------------------------- |
+| `autoSave`     | boolean | `true`                    | Automatically save sessions |
+| `maxHistory`   | number  | `100`                     | Maximum history entries     |
+| `saveLocation` | string  | `$HOME/.roo-cli/sessions` | Session storage directory   |
+| `compression`  | boolean | `true`                    | Compress session files      |
 
 ### MCP Configuration
 
@@ -148,8 +148,8 @@ tools:
 
 #### User Configuration
 
-- `~/.roo-cli/config.json`
-- `~/.config/roo-cli/config.json` (Linux/macOS)
+- `$HOME/.roo-cli/config.json`
+- `$HOME/.config/roo-cli/config.json` (Linux/macOS)
 - `%APPDATA%\roo-cli\config.json` (Windows)
 
 #### System Configuration

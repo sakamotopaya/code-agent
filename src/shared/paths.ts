@@ -7,8 +7,14 @@ import * as os from "os"
 import * as path from "path"
 
 /**
+ * The default directory name for Roo configuration and storage
+ * Change this constant to update the directory name across the entire application
+ */
+export const AGENTZ_DIR_NAME = ".agentz"
+
+/**
  * Get the global storage path for the application
- * Uses .agentz directory for consistency with CLI config
+ * Uses ${AGENTZ_DIR_NAME} directory for consistency with CLI config
  */
 export function getGlobalStoragePath(): string {
 	// Check for container/environment override first (Docker, etc.)
@@ -21,14 +27,14 @@ export function getGlobalStoragePath(): string {
 
 	// Default behavior (backwards compatible)
 	const homeDir = os.homedir()
-	return path.join(homeDir, ".agentz")
+	return path.join(homeDir, AGENTZ_DIR_NAME)
 }
 
 /**
  * Get the fallback storage path for environments without home directory
  */
 export function getFallbackStoragePath(): string {
-	return path.join("/tmp", ".agentz")
+	return path.join("/tmp", AGENTZ_DIR_NAME)
 }
 
 /**

@@ -37,9 +37,9 @@ npx @roo/cli --help
 npx @roo/cli "your command here"
 
 # Option 2: Fix npm permissions
-npm config set prefix ~/.local
-echo 'export PATH=~/.local/bin:$PATH' >> ~/.bashrc
-source ~/.bashrc
+npm config set prefix $HOME/.local
+echo 'export PATH=$HOME/.local/bin:$PATH' >> $HOME/.bashrc
+source $HOME/.bashrc
 
 # Option 3: Use sudo (not recommended)
 sudo npm install -g @roo/cli
@@ -329,7 +329,7 @@ roo --isolate "potentially problematic command"
 ```bash
 # If CLI crashes unexpectedly
 # 1. Check crash logs
-cat ~/.roo/logs/error.log
+cat $HOME/.roo/logs/error.log
 
 # 2. Restore last session
 roo session restore-last
@@ -363,7 +363,7 @@ roo session list --include-backups
 roo session restore backup-20240101-120000
 
 # 3. Check auto-save files
-ls ~/.roo/autosave/
+ls $HOME/.roo/autosave/
 
 # 4. Recover from git if version controlled
 git log --oneline

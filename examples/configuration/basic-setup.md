@@ -19,7 +19,7 @@ roo config init --preset development
 
 **Description:** Set up the CLI for first use with guided configuration.
 
-**Expected Output:** Configuration file created at `~/.roo-cli/config.json`
+**Expected Output:** Configuration file created at `$HOME/.roo-cli/config.json`
 
 **Difficulty:** Beginner  
 **Estimated Time:** 2 minutes  
@@ -299,7 +299,7 @@ roo config repair
 roo config clear-cache
 
 # Recreate default config
-rm ~/.roo-cli/config.json
+rm $HOME/.roo-cli/config.json
 roo config init
 ```
 

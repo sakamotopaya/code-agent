@@ -101,7 +101,7 @@ roo-cli config --show
 roo-cli config --validate ./config.json
 
 # Generate default configuration
-roo-cli config --generate ~/.roo-cli/config.json
+roo-cli config --generate $HOME/.roo-cli/config.json
 
 # Interactive configuration setup
 roo-cli config init
@@ -221,7 +221,7 @@ roo-cli --batch commands.yaml --parallel
 roo-cli config --show
 
 # Generate new configuration
-roo-cli --generate-config ~/.roo-cli/config.json
+roo-cli --generate-config $HOME/.roo-cli/config.json
 
 # Validate existing configuration
 roo-cli config --validate ./project-config.json
