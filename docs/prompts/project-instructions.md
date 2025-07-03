@@ -10,7 +10,7 @@ all along, our solution when, for instance, the CLI needs console, the API needs
 
 WE are only testing the CLI and API during development:
 You can run the CLI by changing to src folder and then run:
-npm run start:cli --silent -- --config ~/.agentz/agent-config.json --batch "use the github mcp server to summarize issue #8. you can run git status or git remote to get the repo name" --verbose
+npm run start:cli --silent -- --config $HOME/.agentz/agent-config.json --batch "use the github mcp server to summarize issue #8. you can run git status or git remote to get the repo name" --verbose
 
 you can run the api by changing to the root of the project and running:
 ./run-api.sh

@@ -2,6 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { Mode } from "../../../shared/modes"
 import { fileExistsAtPath } from "../../../utils/fs"
+import { AGENTZ_DIR_NAME } from "../../../shared/paths"
 
 export type PromptVariables = {
 	workspace?: string
@@ -46,11 +47,11 @@ async function safeReadFile(filePath: string): Promise<string> {
  * Get the path to a system prompt file for a specific mode
  */
 export function getSystemPromptFilePath(cwd: string, mode: Mode): string {
-	return path.join(cwd, ".agentz", `system-prompt-${mode}`)
+	return path.join(cwd, AGENTZ_DIR_NAME, `system-prompt-${mode}`)
 }
 
 /**
- * Loads custom system prompt from a file at .agentz/system-prompt-[mode slug]
+ * Loads custom system prompt from a file at ${AGENTZ_DIR_NAME}/system-prompt-[mode slug]
  * If the file doesn't exist, returns an empty string
  */
 export async function loadSystemPromptFile(cwd: string, mode: Mode, variables: PromptVariables): Promise<string> {

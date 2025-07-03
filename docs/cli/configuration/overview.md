@@ -9,7 +9,7 @@ Configuration is applied in the following order (higher priority overrides lower
 1. **Command-line arguments** (highest priority)
 2. **Environment variables**
 3. **Project configuration file** (`.roo-cli.json`, `.roo-cli.yaml`, `.roo-cli.yml`)
-4. **User configuration file** (`~/.roo-cli/config.json`)
+4. **User configuration file** (`$HOME/.roo-cli/config.json`)
 5. **Default values** (lowest priority)
 
 ## Configuration Locations
@@ -29,7 +29,7 @@ Project-specific settings are loaded from these files in your project directory:
 User-wide settings are stored in:
 
 ```
-~/.roo-cli/config.json    # User configuration directory
+$HOME/.roo-cli/config.json    # User configuration directory
 ```
 
 ### Custom Configuration Path
@@ -272,7 +272,7 @@ roo-cli config --validate ./config.json
 
 ```bash
 # Generate in user directory
-roo-cli --generate-config ~/.roo-cli/config.json
+roo-cli --generate-config $HOME/.roo-cli/config.json
 
 # Generate in project directory
 roo-cli --generate-config ./.roo-cli.json
@@ -381,7 +381,7 @@ Configuration changes are documented in the [migration guide](../migration/from-
 
 ```bash
 # Secure user configuration
-chmod 600 ~/.roo-cli/config.json
+chmod 600 $HOME/.roo-cli/config.json
 
 # Secure project configuration (if it contains secrets)
 chmod 600 ./.roo-cli.json

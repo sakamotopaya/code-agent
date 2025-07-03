@@ -10,6 +10,7 @@ import { TelemetryService } from "@roo-code/telemetry"
 import { ExtensionMessage, ExtensionState } from "../../../shared/ExtensionMessage"
 import { defaultModeSlug } from "../../../shared/modes"
 import { experimentDefault } from "../../../shared/experiments"
+import { AGENTZ_DIR_NAME } from "../../../shared/paths"
 import { setTtsEnabled } from "../../../utils/tts"
 import { ContextProxy } from "../../config/ContextProxy"
 import { Task, TaskOptions } from "../../task/Task"
@@ -2079,7 +2080,7 @@ describe("Project MCP Settings", () => {
 
 		// Verify error message was shown
 		expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-			expect.stringContaining("Failed to create or open .agentz/mcp.json"),
+			expect.stringContaining(`Failed to create or open ${AGENTZ_DIR_NAME}/mcp.json`),
 		)
 	})
 })

@@ -4,6 +4,7 @@ import * as path from "path"
 import * as os from "os"
 import { CliConfigManager } from "../CliConfigManager"
 import type { RooCodeSettings } from "@roo-code/types"
+import { AGENTZ_DIR_NAME } from "../../../shared/paths"
 
 // Mock fs
 jest.mock("fs")
@@ -141,7 +142,7 @@ autoApprovalEnabled: false
 			expect(config.autoApprovalEnabled).toBe(false)
 		})
 
-		test("should load configuration from .agentz/agent-config.json file", async () => {
+		test(`should load configuration from ${AGENTZ_DIR_NAME}/agent-config.json file`, async () => {
 			const configContent = {
 				apiProvider: "openai",
 				apiKey: "agentz-api-key",
@@ -150,11 +151,11 @@ autoApprovalEnabled: false
 			}
 
 			mockFs.existsSync.mockImplementation((filePath) => {
-				return filePath === path.join(tempDir, ".agentz/agent-config.json")
+				return filePath === path.join(tempDir, AGENTZ_DIR_NAME, "agent-config.json")
 			})
 
 			mockFs.readFileSync.mockImplementation((filePath, options) => {
-				if (filePath === path.join(tempDir, ".agentz/agent-config.json")) {
+				if (filePath === path.join(tempDir, AGENTZ_DIR_NAME, "agent-config.json")) {
 					return JSON.stringify(configContent) as any
 				}
 				throw new Error("File not found")
@@ -315,7 +316,7 @@ autoApprovalEnabled: false
 	describe("static methods", () => {
 		test("getDefaultUserConfigDir should return correct path with default", () => {
 			const result = CliConfigManager.getDefaultUserConfigDir()
-			expect(result).toBe("/home/user/.agentz")
+			expect(result).toBe(`/home/user/${AGENTZ_DIR_NAME}`)
 		})
 
 		test("getDefaultUserConfigDir should return correct path with custom dir", () => {
@@ -325,7 +326,7 @@ autoApprovalEnabled: false
 
 		test("getDefaultUserConfigPath should return correct path with default", () => {
 			const result = CliConfigManager.getDefaultUserConfigPath()
-			expect(result).toBe("/home/user/.agentz/config.json")
+			expect(result).toBe(`/home/user/${AGENTZ_DIR_NAME}/config.json`)
 		})
 
 		test("getDefaultUserConfigPath should return correct path with custom dir", () => {
@@ -342,11 +343,14 @@ autoApprovalEnabled: false
 
 			// Setup user config file
 			mockFs.existsSync.mockImplementation((filePath) => {
-				return filePath === "/home/user/.agentz/config.json" || filePath === path.join(tempDir, ".roo-cli.json")
+				return (
+					filePath === `/home/user/${AGENTZ_DIR_NAME}/config.json` ||
+					filePath === path.join(tempDir, ".roo-cli.json")
+				)
 			})
 
 			mockFs.readFileSync.mockImplementation((filePath, options) => {
-				if (filePath === "/home/user/.agentz/config.json") {
+				if (filePath === `/home/user/${AGENTZ_DIR_NAME}/config.json`) {
 					return JSON.stringify({
 						apiKey: "user-key",
 						autoApprovalEnabled: true,

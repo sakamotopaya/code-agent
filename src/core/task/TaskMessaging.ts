@@ -33,6 +33,7 @@ export class TaskMessaging {
 		private globalStoragePath: string,
 		private workspacePath: string,
 		private providerRef?: WeakRef<ClineProvider>,
+		private outputAdapter?: import("../interfaces/IOutputAdapter").IOutputAdapter,
 	) {}
 
 	// API Messages
@@ -72,19 +73,68 @@ export class TaskMessaging {
 		message: ClineMessage,
 		onMessage?: (action: "created" | "updated", message: ClineMessage) => void,
 	) {
+		// 1. Add to internal messages array
 		this.clineMessages.push(message)
-		const provider = this.providerRef?.deref()
-		await provider?.postStateToWebview()
+
+		// 2. Output content through adapter (if available)
+		if (this.outputAdapter) {
+			try {
+				await this.outputAdapter.outputContent(message)
+			} catch (error) {
+				console.error("Output adapter error:", error)
+			}
+		}
+
+		// 3. Sync state through adapter or fallback to provider
+		if (this.outputAdapter) {
+			try {
+				// The output adapter will handle state synchronization
+				const state = {
+					taskId: this.taskId,
+					messages: this.clineMessages,
+					messageCount: this.clineMessages.length,
+					lastMessageTs: this.lastMessageTs,
+				}
+				await this.outputAdapter.syncState(state)
+			} catch (error) {
+				console.error("State sync adapter error:", error)
+			}
+		} else {
+			// Fallback to legacy provider method
+			const provider = this.providerRef?.deref()
+			await provider?.postStateToWebview()
+		}
+
+		// 4. Event notification (separate concern from output)
 		onMessage?.("created", message)
+
+		// 5. Local persistence
 		await this.saveClineMessages()
 
+		// 6. Telemetry
 		const shouldCaptureMessage = message.partial !== true && CloudService.isEnabled()
-
 		if (shouldCaptureMessage) {
 			CloudService.instance.captureEvent({
 				event: TelemetryEventName.TASK_MESSAGE,
 				properties: { taskId: this.taskId, message },
 			})
+		}
+	}
+
+	/**
+	 * Stream a text chunk through the output adapter for real-time display
+	 * This provides the unified streaming path for all modes (CLI, API, VSCode)
+	 */
+	async streamChunk(chunk: string) {
+		if (this.outputAdapter && this.outputAdapter.streamChunk) {
+			try {
+				await this.outputAdapter.streamChunk(chunk)
+			} catch (error) {
+				console.error("Output adapter stream chunk error:", error)
+			}
+		} else {
+			// No streaming capability available - content will be shown when message is complete
+			console.log(`[TaskMessaging] No streaming capability - chunk will be shown when message completes`)
 		}
 	}
 
@@ -97,12 +147,25 @@ export class TaskMessaging {
 		partialMessage: ClineMessage,
 		onMessage?: (action: "created" | "updated", message: ClineMessage) => void,
 	) {
-		const provider = this.providerRef?.deref()
-		await provider?.postMessageToWebview({ type: "partialMessage", partialMessage })
+		// Output partial content through adapter (if available)
+		if (this.outputAdapter) {
+			try {
+				await this.outputAdapter.outputPartialContent(partialMessage)
+				await this.outputAdapter.sendPartialUpdate(partialMessage)
+			} catch (error) {
+				console.error("Output adapter partial update error:", error)
+			}
+		} else {
+			// Fallback to legacy provider method
+			const provider = this.providerRef?.deref()
+			await provider?.postMessageToWebview({ type: "partialMessage", partialMessage })
+		}
+
+		// Event notification
 		onMessage?.("updated", partialMessage)
 
+		// Telemetry
 		const shouldCaptureMessage = partialMessage.partial !== true && CloudService.isEnabled()
-
 		if (shouldCaptureMessage) {
 			CloudService.instance.captureEvent({
 				event: TelemetryEventName.TASK_MESSAGE,

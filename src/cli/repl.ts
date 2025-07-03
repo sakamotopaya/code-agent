@@ -7,6 +7,8 @@ import { CliConfigManager } from "./config/CliConfigManager"
 import { CLIUIService } from "./services/CLIUIService"
 import { SessionManager } from "./services/SessionManager"
 import type { Session } from "./types/session-types"
+import { LoggerFactory } from "../core/services/LoggerFactory"
+import { getGlobalStoragePath } from "../shared/paths"
 
 interface ReplOptions extends CliAdapterOptions {
 	cwd: string
@@ -255,7 +257,8 @@ export class CliRepl {
 				browser: adapters.browser,
 				telemetry: adapters.telemetry,
 				workspacePath: this.options.cwd,
-				globalStoragePath: process.env.HOME ? `${process.env.HOME}/.roo-code` : "/tmp/.roo-code",
+				globalStoragePath: getGlobalStoragePath(),
+				logger: LoggerFactory.getInstance().createLogger({ verbose: this.options.verbose }),
 				cliUIService: this.uiService,
 				// MCP configuration options (will use global service)
 				mcpConfigPath: this.options.mcpConfig,

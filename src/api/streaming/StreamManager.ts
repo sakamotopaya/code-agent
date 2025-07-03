@@ -35,6 +35,11 @@ export class StreamManager {
 			this.closeStream(jobId)
 		}
 
+		// Disable output buffering for immediate streaming
+		if ((response as any).socket) {
+			;(response as any).socket.setNoDelay(true)
+		}
+
 		const stream: SSEStream = {
 			jobId,
 			response,
@@ -69,20 +74,61 @@ export class StreamManager {
 	 * Send an SSE event to a stream
 	 */
 	sendEvent(jobId: string, event: SSEEvent): boolean {
+		const writeStartTime = Date.now()
+		console.log(`[STREAM-WRITE] 🌊 sendEvent() called for job ${jobId} at ${new Date().toISOString()}`)
+		console.log(`[STREAM-WRITE] 📝 Event type: ${event.type}, timestamp: ${event.timestamp}`)
+		console.log(
+			`[STREAM-WRITE] 📝 Event content: "${event.message?.substring(0, 100)}${event.message && event.message.length > 100 ? "..." : ""}" (${event.message?.length || 0} chars)`,
+		)
+
 		const stream = this.streams.get(jobId)
 		if (!stream || !stream.isActive) {
+			console.log(`[STREAM-WRITE] ❌ Stream not found or inactive for job ${jobId}`)
 			this.logger.warn(`Attempted to send event to inactive stream ${jobId}`)
 			return false
 		}
 
 		try {
 			const eventData = `data: ${JSON.stringify(event)}\n\n`
+			console.log(`[STREAM-WRITE] 📡 About to write ${eventData.length} bytes to HTTP response`)
+
+			const httpWriteStartTime = Date.now()
 			stream.response.write(eventData)
+			const httpWriteEndTime = Date.now()
+			console.log(`[STREAM-WRITE] ✅ HTTP write completed in ${httpWriteEndTime - httpWriteStartTime}ms`)
+
+			// Explicitly flush the response buffer to ensure immediate delivery
+			try {
+				console.log(`[STREAM-WRITE] 🚿 Attempting to flush response buffer`)
+				// Force headers to be sent if not already sent
+				if (!stream.response.headersSent) {
+					console.log(`[STREAM-WRITE] 📋 Headers not sent yet, flushing headers`)
+					stream.response.flushHeaders()
+				} else {
+					console.log(`[STREAM-WRITE] 📋 Headers already sent`)
+				}
+				// Force the underlying socket to flush if available
+				const socket = (stream.response as any).socket
+				if (socket && typeof socket.flush === "function") {
+					console.log(`[STREAM-WRITE] 🔌 Socket flush method available, calling it`)
+					socket.flush()
+				} else {
+					console.log(`[STREAM-WRITE] 🔌 Socket flush method NOT available (this is normal for Node.js)`)
+					console.log(`[STREAM-WRITE] 🔌 Socket exists: ${!!socket}, flush type: ${typeof socket?.flush}`)
+				}
+			} catch (flushError) {
+				console.log(`[STREAM-WRITE] ⚠️ Flush error (ignoring):`, flushError)
+				// Ignore flush errors - they're not critical
+			}
+
 			stream.lastActivity = new Date()
 
+			const writeEndTime = Date.now()
+			console.log(`[STREAM-WRITE] ✅ sendEvent() completed in ${writeEndTime - writeStartTime}ms`)
 			this.logger.debug(`Sent SSE event to job ${jobId}: ${event.type}`)
 			return true
 		} catch (error) {
+			console.log(`[STREAM-WRITE] ❌ HTTP write failed:`, error)
 			this.logger.error(`Failed to send SSE event to job ${jobId}:`, error)
 			this.closeStream(jobId)
 			return false

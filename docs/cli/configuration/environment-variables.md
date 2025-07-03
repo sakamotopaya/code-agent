@@ -41,14 +41,14 @@ Roo CLI supports comprehensive configuration through environment variables, allo
 
 ## Session Management
 
-| Variable                     | Type    | Default               | Description                 |
-| ---------------------------- | ------- | --------------------- | --------------------------- |
-| `ROO_SESSION_AUTO_SAVE`      | boolean | `true`                | Automatically save sessions |
-| `ROO_SESSION_MAX_HISTORY`    | number  | `100`                 | Maximum history entries     |
-| `ROO_SESSION_SAVE_LOCATION`  | string  | `~/.roo-cli/sessions` | Session storage directory   |
-| `ROO_SESSION_COMPRESSION`    | boolean | `true`                | Compress session files      |
-| `ROO_SESSION_ENCRYPTION`     | boolean | `false`               | Encrypt session files       |
-| `ROO_SESSION_RETENTION_DAYS` | number  | `30`                  | Session retention period    |
+| Variable                     | Type    | Default                   | Description                 |
+| ---------------------------- | ------- | ------------------------- | --------------------------- |
+| `ROO_SESSION_AUTO_SAVE`      | boolean | `true`                    | Automatically save sessions |
+| `ROO_SESSION_MAX_HISTORY`    | number  | `100`                     | Maximum history entries     |
+| `ROO_SESSION_SAVE_LOCATION`  | string  | `$HOME/.roo-cli/sessions` | Session storage directory   |
+| `ROO_SESSION_COMPRESSION`    | boolean | `true`                    | Compress session files      |
+| `ROO_SESSION_ENCRYPTION`     | boolean | `false`                   | Encrypt session files       |
+| `ROO_SESSION_RETENTION_DAYS` | number  | `30`                      | Session retention period    |
 
 ## MCP (Model Context Protocol)
 
@@ -148,10 +148,10 @@ export ROO_VERBOSE="true"
 #### Permanent (add to shell profile)
 
 ```bash
-# Add to ~/.bashrc, ~/.zshrc, etc.
-echo 'export ROO_API_KEY="your-api-key"' >> ~/.bashrc
-echo 'export ROO_MODE="code"' >> ~/.bashrc
-source ~/.bashrc
+# Add to $HOME/.bashrc, $HOME/.zshrc, etc.
+echo 'export ROO_API_KEY="your-api-key"' >> $HOME/.bashrc
+echo 'export ROO_MODE="code"' >> $HOME/.bashrc
+source $HOME/.bashrc
 ```
 
 #### Using .env file

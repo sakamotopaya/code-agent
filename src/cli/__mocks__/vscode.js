@@ -1,64 +1,66 @@
-/* eslint-env node */
-/* global module, require, process */
-// Mock VSCode module for CLI context
-// Enhanced for standalone executable compatibility
-
-const os = require("os")
-const path = require("path")
-
+// Mock implementation of vscode for CLI builds
 module.exports = {
 	workspace: {
-		getConfiguration: (section) => ({
-			get: (key, defaultValue) => {
-				// Return sensible defaults for CLI context
-				if (section === "roo-cline" && key === "customStoragePath") {
-					return path.join(os.homedir(), ".roo-cline")
-				}
-				return defaultValue
-			},
-			has: () => false,
-			update: () => Promise.resolve(),
-		}),
-		fs: {
-			readFile: () => Promise.reject(new Error("VSCode fs not available in CLI")),
-			writeFile: () => Promise.reject(new Error("VSCode fs not available in CLI")),
-			stat: () => Promise.reject(new Error("VSCode fs not available in CLI")),
-			createDirectory: () => Promise.reject(new Error("VSCode fs not available in CLI")),
-			delete: () => Promise.reject(new Error("VSCode fs not available in CLI")),
-		},
+		name: "mock-workspace",
 		workspaceFolders: [],
-		onDidChangeWorkspaceFolders: () => ({ dispose: () => {} }),
-		rootPath: process.cwd(),
-	},
-	window: {
-		showInformationMessage: () => Promise.resolve(),
-		showErrorMessage: () => Promise.resolve(),
-		showInputBox: () => Promise.resolve(),
-		showQuickPick: () => Promise.resolve(),
-		createOutputChannel: () => ({
-			appendLine: () => {},
-			show: () => {},
+		getConfiguration: () => ({
+			get: () => undefined,
+			update: () => Promise.resolve(),
+			has: () => false,
+			inspect: () => undefined,
+		}),
+		createFileSystemWatcher: () => ({
+			onDidChange: () => ({ dispose: () => {} }),
+			onDidCreate: () => ({ dispose: () => {} }),
+			onDidDelete: () => ({ dispose: () => {} }),
 			dispose: () => {},
 		}),
-		createTextEditorDecorationType: () => ({
+		onDidChangeConfiguration: () => ({ dispose: () => {} }),
+		applyEdit: () => Promise.resolve(true),
+		openTextDocument: () =>
+			Promise.resolve({
+				fileName: "mock-file.txt",
+				getText: () => "",
+				lineCount: 1,
+				lineAt: () => ({ text: "", range: null }),
+				save: () => Promise.resolve(true),
+				uri: { fsPath: "/mock/path" },
+			}),
+	},
+	window: {
+		showErrorMessage: (msg) => console.error("VSCode Error:", msg),
+		showWarningMessage: (msg) => console.warn("VSCode Warning:", msg),
+		showInformationMessage: (msg) => console.info("VSCode Info:", msg),
+		createOutputChannel: () => ({
+			appendLine: () => {},
+			append: () => {},
+			show: () => {},
+			hide: () => {},
 			dispose: () => {},
 		}),
 		activeTextEditor: null,
 		visibleTextEditors: [],
+		onDidChangeActiveTextEditor: () => ({ dispose: () => {} }),
+		onDidChangeVisibleTextEditors: () => ({ dispose: () => {} }),
+		showTextDocument: () => Promise.resolve({}),
+		createTerminal: () => ({
+			show: () => {},
+			hide: () => {},
+			dispose: () => {},
+			sendText: () => {},
+			name: "mock-terminal",
+		}),
+		createTextEditorDecorationType: () => ({
+			dispose: () => {},
+		}),
 	},
 	commands: {
-		executeCommand: () => Promise.resolve(),
 		registerCommand: () => ({ dispose: () => {} }),
-	},
-	env: {
-		clipboard: {
-			writeText: () => Promise.resolve(),
-			readText: () => Promise.resolve(""),
-		},
+		executeCommand: () => Promise.resolve(),
 	},
 	Uri: {
-		file: (path) => ({ path }),
-		parse: (uri) => ({ path: uri }),
+		file: (path) => ({ fsPath: path, scheme: "file", path }),
+		parse: (uriString) => ({ fsPath: uriString, scheme: "file", path: uriString }),
 	},
 	Range: class MockRange {
 		constructor(start, end) {
@@ -73,39 +75,37 @@ module.exports = {
 		}
 	},
 	Selection: class MockSelection {
-		constructor(anchor, active) {
-			this.anchor = anchor
-			this.active = active
+		constructor(start, end) {
+			this.start = start
+			this.end = end
 		}
 	},
-	ConfigurationTarget: {
-		Global: 1,
-		Workspace: 2,
-		WorkspaceFolder: 3,
+	TextEdit: {
+		replace: () => ({}),
+		insert: () => ({}),
+		delete: () => ({}),
 	},
-	ViewColumn: {
-		One: 1,
-		Two: 2,
-		Three: 3,
-	},
-	TextEditorRevealType: {
-		Default: 0,
-		InCenter: 1,
-		InCenterIfOutsideViewport: 2,
-		AtTop: 3,
-	},
-	ExtensionContext: class MockExtensionContext {
+	WorkspaceEdit: class MockWorkspaceEdit {
 		constructor() {
-			this.globalState = {
-				get: () => undefined,
-				update: () => Promise.resolve(),
-			}
-			this.secrets = {
-				get: () => Promise.resolve(),
-				store: () => Promise.resolve(),
-				delete: () => Promise.resolve(),
-			}
-			this.subscriptions = []
+			this.edits = []
 		}
+		set() {}
+		replace() {}
+		insert() {}
+		delete() {}
 	},
+	extensions: {
+		getExtension: () => undefined,
+		all: [],
+	},
+	env: {
+		machineId: "mock-machine-id",
+		sessionId: "mock-session-id",
+		language: "en",
+		clipboard: {
+			readText: () => Promise.resolve(""),
+			writeText: () => Promise.resolve(),
+		},
+	},
+	version: "1.0.0",
 }

@@ -16,7 +16,11 @@ import { StartupOptimizer } from "./optimization/StartupOptimizer"
 import { MemoryOptimizer } from "./optimization/MemoryOptimizer"
 import { PerformanceConfigManager } from "./config/performance-config"
 import { initializeCLILogger, getCLILogger, formatDebugMessage } from "./services/CLILogger"
-import { GlobalCLIMcpService } from "./services/GlobalCLIMcpService"
+import { UnifiedMcpService } from "./services/UnifiedMcpService"
+import { LoggerFactory } from "../core/services/LoggerFactory"
+import { AGENTZ_DIR_NAME } from "../shared/paths"
+import { LoggerPlatform } from "../core/interfaces/ILogger"
+import { createCLILoggerFromOptions } from "../core/adapters/cli/CLILoggerAdapter"
 import chalk from "chalk"
 import * as fs from "fs"
 
@@ -156,7 +160,11 @@ program
 	.option("--dry-run", "Show what would be executed without running commands")
 	.option("--quiet", "Suppress non-essential output")
 	.option("--generate-config <path>", "Generate default configuration file at specified path", validatePath)
-	.option("--session-directory <path>", "Directory for storing session files (default: ~/.agentz)", validatePath)
+	.option(
+		"--session-directory <path>",
+		`Directory for storing session files (default: ~/${AGENTZ_DIR_NAME})`,
+		validatePath,
+	)
 	.option("--headless", "Run browser in headless mode (default: true)", true)
 	.option("--no-headless", "Run browser in headed mode")
 	.option("--browser-viewport <size>", "Browser viewport size (e.g., 1920x1080)", validateBrowserViewport)
@@ -218,14 +226,14 @@ program
 
 			// Dispose global MCP service
 			try {
-				const globalMcpService = GlobalCLIMcpService.getInstance()
-				if (globalMcpService.isInitialized()) {
+				const mcpService = UnifiedMcpService.getInstance()
+				if (mcpService.isInitialized()) {
 					if (options.verbose) {
-						logger.debug("Disposing global MCP service...")
+						logger.debug("Disposing unified MCP service...")
 					}
-					await globalMcpService.dispose()
+					await mcpService.dispose()
 					if (options.verbose) {
-						logger.debug("Global MCP service disposed")
+						logger.debug("Unified MCP service disposed")
 					}
 				}
 			} catch (error) {
@@ -263,42 +271,52 @@ program
 			logger.warn("Startup optimization failed:", error)
 		}
 
+		// Initialize logging system for CLI
+		const cliLogger = createCLILoggerFromOptions({
+			verbose: options.verbose,
+			quiet: options.quiet,
+			color: options.color,
+		})
+
+		// Initialize logger factory
+		LoggerFactory.getInstance().initialize(LoggerPlatform.CLI, {
+			verbose: options.verbose,
+			quiet: options.quiet,
+			useColor: options.color,
+		})
+
 		// Initialize platform services for CLI context
 		await PlatformServiceFactory.initialize(PlatformContext.CLI, "roo-cline", options.config)
 
 		// Initialize global MCP service once at startup
-		console.log(
-			formatDebugMessage("CLI: MCP auto-connect check:", options.color),
+		cliLogger.debug(
+			"CLI: MCP auto-connect check:",
 			options.mcpAutoConnect,
 			"!== false =",
 			options.mcpAutoConnect !== false,
 		)
+
 		if (options.mcpAutoConnect !== false) {
-			console.log(formatDebugMessage("CLI: About to initialize global MCP service...", options.color))
+			cliLogger.debug("CLI: About to initialize global MCP service...")
 			try {
-				const { GlobalCLIMcpService } = await import("./services/GlobalCLIMcpService")
-				console.log(formatDebugMessage("CLI: GlobalCLIMcpService imported successfully", options.color))
-				const globalMcpService = GlobalCLIMcpService.getInstance()
-				console.log(formatDebugMessage("CLI: GlobalCLIMcpService instance obtained", options.color))
-				await globalMcpService.initialize({
+				const mcpService = UnifiedMcpService.getInstance()
+				cliLogger.debug("CLI: UnifiedMcpService instance obtained")
+				await mcpService.initialize({
 					mcpConfigPath: options.mcpConfig,
 					mcpAutoConnect: options.mcpAutoConnect,
 					mcpTimeout: options.mcpTimeout,
 					mcpRetries: options.mcpRetries,
 					verbose: options.verbose,
+					workingDirectory: options.cwd,
 				})
-				console.log(formatDebugMessage("CLI: GlobalCLIMcpService.initialize() completed", options.color))
-				if (options.verbose) {
-					logger.debug("Global MCP service initialized successfully")
-				}
+				cliLogger.debug("CLI: UnifiedMcpService.initialize() completed")
+				logger.debug("Global MCP service initialized successfully")
 			} catch (error) {
-				console.error(formatDebugMessage("CLI: Failed to initialize global MCP service:", options.color), error)
+				cliLogger.error("CLI: Failed to initialize global MCP service:", error)
 				logger.warn("Failed to initialize global MCP service:", error)
 			}
 		} else {
-			console.log(
-				formatDebugMessage("CLI: MCP auto-connect disabled, skipping MCP initialization", options.color),
-			)
+			cliLogger.debug("CLI: MCP auto-connect disabled, skipping MCP initialization")
 		}
 
 		// Handle MCP auto-connect logic: default to true, but allow explicit override
@@ -480,15 +498,15 @@ program
 				// Schedule exit to allow any remaining async operations to complete
 				setTimeout(async () => {
 					try {
-						// Dispose global MCP service before exit
-						const globalMcpService = GlobalCLIMcpService.getInstance()
-						if (globalMcpService.isInitialized()) {
+						// Dispose unified MCP service before exit
+						const mcpService = UnifiedMcpService.getInstance()
+						if (mcpService.isInitialized()) {
 							if (options.verbose) {
-								logger.debug("Disposing global MCP service before exit...")
+								logger.debug("Disposing unified MCP service before exit...")
 							}
-							await globalMcpService.dispose()
+							await mcpService.dispose()
 							if (options.verbose) {
-								logger.debug("Global MCP service disposed")
+								logger.debug("Unified MCP service disposed")
 							}
 						}
 					} catch (error) {

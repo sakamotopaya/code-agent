@@ -22,16 +22,16 @@ Choose one of these methods to configure your API key:
 # Set for current session
 export ROO_API_KEY="your-anthropic-api-key-here"
 
-# Make permanent (add to ~/.bashrc, ~/.zshrc, etc.)
-echo 'export ROO_API_KEY="your-anthropic-api-key-here"' >> ~/.zshrc
-source ~/.zshrc
+# Make permanent (add to $HOME/.bashrc, $HOME/.zshrc, etc.)
+echo 'export ROO_API_KEY="your-anthropic-api-key-here"' >> $HOME/.zshrc
+source $HOME/.zshrc
 ```
 
 #### Method B: Configuration File
 
 ```bash
 # Generate default configuration
-roo-cli --generate-config ~/.roo-cli/config.json
+roo-cli --generate-config $HOME/.roo-cli/config.json
 
 # Edit the configuration file
 {

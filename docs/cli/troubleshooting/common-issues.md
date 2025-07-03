@@ -36,12 +36,12 @@ npx roo-cli --help
 echo $PATH | grep $(npm config get prefix)/bin
 
 # Add npm global bin to PATH
-echo 'export PATH=$(npm config get prefix)/bin:$PATH' >> ~/.bashrc
-source ~/.bashrc
+echo 'export PATH=$(npm config get prefix)/bin:$PATH' >> $HOME/.bashrc
+source $HOME/.bashrc
 
 # On macOS with Homebrew node
-echo 'export PATH=/usr/local/bin:$PATH' >> ~/.zshrc
-source ~/.zshrc
+echo 'export PATH=/usr/local/bin:$PATH' >> $HOME/.zshrc
+source $HOME/.zshrc
 
 # Check installation location
 npm list -g roo-cli
@@ -90,7 +90,7 @@ curl -H "Authorization: Bearer $ROO_API_KEY" \
      https://api.anthropic.com/v1/messages
 
 # Set API key in config file
-roo-cli config --generate ~/.roo-cli/config.json
+roo-cli config --generate $HOME/.roo-cli/config.json
 # Edit file and add: "apiKey": "your-key-here"
 
 # Verify configuration
@@ -105,12 +105,12 @@ roo-cli config --show --verbose
 
 ```bash
 # Check configuration file locations
-ls -la ~/.roo-cli/config.json
+ls -la $HOME/.roo-cli/config.json
 ls -la ./.roo-cli.json
 ls -la ./.roo-cli.yaml
 
 # Generate default configuration
-roo-cli config --generate ~/.roo-cli/config.json
+roo-cli config --generate $HOME/.roo-cli/config.json
 
 # Specify config file explicitly
 roo-cli --config ./my-config.json --help
@@ -119,7 +119,7 @@ roo-cli --config ./my-config.json --help
 roo-cli config --validate --verbose
 
 # Check file permissions
-chmod 600 ~/.roo-cli/config.json
+chmod 600 $HOME/.roo-cli/config.json
 ```
 
 ### Invalid configuration format
@@ -130,10 +130,10 @@ chmod 600 ~/.roo-cli/config.json
 
 ```bash
 # Validate JSON syntax
-cat ~/.roo-cli/config.json | jq .
+cat $HOME/.roo-cli/config.json | jq .
 
 # Validate configuration
-roo-cli config --validate ~/.roo-cli/config.json
+roo-cli config --validate $HOME/.roo-cli/config.json
 
 # Fix common JSON errors
 # - Remove trailing commas
@@ -141,8 +141,8 @@ roo-cli config --validate ~/.roo-cli/config.json
 # - Check bracket/brace matching
 
 # Reset to default configuration
-mv ~/.roo-cli/config.json ~/.roo-cli/config.json.backup
-roo-cli config --generate ~/.roo-cli/config.json
+mv $HOME/.roo-cli/config.json $HOME/.roo-cli/config.json.backup
+roo-cli config --generate $HOME/.roo-cli/config.json
 ```
 
 ## Runtime Issues
@@ -358,13 +358,13 @@ sudo apt-get install -y libgtk-3-0 libx11-xcb1 libxcomposite1 libxcursor1 libxda
 
 ```bash
 # List session files
-ls -la ~/.roo-cli/sessions/
+ls -la $HOME/.roo-cli/sessions/
 
 # Check session file integrity
 roo-cli session info session-id --verbose
 
 # Restore from backup
-cp ~/.roo-cli/sessions/backup/session-id.json ~/.roo-cli/sessions/
+cp $HOME/.roo-cli/sessions/backup/session-id.json $HOME/.roo-cli/sessions/
 
 # Clean up corrupted sessions
 roo-cli session cleanup --force
@@ -381,7 +381,7 @@ roo-cli session export session-id --output backup.json
 
 ```bash
 # Check disk space
-df -h ~/.roo-cli/sessions
+df -h $HOME/.roo-cli/sessions
 
 # Clean old sessions
 roo-cli session cleanup --max-age 30
@@ -393,8 +393,8 @@ roo-cli config set session.saveLocation /path/to/larger/disk
 roo-cli config set session.compression true
 
 # Archive old sessions
-tar -czf old-sessions.tar.gz ~/.roo-cli/sessions/*.json
-rm ~/.roo-cli/sessions/old-*.json
+tar -czf old-sessions.tar.gz $HOME/.roo-cli/sessions/*.json
+rm $HOME/.roo-cli/sessions/old-*.json
 ```
 
 ## MCP Server Issues
@@ -597,7 +597,7 @@ curl -I https://api.anthropic.com
 env | grep ROO_
 
 # File permissions
-ls -la ~/.roo-cli/
+ls -la $HOME/.roo-cli/
 ```
 
 ### Generate support bundle
@@ -618,7 +618,7 @@ env | grep ROO_ > environment.txt
 roo-cli config --show > config.txt
 
 # Logs
-cp ~/.roo-cli/logs/* . 2>/dev/null || echo "No logs found"
+cp $HOME/.roo-cli/logs/* . 2>/dev/null || echo "No logs found"
 
 # Create archive
 cd ..
@@ -652,9 +652,9 @@ If Roo CLI is completely broken:
 
 ```bash
 # Reset all configuration
-rm -rf ~/.roo-cli/
-rm -rf ~/.config/roo-cli/
-rm -rf ~/.local/share/roo-cli/
+rm -rf $HOME/.roo-cli/
+rm -rf $HOME/.config/roo-cli/
+rm -rf $HOME/.local/share/roo-cli/
 
 # Reinstall from scratch
 npm uninstall -g roo-cli

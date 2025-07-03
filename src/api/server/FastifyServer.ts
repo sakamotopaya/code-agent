@@ -2,6 +2,7 @@ import fastify, { FastifyInstance, FastifyRequest, FastifyReply } from "fastify"
 import cors from "@fastify/cors"
 import helmet from "@fastify/helmet"
 import { ApiConfigManager } from "../config/ApiConfigManager"
+import { LoggerConfigManager } from "../config/LoggerConfigManager"
 import type { ApiServerOptions, ServerStatus, HealthCheck } from "../types/server"
 import type { CoreInterfaces } from "../../core/interfaces"
 import { JobManager } from "../jobs/JobManager"
@@ -12,6 +13,8 @@ import { Task } from "../../core/task/Task"
 import { createApiAdapters } from "../../core/adapters/api"
 import { TaskExecutionOrchestrator, ApiTaskExecutionHandler } from "../../core/task/execution"
 import { getStoragePath } from "../../shared/paths"
+import { SharedContentProcessor } from "../../core/content/SharedContentProcessor"
+import { SSEStreamingAdapter, SSEContentOutputAdapter } from "../../core/adapters/api/SSEOutputAdapters"
 
 /**
  * Fastify-based API server implementation
@@ -36,10 +39,13 @@ export class FastifyServer {
 		this.questionManager = new ApiQuestionManager()
 		this.taskExecutionOrchestrator = new TaskExecutionOrchestrator()
 		this.app = fastify({
-			logger: {
-				level: config.getConfiguration().debug ? "debug" : "info",
-			},
+			logger: LoggerConfigManager.createLoggerConfig(config),
 		})
+
+		// Test log entry to verify logging is working
+		this.app.log.info("🚀 FastifyServer logger initialized successfully")
+		this.app.log.debug("🔧 Debug logging is enabled")
+		this.app.log.error("🧪 Test error log entry for validation")
 	}
 
 	/**
@@ -154,11 +160,21 @@ export class FastifyServer {
 					"Access-Control-Allow-Headers": "Cache-Control",
 				})
 
+				// Disable TCP buffering for immediate streaming
+				if ((reply.raw as any).socket) {
+					;(reply.raw as any).socket.setNoDelay(true)
+				}
+
 				// Create SSE stream
 				const stream = this.streamManager.createStream(reply.raw, job.id)
 
 				// Create SSE adapter for this job with verbose flag and shared question manager
 				const sseAdapter = new SSEOutputAdapter(this.streamManager, job.id, verbose, this.questionManager)
+
+				// Create shared content processing components for SSE
+				const sharedContentProcessor = new SharedContentProcessor()
+				const sseStreamingAdapter = new SSEStreamingAdapter(sseAdapter)
+				const sseContentOutputAdapter = new SSEContentOutputAdapter(sseAdapter)
 
 				// Send initial start event
 				await sseAdapter.emitStart("Task started", task)
@@ -245,6 +261,10 @@ export class FastifyServer {
 					mcpRetries: this.config.getConfiguration().mcpRetries || 3,
 					// Use SSE adapter as CLI UI service equivalent for question handling
 					cliUIService: sseAdapter,
+					// Disable new adapters for now - go back to existing working logic
+					// streamingAdapter: sseStreamingAdapter,
+					// contentProcessor: sharedContentProcessor,
+					// contentOutputAdapter: sseContentOutputAdapter,
 				}
 
 				this.app.log.info(`Task options prepared for job ${job.id}`)
@@ -507,10 +527,22 @@ export class FastifyServer {
 			this.app.log.info(`🚀 API Server started at ${address}`)
 			this.app.log.info(`📁 Workspace: ${serverConfig.workspaceRoot}`)
 
+			// Log configuration information
+			const loggingInfo = LoggerConfigManager.getLoggingInfo()
+			if (loggingInfo.fileLoggingEnabled) {
+				this.app.log.info(`📝 File logging: enabled → ${loggingInfo.logsDir}`)
+				if (loggingInfo.rotationEnabled) {
+					this.app.log.info(`🔄 Log rotation: enabled`)
+				}
+			} else {
+				this.app.log.info(`📝 File logging: disabled (console only)`)
+			}
+
 			if (serverConfig.verbose) {
 				this.app.log.info(`🔧 Debug mode: ${serverConfig.debug ? "enabled" : "disabled"}`)
 				this.app.log.info(`🌐 CORS: ${serverConfig.cors ? "enabled" : "disabled"}`)
 				this.app.log.info(`🛡️  Security: ${serverConfig.security?.enableHelmet ? "enabled" : "disabled"}`)
+				this.app.log.info(`📊 Log level: ${loggingInfo.logLevel}`)
 			}
 		} catch (error) {
 			this.app.log.error("Failed to start server:", error)

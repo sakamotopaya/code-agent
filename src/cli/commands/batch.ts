@@ -8,7 +8,9 @@ import { getCLILogger } from "../services/CLILogger"
 import { CLIUIService } from "../services/CLIUIService"
 import { initializeGlobalLLMContentLogger, closeGlobalLLMContentLogger } from "../services/streaming/XMLTagLogger"
 import { CLIContentProcessor } from "../services/streaming/CLIContentProcessor"
+import { getGlobalStoragePath } from "../../shared/paths"
 import { CLIDisplayFormatter } from "../services/streaming/CLIDisplayFormatter"
+import { SharedContentProcessor } from "../../core/content/SharedContentProcessor"
 
 interface BatchOptions extends CliAdapterOptions {
 	cwd: string
@@ -31,12 +33,17 @@ export class BatchProcessor {
 	private currentTask?: Task
 	private contentProcessor: CLIContentProcessor
 	private displayFormatter: CLIDisplayFormatter
+	// New shared components
+	private sharedContentProcessor: SharedContentProcessor
 
 	constructor(options: BatchOptions, configManager?: CliConfigManager) {
 		this.options = options
 		this.configManager = configManager
 		this.contentProcessor = new CLIContentProcessor()
 		this.displayFormatter = new CLIDisplayFormatter(options.color, false) // Don't show thinking in batch mode
+
+		// Initialize shared content processing components
+		this.sharedContentProcessor = new SharedContentProcessor()
 	}
 
 	private logDebug(message: string, ...args: any[]): void {
@@ -138,27 +145,43 @@ export class BatchProcessor {
 			this.logDebug("[BatchProcessor] Creating CLI UI service...")
 			const cliUIService = new CLIUIService(this.options.color)
 
-			// Create and execute task
+			// Create CLI provider with comprehensive functionality
+			this.logDebug("[BatchProcessor] Creating CLI provider...")
+
+			const { CLIProvider } = await import("../../core/adapters/cli/CLIProvider")
+
+			const cliProvider = new CLIProvider({
+				globalStoragePath: getGlobalStoragePath(),
+				workspacePath: this.options.cwd,
+				useColor: this.options.color,
+				telemetry: adapters.telemetry,
+			})
+
+			// Initialize the provider
+			await cliProvider.initialize()
+
+			// Set API configuration in provider state
+			await cliProvider.updateGlobalState("apiConfiguration", apiConfiguration)
+
+			// Create and execute task through provider
 			this.logDebug("[BatchProcessor] Creating task...")
 
-			// Use Task.create() to get both the instance and the promise
-			const [task, taskPromise] = Task.create({
-				apiConfiguration,
+			const task = await cliProvider.createTaskInstance({
 				task: taskDescription,
-				fileSystem: adapters.fileSystem,
-				terminal: adapters.terminal,
-				browser: adapters.browser,
-				telemetry: adapters.telemetry,
-				workspacePath: this.options.cwd,
-				globalStoragePath: process.env.HOME ? `${process.env.HOME}/.agentz` : "/tmp/.agentz",
-				startTask: true,
-				verbose: this.options.verbose,
-				cliUIService: cliUIService,
-				// MCP configuration options
-				mcpConfigPath: this.options.mcpConfig,
-				mcpAutoConnect: this.options.mcpAutoConnect !== false && !this.options.noMcpAutoConnect,
-				mcpTimeout: this.options.mcpTimeout,
-				mcpRetries: this.options.mcpRetries,
+				options: {
+					fileSystem: adapters.fileSystem,
+					terminal: adapters.terminal,
+					browser: adapters.browser,
+					telemetry: adapters.telemetry,
+					startTask: true,
+					verbose: this.options.verbose,
+					cliUIService: cliUIService,
+					// MCP configuration options
+					mcpConfigPath: this.options.mcpConfig,
+					mcpAutoConnect: this.options.mcpAutoConnect !== false && !this.options.noMcpAutoConnect,
+					mcpTimeout: this.options.mcpTimeout,
+					mcpRetries: this.options.mcpRetries,
+				},
 			})
 
 			// Store task reference for completion detection
@@ -193,6 +216,27 @@ export class BatchProcessor {
 
 			// Execute the task with enhanced completion detection
 			this.logDebug("[BatchProcessor] About to call executeTaskWithCompletionDetection...")
+
+			// Since the task is already started through the provider, we need to create a promise to track completion
+			const taskPromise = new Promise<void>((resolve, reject) => {
+				task.on("taskCompleted", () => {
+					this.logDebug("[BatchProcessor] Task completed event received")
+					resolve()
+				})
+				task.on("taskAborted", () => {
+					this.logDebug("[BatchProcessor] Task aborted event received")
+					reject(new Error("Task was aborted"))
+				})
+				// Set a timeout as fallback
+				setTimeout(
+					() => {
+						this.logDebug("[BatchProcessor] Task timeout reached")
+						reject(new Error("Task execution timeout"))
+					},
+					30 * 60 * 1000,
+				) // 30 minute timeout
+			})
+
 			await this.executeTaskWithCompletionDetection(task, taskPromise, isInfoQuery)
 			this.logDebug("[BatchProcessor] executeTaskWithCompletionDetection returned")
 
@@ -454,17 +498,11 @@ export class BatchProcessor {
 				this.logDebug(`[BatchProcessor] Response content captured: ${content.substring(0, 100)}...`)
 				this.logDebug(`[BatchProcessor] Message type: ${messageType}`)
 
-				// Display completion_result messages immediately - this is the final response the user wants to see
+				// Task's CLIOutputAdapter already handles output, no need to duplicate here
 				if (messageType === "completion_result" && content.trim()) {
-					// Process content through XML tag parsing pipeline to remove tags
-					const processedMessages = this.contentProcessor.processContent(content)
-					for (const processedMessage of processedMessages) {
-						const formattedContent = this.displayFormatter.formatContent(processedMessage)
-						if (formattedContent) {
-							console.log(formattedContent)
-						}
-					}
-					this.logDebug(`[BatchProcessor] Displayed processed completion_result content to user`)
+					this.logDebug(
+						`[BatchProcessor] Completion result detected - Task CLIOutputAdapter will handle output`,
+					)
 				}
 
 				// Clear existing timer
@@ -539,15 +577,15 @@ export class BatchProcessor {
 	 */
 	private async disposeMcpConnections(): Promise<void> {
 		try {
-			const { GlobalCLIMcpService } = await import("../services/GlobalCLIMcpService")
-			const globalMcpService = GlobalCLIMcpService.getInstance()
+			const { UnifiedMcpService } = await import("../services/UnifiedMcpService")
+			const mcpService = UnifiedMcpService.getInstance()
 
-			if (globalMcpService.isInitialized()) {
-				this.logDebug("[BatchProcessor] Disposing global MCP service...")
-				await globalMcpService.dispose()
-				this.logDebug("[BatchProcessor] Global MCP service disposed successfully")
+			if (mcpService.isInitialized()) {
+				this.logDebug("[BatchProcessor] Disposing unified MCP service...")
+				await mcpService.dispose()
+				this.logDebug("[BatchProcessor] Unified MCP service disposed successfully")
 			} else {
-				this.logDebug("[BatchProcessor] Global MCP service not initialized, nothing to dispose")
+				this.logDebug("[BatchProcessor] Unified MCP service not initialized, nothing to dispose")
 			}
 		} catch (error) {
 			this.logDebug("[BatchProcessor] Error disposing MCP connections:", error)

@@ -5,6 +5,7 @@ import { Dirent } from "fs"
 import { isLanguage } from "@roo-code/types"
 
 import { LANGUAGES } from "../../../shared/language"
+import { AGENTZ_DIR_NAME } from "../../../shared/paths"
 
 /**
  * Safely read a file and return its trimmed content
@@ -158,8 +159,8 @@ function formatDirectoryContent(dirPath: string, files: Array<{ filename: string
  * Load rule files from the specified directory
  */
 export async function loadRuleFiles(cwd: string): Promise<string> {
-	// Check for .agentz/rules/ directory
-	const rooRulesDir = path.join(cwd, ".agentz", "rules")
+	// Check for ${AGENTZ_DIR_NAME}/rules/ directory
+	const rooRulesDir = path.join(cwd, AGENTZ_DIR_NAME, "rules")
 	if (await directoryExists(rooRulesDir)) {
 		const files = await readTextFilesFromDirectory(rooRulesDir)
 		if (files.length > 0) {
@@ -194,8 +195,8 @@ export async function addCustomInstructions(
 	let usedRuleFile = ""
 
 	if (mode) {
-		// Check for .agentz/rules-${mode}/ directory
-		const modeRulesDir = path.join(cwd, ".agentz", `rules-${mode}`)
+		// Check for ${AGENTZ_DIR_NAME}/rules-${mode}/ directory
+		const modeRulesDir = path.join(cwd, AGENTZ_DIR_NAME, `rules-${mode}`)
 		if (await directoryExists(modeRulesDir)) {
 			const files = await readTextFilesFromDirectory(modeRulesDir)
 			if (files.length > 0) {
@@ -243,7 +244,7 @@ export async function addCustomInstructions(
 
 	// Add mode-specific rules first if they exist
 	if (modeRuleContent && modeRuleContent.trim()) {
-		if (usedRuleFile.includes(path.join(".agentz", `rules-${mode}`))) {
+		if (usedRuleFile.includes(path.join(AGENTZ_DIR_NAME, `rules-${mode}`))) {
 			rules.push(modeRuleContent.trim())
 		} else {
 			rules.push(`# Rules from ${usedRuleFile}:\n${modeRuleContent}`)

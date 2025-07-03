@@ -103,6 +103,31 @@ export class CleanupManager {
 				}
 				logger.debug("[CleanupManager] Process exit code set, allowing natural exit")
 
+				// Option 2: Unref standard streams to allow natural exit with remaining handles
+				try {
+					if (process.stdout && typeof process.stdout.unref === "function") {
+						process.stdout.unref()
+						logger.debug("[CleanupManager] Unreferenced stdout")
+					}
+					if (process.stderr && typeof process.stderr.unref === "function") {
+						process.stderr.unref()
+						logger.debug("[CleanupManager] Unreferenced stderr")
+					}
+					if (process.stdin && typeof process.stdin.unref === "function") {
+						process.stdin.unref()
+						logger.debug("[CleanupManager] Unreferenced stdin")
+					}
+					logger.debug("[CleanupManager] Standard streams unreferenced - allowing natural exit")
+				} catch (error) {
+					logger.debug("[CleanupManager] Error unreferencing streams:", error)
+				}
+
+				// Wait briefly for natural exit, then use Option 3 as fallback
+				setTimeout(() => {
+					logger.debug("[CleanupManager] Natural exit timeout reached, forcing clean exit")
+					process.exit(process.exitCode || 0)
+				}, 1000) // 1 second fallback timeout
+
 				// Diagnostic logging to identify what's keeping the process alive
 				const activeHandles = (process as any)._getActiveHandles?.() || []
 				const activeRequests = (process as any)._getActiveRequests?.() || []

@@ -4,6 +4,7 @@ import { DEFAULT_MCP_CONFIG } from "../../types/mcp-config-types"
 import * as fs from "fs/promises"
 import * as path from "path"
 import * as os from "os"
+import { AGENTZ_DIR_NAME } from "../../../shared/paths"
 
 // Mock the filesystem
 jest.mock("fs/promises")
@@ -110,7 +111,10 @@ describe("CLIMcpService", () => {
 			await service.loadServerConfigs()
 
 			// Should try home directory config
-			expect(mockFs.readFile).toHaveBeenCalledWith(path.join(os.homedir(), ".agentz", "mcp-config.json"), "utf-8")
+			expect(mockFs.readFile).toHaveBeenCalledWith(
+				path.join(os.homedir(), AGENTZ_DIR_NAME, "mcp-config.json"),
+				"utf-8",
+			)
 		})
 		it("should preserve zero values and not replace them with defaults", async () => {
 			const mockConfig = {

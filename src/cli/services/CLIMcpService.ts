@@ -1,6 +1,7 @@
 import * as fs from "fs/promises"
 import * as path from "path"
 import * as os from "os"
+import { getGlobalStoragePath, AGENTZ_DIR_NAME } from "../../shared/paths"
 import {
 	McpServerConfig,
 	McpServerInfo,
@@ -185,8 +186,26 @@ export class CLIMcpService implements ICLIMcpService {
 		this.stopHealthCheck(serverId)
 
 		logger.debug(`CLIMcpService: Calling connection.disconnect() for ${serverId}`)
-		// Disconnect
-		await connection.disconnect()
+		// Disconnect with detailed timing logging
+		const disconnectStartTime = Date.now()
+		logger.debug(
+			`[DISCONNECT-DEBUG] Starting connection.disconnect() for ${serverId} at ${new Date().toISOString()}`,
+		)
+
+		try {
+			await connection.disconnect()
+			const disconnectDuration = Date.now() - disconnectStartTime
+			logger.debug(
+				`[DISCONNECT-DEBUG] Connection.disconnect() completed for ${serverId} in ${disconnectDuration}ms`,
+			)
+		} catch (error) {
+			const disconnectDuration = Date.now() - disconnectStartTime
+			logger.debug(
+				`[DISCONNECT-DEBUG] Connection.disconnect() failed for ${serverId} after ${disconnectDuration}ms:`,
+				error,
+			)
+			throw error
+		}
 
 		logger.debug(`CLIMcpService: Connection.disconnect() completed for ${serverId}, removing from connections`)
 		// Remove from connections
@@ -567,11 +586,11 @@ export class CLIMcpService implements ICLIMcpService {
 			// 1. Local CLI config
 			path.join(process.cwd(), MCP_CONFIG_FILENAME),
 			// 2. Project Roo config
-			path.join(process.cwd(), ".agentz", "mcp_settings.json"),
+			path.join(process.cwd(), AGENTZ_DIR_NAME, "mcp_settings.json"),
 			// 3. Global Roo config
-			path.join(os.homedir(), ".agentz", "mcp_settings.json"),
+			path.join(getGlobalStoragePath(), "mcp_settings.json"),
 			// 4. Global CLI config
-			path.join(os.homedir(), ".agentz", MCP_CONFIG_FILENAME),
+			path.join(getGlobalStoragePath(), MCP_CONFIG_FILENAME),
 		]
 
 		// Try each path in order
@@ -585,7 +604,7 @@ export class CLIMcpService implements ICLIMcpService {
 		}
 
 		// If no config found, return the global CLI config path (will be created if needed)
-		return path.join(os.homedir(), ".agentz", MCP_CONFIG_FILENAME)
+		return path.join(getGlobalStoragePath(), MCP_CONFIG_FILENAME)
 	}
 
 	private startHealthCheck(serverId: string, interval: number): void {

@@ -30,6 +30,9 @@ import { API } from "./extension/api"
 import { setVsCodeContext } from "./core/adapters/vscode"
 import { PlatformServiceFactory, PlatformContext } from "./core/adapters/PlatformServiceFactory"
 
+// Optional: Data layer abstraction for future external integrations
+import { getDataLayer } from "./core/data/DataLayerService"
+
 import {
 	handleUri,
 	registerCommands,

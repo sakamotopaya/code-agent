@@ -174,15 +174,33 @@ async function execRipgrep(bin: string, args: string[]): Promise<string> {
 		rgProcess.stderr.on("data", (data) => {
 			errorOutput += data.toString()
 		})
-		rl.on("close", () => {
-			if (errorOutput) {
-				reject(new Error(`ripgrep process error: ${errorOutput}`))
+
+		rgProcess.on("exit", (code, signal) => {
+			// Handle different exit codes appropriately
+			if (code === 0) {
+				// Success with matches found
+				resolve(output)
+			} else if (code === 1) {
+				// No matches found - this is normal, not an error
+				resolve(output) // Return empty output, let caller handle formatting
+			} else if (code === 2) {
+				// Error occurred
+				const errorMsg = errorOutput.trim() || `ripgrep exited with code ${code}`
+				reject(new Error(`ripgrep error: ${errorMsg}`))
+			} else if (signal) {
+				// Process was killed
+				reject(new Error(`ripgrep process was killed by signal: ${signal}`))
 			} else {
+				// Other exit codes
+				const errorMsg = errorOutput.trim() || `ripgrep exited with code ${code}`
+				console.warn(`ripgrep process exited with code ${code}, returning partial results`)
+				// For non-fatal errors, return partial results with warning
 				resolve(output)
 			}
 		})
+
 		rgProcess.on("error", (error) => {
-			reject(new Error(`ripgrep process error: ${error.message}`))
+			reject(new Error(`ripgrep process spawn error: ${error.message}`))
 		})
 	})
 }

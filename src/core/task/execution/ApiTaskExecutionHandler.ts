@@ -29,8 +29,61 @@ export class ApiTaskExecutionHandler implements ITaskExecutionHandler {
 			console.log(`[ApiTaskExecutionHandler] Tool usage:`, toolUsage)
 		}
 
-		// Emit SSE completion event
-		await this.sseAdapter.emitCompletion(result, "Task has been completed successfully")
+		// Stream completion result in real-time rather than sending as one large block
+		if (typeof result === "string" && result.length > 100) {
+			// For large completion results, stream them chunk by chunk for better UX
+			await this.streamCompletionResult(result)
+		} else {
+			// For small results, emit normally
+			await this.sseAdapter.emitCompletion(result, "Task has been completed successfully")
+		}
+	}
+
+	/**
+	 * Stream large completion results in chunks for better real-time experience
+	 */
+	private async streamCompletionResult(result: string): Promise<void> {
+		console.log(`[COMPLETION-STREAMING] 🚀 Streaming completion result in chunks (${result.length} chars)`)
+
+		// Split result into reasonable chunks (similar to how LLM normally streams)
+		const chunkSize = 50 // Similar to typical LLM chunk sizes
+		const chunks: string[] = []
+
+		for (let i = 0; i < result.length; i += chunkSize) {
+			chunks.push(result.slice(i, i + chunkSize))
+		}
+
+		console.log(`[COMPLETION-STREAMING] 📊 Split into ${chunks.length} chunks`)
+
+		// Stream each chunk with a small delay to simulate real-time streaming
+		for (let i = 0; i < chunks.length; i++) {
+			const chunk = chunks[i]
+			console.log(
+				`[COMPLETION-STREAMING] 📤 Streaming chunk ${i + 1}/${chunks.length}: "${chunk.substring(0, 30)}${chunk.length > 30 ? "..." : ""}"`,
+			)
+
+			// Use emitRawChunk for immediate streaming (bypasses MessageBuffer buffering)
+			try {
+				if (typeof (this.sseAdapter as any).emitRawChunk === "function") {
+					await (this.sseAdapter as any).emitRawChunk(chunk)
+				} else {
+					// Fallback to regular progress if emitRawChunk is not available
+					await this.sseAdapter.showProgress(chunk)
+				}
+			} catch (error) {
+				// Fallback to regular progress if there's any error
+				await this.sseAdapter.showProgress(chunk)
+			}
+
+			// Small delay between chunks to prevent all chunks from being sent in the same event loop tick
+			if (i < chunks.length - 1) {
+				await new Promise((resolve) => setTimeout(resolve, 25)) // 25ms delay
+			}
+		}
+
+		// Send final completion event
+		await this.sseAdapter.emitCompletion("Task completed successfully", "Task has been completed successfully")
+		console.log(`[COMPLETION-STREAMING] ✅ Completion result streaming finished`)
 	}
 
 	async onTaskFailed(taskId: string, error: Error): Promise<void> {

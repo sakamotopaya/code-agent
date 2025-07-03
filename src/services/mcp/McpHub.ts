@@ -17,6 +17,7 @@ import * as path from "path"
 import * as vscode from "vscode"
 import { z } from "zod"
 import { t } from "../../i18n"
+import { AGENTZ_DIR_NAME } from "../../shared/paths"
 
 import { ClineProvider } from "../../core/webview/ClineProvider"
 import { GlobalFileNames } from "../../shared/globalFileNames"
@@ -406,7 +407,7 @@ export class McpHub {
 		}
 
 		const workspaceFolder = vscode.workspace.workspaceFolders[0]
-		const projectMcpDir = path.join(workspaceFolder.uri.fsPath, ".agentz")
+		const projectMcpDir = path.join(workspaceFolder.uri.fsPath, AGENTZ_DIR_NAME)
 		const projectMcpPath = path.join(projectMcpDir, "mcp.json")
 
 		try {

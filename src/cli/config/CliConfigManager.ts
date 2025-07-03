@@ -3,6 +3,7 @@ import * as path from "path"
 import * as os from "os"
 import { z } from "zod"
 import { parse as parseYaml } from "yaml"
+import { getGlobalStoragePath, AGENTZ_DIR_NAME } from "../../shared/paths"
 import {
 	type RooCodeSettings,
 	type ProviderSettings,
@@ -85,7 +86,7 @@ export type CliConfigFile = z.infer<typeof cliConfigFileSchema>
  * Configuration source priority (highest to lowest):
  * 1. CLI arguments
  * 2. Environment variables
- * 3. Project-level config file (.roo-cli.json/yaml, .agentz/agent-config.json)
+ * 3. Project-level config file (.roo-cli.json/yaml, ${AGENTZ_DIR_NAME}/agent-config.json)
  * 4. User-level config file (~/.roo-cli/config.json/yaml)
  * 5. VSCode settings (if available)
  * 6. Default values
@@ -114,7 +115,7 @@ export class CliConfigManager {
 		this.options = {
 			cwd: process.cwd(),
 			verbose: false,
-			userConfigDir: path.join(os.homedir(), ".agentz"), // Default to CLI mode
+			userConfigDir: getGlobalStoragePath(), // Default to CLI mode
 			...options,
 		}
 	}
@@ -244,7 +245,7 @@ export class CliConfigManager {
 			".roo-cli.yaml",
 			".roo-cli.yml",
 			"roo-cli.config.json",
-			".agentz/agent-config.json",
+			`${AGENTZ_DIR_NAME}/agent-config.json`,
 		]
 
 		for (const fileName of configFiles) {
@@ -442,14 +443,14 @@ export class CliConfigManager {
 	/**
 	 * Get the default user config directory
 	 */
-	public static getDefaultUserConfigDir(userConfigDirName: string = ".agentz"): string {
+	public static getDefaultUserConfigDir(userConfigDirName: string = AGENTZ_DIR_NAME): string {
 		return path.join(os.homedir(), userConfigDirName)
 	}
 
 	/**
 	 * Get the default user config file path
 	 */
-	public static getDefaultUserConfigPath(userConfigDirName: string = ".agentz"): string {
+	public static getDefaultUserConfigPath(userConfigDirName: string = AGENTZ_DIR_NAME): string {
 		return path.join(this.getDefaultUserConfigDir(userConfigDirName), "config.json")
 	}
 }

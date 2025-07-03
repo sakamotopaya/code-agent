@@ -24,13 +24,13 @@ export default [
 		},
 	},
 	{
-		files: ["__mocks__/**/*.js"],
+		files: ["__mocks__/**/*.js", "cli/__mocks__/**/*.js"],
 		rules: {
 			"no-undef": "off",
 		},
 	},
 	{
-		files: ["test-run-output/**/*.js", "**/__tests__/**/*.js", "temp/**/*.js"],
+		files: ["test-run-output/**/*.js", "**/__tests__/**/*.js", "temp/**/*.js", "test-cli-simple.js", "test-cli-logging.js"],
 		languageOptions: {
 			globals: {
 				require: "readonly",
@@ -44,6 +44,12 @@ export default [
 				setInterval: "readonly",
 				clearInterval: "readonly",
 			},
+		},
+	},
+	{
+		files: ["**/CLIStreamProcessor.test.ts"],
+		rules: {
+			"no-control-regex": "off",
 		},
 	},
 	{

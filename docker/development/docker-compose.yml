@@ -1,0 +1,225 @@
+# Roo Code Agent API - Development Docker Compose
+# Development environment with hot reload, debugging, and testing support
+
+services:
+  roo-api-dev:
+    build:
+      context: ../../
+      dockerfile: docker/development/Dockerfile
+    ports:
+      - "${API_PORT:-3000}:3000"
+      - "${DEBUG_PORT:-9229}:9229"
+    environment:
+      # Core Configuration
+      - NODE_ENV=development
+      - API_PORT=${API_PORT:-3000}
+      - API_HOST=0.0.0.0
+      - API_VERBOSE=${API_VERBOSE:-true}
+      - API_DEBUG=${API_DEBUG:-true}
+      
+      # Logging Configuration
+      - LOGS_PATH=/app/logs
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - LOG_FILE_ENABLED=${LOG_FILE_ENABLED:-true}
+      - LOG_ROTATION_ENABLED=${LOG_ROTATION_ENABLED:-false}
+      - LOG_MAX_SIZE=${LOG_MAX_SIZE:-10MB}
+      - LOG_MAX_FILES=${LOG_MAX_FILES:-3}
+      
+      # Workspace Configuration
+      - API_WORKSPACE_ROOT=/app/workspace
+      - API_CLI_CONFIG_PATH=/app/config/agent-config.json
+      
+      # Storage Configuration (CRITICAL for state persistence)
+      - ROO_GLOBAL_STORAGE_PATH=/app/.roo-storage
+      - ROO_CLI_STORAGE_PATH=/app/.roo-cli
+      - API_STORAGE_ROOT=/app/.roo-storage
+      
+      # Development-friendly CORS (permissive)
+      - API_CORS_ORIGIN=${API_CORS_ORIGIN:-*}
+      - API_CORS_CREDENTIALS=${API_CORS_CREDENTIALS:-true}
+      
+      # Security Configuration (relaxed for development)
+      - API_ENABLE_HELMET=${API_ENABLE_HELMET:-false}
+      - API_RATE_LIMIT_MAX=${API_RATE_LIMIT_MAX:-1000}
+      - API_RATE_LIMIT_WINDOW=${API_RATE_LIMIT_WINDOW:-1m}
+      
+      # SSE Configuration (development optimized)
+      - API_SSE_HEARTBEAT_INTERVAL=${API_SSE_HEARTBEAT_INTERVAL:-10000}
+      - API_SSE_RETRY_TIMEOUT=${API_SSE_RETRY_TIMEOUT:-1000}
+      - API_SSE_MAX_CONNECTIONS=${API_SSE_MAX_CONNECTIONS:-50}
+      - API_STREAM_BUFFER_SIZE=${API_STREAM_BUFFER_SIZE:-512}
+      
+      # Timeout Configuration (generous for debugging)
+      - API_REQUEST_TIMEOUT=${API_REQUEST_TIMEOUT:-60000}
+      - API_KEEP_ALIVE_TIMEOUT=${API_KEEP_ALIVE_TIMEOUT:-10000}
+      - API_TASK_TIMEOUT=${API_TASK_TIMEOUT:-1800000}
+      
+      # MCP Configuration
+      - MCP_CONFIG_PATH=/app/config/mcp-config.json
+      - MCP_AUTO_CONNECT=${MCP_AUTO_CONNECT:-true}
+      - MCP_TIMEOUT=${MCP_TIMEOUT:-60000}
+      - MCP_RETRIES=${MCP_RETRIES:-5}
+      
+      # External API Keys (from host environment)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DATABASE_URL=${DATABASE_URL}
+      - MSSQL_CONNECTION_STRING=${MSSQL_CONNECTION_STRING}
+    
+    volumes:
+      # Source code mounting for hot reload (use cached for better performance)
+      - ../../src:/app/src:cached
+      
+      # Preserve src node_modules (contains ts-node for development)
+      - src_node_modules_dev:/app/src/node_modules
+      
+      # Workspace mounting (configurable - defaults to test-workspace for development)
+      - ${WORKSPACE_PATH:-./workspace}:/app/workspace:rw
+      
+      # Configuration mounting
+      - ${CONFIG_PATH:-./config}:/app/config:rw
+      
+      # Global storage mounting (CRITICAL: Puppeteer, checkpoints, cache, MCP state)
+      - ${ROO_STORAGE_PATH:-./storage}:/app/.roo-storage:rw
+      
+      # CLI storage mounting (session history, REPL state)
+      - ${ROO_CLI_STORAGE_PATH:-./cli-storage}:/app/.roo-cli:rw
+      
+      # Logs mounting (persistent application logs)
+      - ${LOGS_PATH:-./logs}:/app/logs:rw
+      
+      # Node modules cache (named volume for performance)
+      - node_modules_dev:/app/node_modules
+      
+      # Development cache
+      - dev_cache:/app/.cache
+      
+      # Puppeteer downloads cache (subset of global storage)
+      - puppeteer_cache:/app/.roo-storage/puppeteer
+    
+    networks:
+      - roo-dev-network
+    
+    # Interactive mode for debugging
+    stdin_open: true
+    tty: true
+    
+    # Restart policy for development
+    restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    
+    # Development logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "1m"
+        max-file: "5"
+        labels: "service=roo-api-dev,environment=development"
+
+  # Optional: Isolated testing environment
+  roo-api-test:
+    build:
+      context: ../../
+      dockerfile: docker/development/Dockerfile
+    ports:
+      - "${TEST_API_PORT:-3001}:3000"
+      - "${TEST_DEBUG_PORT:-9230}:9229"
+    environment:
+      # Test environment configuration
+      - NODE_ENV=test
+      - API_PORT=3000
+      - API_HOST=0.0.0.0
+      - API_VERBOSE=${TEST_VERBOSE:-false}
+      - API_DEBUG=${TEST_DEBUG:-true}
+      - API_WORKSPACE_ROOT=/app/test-workspace
+      - API_CLI_CONFIG_PATH=/app/config/test-agent-config.json
+      - API_CORS_ORIGIN=*
+      - API_CORS_CREDENTIALS=true
+      - API_ENABLE_HELMET=false
+      
+      # Test Logging Configuration
+      - LOGS_PATH=/app/logs
+      - LOG_LEVEL=${TEST_LOG_LEVEL:-info}
+      - LOG_FILE_ENABLED=${TEST_LOG_FILE_ENABLED:-true}
+      - LOG_ROTATION_ENABLED=${TEST_LOG_ROTATION_ENABLED:-false}
+      - LOG_MAX_SIZE=${TEST_LOG_MAX_SIZE:-5MB}
+      - LOG_MAX_FILES=${TEST_LOG_MAX_FILES:-2}
+      
+      # Test Storage Configuration
+      - ROO_GLOBAL_STORAGE_PATH=/app/.roo-storage
+      - ROO_CLI_STORAGE_PATH=/app/.roo-cli
+      - API_STORAGE_ROOT=/app/.roo-storage
+      
+      # Test MCP configuration
+      - MCP_CONFIG_PATH=/app/config/test-mcp-config.json
+      - MCP_AUTO_CONNECT=true
+      - MCP_TIMEOUT=30000
+      - MCP_RETRIES=3
+      
+      # Test API keys (can be different from dev)
+      - ANTHROPIC_API_KEY=${TEST_ANTHROPIC_API_KEY:-${ANTHROPIC_API_KEY}}
+      - OPENAI_API_KEY=${TEST_OPENAI_API_KEY:-${OPENAI_API_KEY}}
+      - GITHUB_TOKEN=${TEST_GITHUB_TOKEN:-${GITHUB_TOKEN}}
+    
+    volumes:
+      # Source code mounting
+      - ../../src:/app/src:cached
+      
+      # Test workspace
+      - ${TEST_WORKSPACE_PATH:-./workspace}:/app/test-workspace:rw
+      
+      # Test configuration
+      - ${TEST_CONFIG_PATH:-./config}:/app/config:rw
+      
+      # Test storage (isolated from dev environment)
+      - ${TEST_ROO_STORAGE_PATH:-./storage}:/app/.roo-storage:rw
+      
+      # Test CLI storage
+      - ${TEST_ROO_CLI_STORAGE_PATH:-./cli-storage}:/app/.roo-cli:rw
+      
+      # Test logs mounting
+      - ${TEST_LOGS_PATH:-./logs}:/app/logs:rw
+      
+      # Separate node modules for test
+      - node_modules_test:/app/node_modules
+      
+      # Test puppeteer cache
+      - puppeteer_cache_test:/app/.roo-storage/puppeteer
+    
+    networks:
+      - roo-dev-network
+    
+    # Only start with testing profile
+    profiles:
+      - testing
+    
+    restart: unless-stopped
+
+volumes:
+  node_modules_dev:
+    driver: local
+  src_node_modules_dev:
+    driver: local
+  node_modules_test:
+    driver: local
+  dev_cache:
+    driver: local
+  puppeteer_cache:
+    driver: local
+  puppeteer_cache_test:
+    driver: local
+
+networks:
+  roo-dev-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16

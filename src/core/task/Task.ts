@@ -2,6 +2,7 @@ import * as path from "path"
 import os from "os"
 import crypto from "crypto"
 import EventEmitter from "events"
+import { getGlobalStoragePath } from "../../shared/paths"
 
 import { Anthropic } from "@anthropic-ai/sdk"
 import pWaitFor from "p-wait-for"
@@ -20,6 +21,7 @@ import {
 	TelemetryEventName,
 } from "@roo-code/types"
 import { ITelemetryService } from "../interfaces/ITelemetryService"
+import { ILogger, NoOpLogger } from "../interfaces/ILogger"
 
 // api
 import { ApiHandler, buildApiHandler } from "../../api"
@@ -89,6 +91,12 @@ import { type AssistantMessageContent } from "../assistant-message"
 import { IFileSystem } from "../interfaces/IFileSystem"
 import { ITerminal } from "../interfaces/ITerminal"
 import { IBrowser } from "../interfaces/IBrowser"
+import { IUserInterface } from "../interfaces/IUserInterface"
+import { IStreamingAdapter, IContentOutputAdapter } from "../interfaces/IOutputAdapter"
+import { IContentProcessor } from "../interfaces/IContentProcessor"
+
+// Data layer imports
+import { RepositoryContainer } from "../data/interfaces"
 
 // Modular components
 import { TaskMessaging } from "./TaskMessaging"
@@ -130,10 +138,12 @@ export type TaskOptions = {
 	fileSystem?: IFileSystem
 	terminal?: ITerminal
 	browser?: IBrowser
+	userInterface?: IUserInterface
 	telemetry?: ITelemetryService
 	globalStoragePath?: string
 	workspacePath?: string
 	verbose?: boolean
+	logger?: ILogger
 	// CLI specific dependencies
 	cliUIService?: any // CLIUIService type import would create circular dependency
 	// MCP configuration options
@@ -141,6 +151,10 @@ export type TaskOptions = {
 	mcpAutoConnect?: boolean
 	mcpTimeout?: number
 	mcpRetries?: number
+	// Data layer support
+	repositories?: RepositoryContainer
+	// Output adapter (to prevent duplicate creation)
+	outputAdapter?: import("../interfaces/IOutputAdapter").IOutputAdapter
 }
 
 export class Task extends EventEmitter<ClineEvents> {
@@ -198,8 +212,10 @@ export class Task extends EventEmitter<ClineEvents> {
 	private terminal?: ITerminal
 	private browser?: IBrowser
 	private telemetryService?: ITelemetryService
+	private _userInterface?: IUserInterface
 	private cliUIService?: any // CLIUIService instance for CLI mode
 	private verbose: boolean = false
+	private logger: ILogger = new NoOpLogger()
 
 	// MCP configuration
 	private mcpConfigPath?: string
@@ -213,37 +229,42 @@ export class Task extends EventEmitter<ClineEvents> {
 	private lifecycle: TaskLifecycle
 	private apiHandler: TaskApiHandler
 
-	// Logging methods
+	// Data layer support (optional)
+	private repositories?: RepositoryContainer
+
+	// Logging methods using injected logger
 	private logDebug(message: string, ...args: any[]): void {
-		if (this.isCliMode()) {
-			getCLILogger().debug(message, ...args)
-		} else if (this.verbose) {
-			console.log(message, ...args)
-		}
+		this.logger.debug(message, ...args)
+	}
+
+	private logVerbose(message: string, ...args: any[]): void {
+		this.logger.verbose(message, ...args)
 	}
 
 	private logInfo(message: string, ...args: any[]): void {
-		if (this.isCliMode()) {
-			getCLILogger().info(message, ...args)
-		} else {
-			console.log(message, ...args)
-		}
+		this.logger.info(message, ...args)
 	}
 
 	private logError(message: string, ...args: any[]): void {
-		if (this.isCliMode()) {
-			getCLILogger().error(message, ...args)
-		} else {
-			console.error(message, ...args)
-		}
+		this.logger.error(message, ...args)
 	}
 
 	private logWarn(message: string, ...args: any[]): void {
-		if (this.isCliMode()) {
-			getCLILogger().warn(message, ...args)
-		} else {
-			console.warn(message, ...args)
-		}
+		this.logger.warn(message, ...args)
+	}
+
+	/**
+	 * Set or update the logger instance
+	 */
+	setLogger(logger: ILogger): void {
+		this.logger = logger
+	}
+
+	/**
+	 * Get the current logger instance
+	 */
+	getLogger(): ILogger {
+		return this.logger
 	}
 
 	private isCliMode(): boolean {
@@ -360,6 +381,15 @@ export class Task extends EventEmitter<ClineEvents> {
 		return this.browser
 	}
 
+	get userInterface(): IUserInterface {
+		if (!this._userInterface) {
+			throw new Error(
+				"UserInterface interface not available. Make sure the Task was initialized with a userInterface interface.",
+			)
+		}
+		return this._userInterface
+	}
+
 	get telemetry(): ITelemetryService {
 		if (!this.telemetryService) {
 			// Fallback to global telemetry service for compatibility
@@ -400,6 +430,15 @@ export class Task extends EventEmitter<ClineEvents> {
 		return this.telemetryService
 	}
 
+	// Data layer access
+	get dataRepositories(): RepositoryContainer | undefined {
+		return this.repositories
+	}
+
+	get hasDataLayer(): boolean {
+		return !!this.repositories
+	}
+
 	// Messaging compatibility
 	get lastMessageTs() {
 		return this.messaging.lastMessageTs
@@ -426,15 +465,19 @@ export class Task extends EventEmitter<ClineEvents> {
 		fileSystem,
 		terminal,
 		browser,
+		userInterface,
 		telemetry,
 		globalStoragePath,
 		workspacePath,
 		verbose = false,
+		logger,
 		cliUIService,
 		mcpConfigPath,
 		mcpAutoConnect = true,
 		mcpTimeout,
 		mcpRetries,
+		repositories,
+		outputAdapter,
 	}: TaskOptions) {
 		super()
 
@@ -453,9 +496,12 @@ export class Task extends EventEmitter<ClineEvents> {
 		this.fileSystem = fileSystem
 		this.terminal = terminal
 		this.browser = browser
+		this._userInterface = userInterface
 		this.telemetryService = telemetry
 		this.cliUIService = cliUIService
 		this.verbose = verbose
+		this.repositories = repositories
+		this.logger = logger || new NoOpLogger()
 
 		// Store MCP configuration
 		this.mcpConfigPath = mcpConfigPath
@@ -468,7 +514,38 @@ export class Task extends EventEmitter<ClineEvents> {
 			this.providerRef = new WeakRef(provider)
 			this.globalStoragePath = provider.context.globalStorageUri.fsPath
 		} else {
-			this.globalStoragePath = globalStoragePath || path.join(os.homedir(), ".roo-code")
+			this.globalStoragePath = globalStoragePath || getGlobalStoragePath()
+		}
+
+		// Use provided output adapter or create one based on mode
+		let taskOutputAdapter: import("../interfaces/IOutputAdapter").IOutputAdapter | undefined
+
+		if (outputAdapter) {
+			// Use the provided output adapter (from CLIProvider, etc.)
+			this.logDebug("[Task] Using provided output adapter")
+			taskOutputAdapter = outputAdapter
+		} else {
+			// Create appropriate output adapter based on mode
+			try {
+				if (provider) {
+					// VSCode Extension mode - use VSCode output adapter
+					this.logDebug("[Task] VSCode mode detected - creating VSCode output adapter")
+					const { VSCodeOutputAdapter } = require("../adapters/vscode/VSCodeOutputAdapter")
+					taskOutputAdapter = new VSCodeOutputAdapter(provider)
+				} else if (userInterface) {
+					// API mode - will implement SSE adapter later
+					this.logDebug("[Task] API mode detected - using legacy userInterface for now")
+					taskOutputAdapter = undefined // Will implement SSE adapter later
+				} else {
+					// CLI mode - use CLI output adapter
+					this.logDebug("[Task] CLI mode detected - creating CLI output adapter")
+					const { CLIOutputAdapter } = require("../adapters/cli/CLIOutputAdapters")
+					taskOutputAdapter = new CLIOutputAdapter(this.globalStoragePath, true, this.logger)
+				}
+			} catch (error) {
+				this.logError("[Task] Error creating output adapter:", error)
+				taskOutputAdapter = undefined // Fall back to legacy methods
+			}
 		}
 
 		// Initialize modular components
@@ -479,6 +556,7 @@ export class Task extends EventEmitter<ClineEvents> {
 			this.globalStoragePath,
 			this.workspacePath,
 			this.providerRef,
+			taskOutputAdapter,
 		)
 
 		this.lifecycle = new TaskLifecycle(
@@ -496,7 +574,7 @@ export class Task extends EventEmitter<ClineEvents> {
 		// Enable file watcher only in VSCode mode (when provider exists)
 		this.rooIgnoreController = new RooIgnoreController(this.workspacePath, !!provider)
 		this.rooIgnoreController.initialize().catch((error) => {
-			console.error("Failed to initialize RooIgnoreController:", error)
+			this.logError("Failed to initialize RooIgnoreController:", error)
 		})
 
 		if (provider) {
@@ -517,11 +595,13 @@ export class Task extends EventEmitter<ClineEvents> {
 			this.messaging,
 			this.telemetry,
 			this.providerRef,
-			(taskId, tokenUsage) => this.emit("taskTokenUsageUpdated", taskId, tokenUsage),
-			(taskId, tool, error) => this.emit("taskToolFailed", taskId, tool, error),
-			(action, message) => this.emit("message", { action, message }), // onMessage callback
-			!provider, // cliMode - true if no provider
-			apiConfiguration, // cliApiConfiguration
+			(taskId: string, tokenUsage: any) => this.emit("taskTokenUsageUpdated", taskId, tokenUsage),
+			(taskId: string, tool: ToolName, error: string) => this.emit("taskToolFailed", taskId, tool, error),
+			(action: "created" | "updated", message: any) => this.emit("message", { action, message }), // onMessage callback
+			!provider && !this._userInterface, // cliMode - true only if no provider AND no userInterface (true CLI mode)
+			undefined, // cliApiConfiguration
+			new WeakRef(this), // taskRef - reference to this Task instance
+			this.logger, // logger
 		)
 
 		// For backward compatibility with VS Code extension
@@ -592,6 +672,16 @@ export class Task extends EventEmitter<ClineEvents> {
 		if (this.cliMcpService) {
 			this.logDebug("[Task] Releasing reference to shared MCP service...")
 			this.cliMcpService = undefined
+		}
+
+		// Clean up data layer repositories if present
+		if (this.repositories?.dispose) {
+			try {
+				await this.repositories.dispose()
+				this.logDebug("[Task] Data layer repositories disposed")
+			} catch (error) {
+				this.logError("[Task] Error disposing data layer repositories:", error)
+			}
 		}
 	}
 
@@ -827,16 +917,12 @@ export class Task extends EventEmitter<ClineEvents> {
 					throw new Error("MCP service not available in CLI mode")
 				}
 
-				if (this.verbose) {
-					console.log(`[CLI MCP] Executing tool: ${params.tool_name} on server: ${params.server_name}`)
-					console.log(`[CLI MCP] Arguments:`, params.arguments)
-				}
+				this.logDebug(`[CLI MCP] Executing tool: ${params.tool_name} on server: ${params.server_name}`)
+				this.logDebug(`[CLI MCP] Arguments:`, params.arguments)
 
 				try {
 					const parsedArgs = JSON.parse(params.arguments)
-					if (this.verbose) {
-						console.log(`[CLI MCP] Parsed arguments:`, JSON.stringify(parsedArgs, null, 2))
-					}
+					this.logDebug(`[CLI MCP] Parsed arguments:`, JSON.stringify(parsedArgs, null, 2))
 
 					const result = await this.cliMcpService.executeTool(
 						params.server_name,
@@ -844,15 +930,11 @@ export class Task extends EventEmitter<ClineEvents> {
 						parsedArgs,
 					)
 
-					if (this.verbose) {
-						console.log(`[CLI MCP] Tool execution result:`, JSON.stringify(result, null, 2))
-					}
+					this.logDebug(`[CLI MCP] Tool execution result:`, JSON.stringify(result, null, 2))
 
 					if (!result.success) {
 						const errorMsg = result.error || "Tool execution failed"
-						if (this.verbose) {
-							console.error(`[CLI MCP] Tool execution failed: ${errorMsg}`)
-						}
+						this.logError(`[CLI MCP] Tool execution failed: ${errorMsg}`)
 						throw new Error(`MCP tool execution failed: ${errorMsg}`)
 					}
 
@@ -863,14 +945,10 @@ export class Task extends EventEmitter<ClineEvents> {
 							: JSON.stringify(result.result, null, 2)
 						: "(No response)"
 
-					if (this.verbose) {
-						console.log(`[CLI MCP] Formatted result:`, formattedResult)
-					}
+					this.logDebug(`[CLI MCP] Formatted result:`, formattedResult)
 					return formattedResult
 				} catch (parseError) {
-					if (this.verbose) {
-						console.error(`[CLI MCP] Failed to parse arguments:`, parseError)
-					}
+					this.logError(`[CLI MCP] Failed to parse arguments:`, parseError)
 					throw new Error(`Invalid JSON arguments for MCP tool: ${parseError.message}`)
 				}
 			}
@@ -977,40 +1055,32 @@ export class Task extends EventEmitter<ClineEvents> {
 		toolName: string,
 		args: any,
 	): Promise<{ success: boolean; result?: any; error?: string }> {
-		if (this.verbose) {
-			console.log(`[MCP] executeMcpTool called: server=${serverName}, tool=${toolName}`)
-			console.log(`[MCP] Args:`, JSON.stringify(args, null, 2))
-			console.log(`[MCP] CLI MCP Service available:`, !!this.cliMcpService)
-			console.log(`[MCP] Provider ref available:`, !!this.providerRef?.deref())
-		}
+		this.logDebug(`[MCP] executeMcpTool called: server=${serverName}, tool=${toolName}`)
+		this.logDebug(`[MCP] Args:`, JSON.stringify(args, null, 2))
+		this.logDebug(`[MCP] CLI MCP Service available:`, !!this.cliMcpService)
+		this.logDebug(`[MCP] Provider ref available:`, !!this.providerRef?.deref())
 
 		try {
 			if (this.cliMcpService) {
 				// CLI mode - use CLI MCP service
-				if (this.verbose) {
-					console.log(`[CLI MCP] Using CLI MCP service for tool execution`)
-					console.log(
-						`[CLI MCP] Connected servers:`,
-						this.cliMcpService.getConnectedServers().map((s: any) => s.id),
-					)
-				}
+				this.logDebug(`[CLI MCP] Using CLI MCP service for tool execution`)
+				this.logDebug(
+					`[CLI MCP] Connected servers:`,
+					this.cliMcpService.getConnectedServers().map((s: any) => s.id),
+				)
 
 				const result = await this.cliMcpService.executeTool(serverName, toolName, args)
-				if (this.verbose) {
-					console.log(
-						`[CLI MCP] Tool execution completed: ${toolName} -> ${result.success ? "SUCCESS" : "ERROR"}`,
-					)
-					console.log(`[CLI MCP] Result:`, JSON.stringify(result, null, 2))
-				}
+				this.logDebug(
+					`[CLI MCP] Tool execution completed: ${toolName} -> ${result.success ? "SUCCESS" : "ERROR"}`,
+				)
+				this.logDebug(`[CLI MCP] Result:`, JSON.stringify(result, null, 2))
 				return result
 			} else if (this.providerRef?.deref()) {
 				// VS Code extension mode - use MCP hub
-				if (this.verbose) {
-					console.log(`[MCP] Using VS Code extension MCP hub`)
-				}
+				this.logDebug(`[MCP] Using VS Code extension MCP hub`)
 				const mcpHub = this.providerRef.deref()?.getMcpHub()
 				if (!mcpHub) {
-					console.error(`[MCP] MCP hub not available in extension mode`)
+					this.logError(`[MCP] MCP hub not available in extension mode`)
 					return { success: false, error: "MCP hub not available in extension mode" }
 				}
 
@@ -1031,16 +1101,16 @@ export class Task extends EventEmitter<ClineEvents> {
 						.filter(Boolean)
 						.join("\n\n") || "(No response)"
 
-				console.log(`[MCP] Extension tool execution completed: ${success ? "SUCCESS" : "ERROR"}`)
+				this.logDebug(`[MCP] Extension tool execution completed: ${success ? "SUCCESS" : "ERROR"}`)
 				return { success, result, error: success ? undefined : result }
 			} else {
-				console.error(`[MCP] No MCP service available in current context`)
+				this.logError(`[MCP] No MCP service available in current context`)
 				return { success: false, error: "MCP service not available in current context" }
 			}
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : String(error)
-			console.error(`[MCP] Tool execution failed:`, error)
-			console.error(`[MCP] Error stack:`, error instanceof Error ? error.stack : "No stack trace")
+			this.logError(`[MCP] Tool execution failed:`, error)
+			this.logError(`[MCP] Error stack:`, error instanceof Error ? error.stack : "No stack trace")
 			return { success: false, error: errorMessage }
 		}
 	}
@@ -1189,7 +1259,7 @@ export class Task extends EventEmitter<ClineEvents> {
 				this.logDebug(`[Task] Task loop aborted after ${loopCount} iterations`)
 			}
 		} catch (error) {
-			console.error(`[Task] Error in task loop:`, error)
+			this.logError(`[Task] Error in task loop:`, error)
 			throw error
 		}
 	}
@@ -1294,7 +1364,7 @@ export class Task extends EventEmitter<ClineEvents> {
 								executedTool = true
 								break
 							} catch (error) {
-								console.error(`[Task] attempt_completion failed:`, error)
+								this.logError(`[Task] attempt_completion failed:`, error)
 								taskApiHandler.streamingState.userMessageContent.push({
 									type: "text",
 									text: `<tool_result>\nError: ${error.message}\n</tool_result>`,
@@ -1319,7 +1389,7 @@ export class Task extends EventEmitter<ClineEvents> {
 							// Mark that we used a tool
 							taskApiHandler.setStreamingState({ didAlreadyUseTool: true })
 						} catch (error) {
-							console.error(`[Task] Tool execution failed for ${block.name}:`, error)
+							this.logError(`[Task] Tool execution failed for ${block.name}:`, error)
 							taskApiHandler.streamingState.userMessageContent.push({
 								type: "text",
 								text: `<tool_result>\nError: ${error.message}\n</tool_result>`,
@@ -1364,7 +1434,7 @@ export class Task extends EventEmitter<ClineEvents> {
 								executedTool = true
 								taskApiHandler.setStreamingState({ didAlreadyUseTool: true })
 							} catch (error) {
-								console.error(`[Task] Parsed tool execution failed for ${toolUse.name}:`, error)
+								this.logError(`[Task] Parsed tool execution failed for ${toolUse.name}:`, error)
 								taskApiHandler.streamingState.userMessageContent.push({
 									type: "text",
 									text: `<tool_result>\nError: ${error.message}\n</tool_result>`,
@@ -1429,12 +1499,12 @@ export class Task extends EventEmitter<ClineEvents> {
 
 					if (mcpHub) {
 						await pWaitFor(() => !mcpHub!.isConnecting, { timeout: 10_000 }).catch(() => {
-							console.error("MCP servers failed to connect in time")
+							this.logError("MCP servers failed to connect in time")
 						})
 					}
 				}
 			} catch (error) {
-				console.warn(`[Task] Failed to get provider state:`, error)
+				this.logWarn(`[Task] Failed to get provider state:`, error)
 			}
 		} else {
 			// CLI mode - use defaults and enable MCP

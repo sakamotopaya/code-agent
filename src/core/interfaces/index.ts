@@ -77,6 +77,10 @@ export type {
 export type { ITelemetryService } from "./ITelemetryService"
 export type { IStorageService } from "./IStorageService"
 
+// Content processing and output interfaces
+export type { IContentProcessor, ProcessedContent } from "./IContentProcessor"
+export type { IStreamingAdapter, IContentOutputAdapter } from "./IOutputAdapter"
+
 // Import the interfaces for use in CoreInterfaces
 import type { IUserInterface } from "./IUserInterface"
 import type { IFileSystem } from "./IFileSystem"
@@ -109,6 +113,10 @@ export interface CoreInterfaces {
 	/** Storage abstraction for persistent data and configuration */
 	storage: IStorageService
 }
+
+// Re-export data layer abstractions
+export type * from "../data/interfaces"
+export type * from "../data/types/entities"
 
 /**
  * Factory function type for creating platform-specific implementations

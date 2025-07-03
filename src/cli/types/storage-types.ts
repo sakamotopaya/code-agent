@@ -4,6 +4,7 @@
 
 import * as os from "os"
 import * as path from "path"
+import { getGlobalStoragePath } from "../../shared/paths"
 
 // Storage backend interface
 export interface ISessionStorage {
@@ -47,7 +48,7 @@ export interface StorageConfig {
 }
 
 export const DEFAULT_STORAGE_CONFIG: StorageConfig = {
-	sessionDirectory: path.join(os.homedir(), ".agentz"),
+	sessionDirectory: getGlobalStoragePath(),
 	compressionLevel: 6,
 	backupEnabled: true,
 	backupInterval: 24,

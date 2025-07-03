@@ -2,6 +2,7 @@ import fs from "fs/promises"
 import { PathLike } from "fs"
 
 import { loadRuleFiles, addCustomInstructions } from "../custom-instructions"
+import { AGENTZ_DIR_NAME } from "../../../../shared/paths"
 
 // Mock fs/promises
 jest.mock("fs/promises")
