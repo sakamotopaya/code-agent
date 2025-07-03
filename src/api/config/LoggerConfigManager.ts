@@ -106,8 +106,17 @@ export class LoggerConfigManager {
 						// Write to API log file
 						this.fileStreams.api?.write(chunk)
 						// Write to error log if it's an error level
-						if (chunk.includes('"level":"error"') || chunk.includes('"level":50')) {
-							this.fileStreams.error?.write(chunk)
+						try {
+							const logObject = JSON.parse(chunk)
+							// Pino uses numeric levels: error = 50, fatal = 60
+							if (logObject.level >= 50 || logObject.level === "error") {
+								this.fileStreams.error?.write(chunk)
+							}
+						} catch (error) {
+							// Fallback to string matching if JSON parsing fails
+							if (chunk.includes('"level":"error"') || chunk.includes('"level":50')) {
+								this.fileStreams.error?.write(chunk)
+							}
 						}
 					},
 				}

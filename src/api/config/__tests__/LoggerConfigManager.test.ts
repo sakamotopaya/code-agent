@@ -31,10 +31,11 @@ describe("LoggerConfigManager", () => {
 		delete process.env.LOG_MAX_SIZE
 		delete process.env.LOG_MAX_FILES
 
-		// Mock fs.existsSync to return false by default (non-container environment)
+		// Mock fs methods
 		mockFs.existsSync.mockReturnValue(false)
 		mockFs.mkdirSync.mockReturnValue(undefined as any)
-		mockFs.accessSync.mockReturnValue(undefined)
+		mockFs.accessSync = jest.fn().mockReturnValue(undefined)
+		mockFs.createWriteStream = jest.fn()
 	})
 
 	describe("createLoggerConfig", () => {
@@ -44,9 +45,9 @@ describe("LoggerConfigManager", () => {
 			const config = LoggerConfigManager.createLoggerConfig(mockApiConfig)
 
 			expect(config).toHaveProperty("level", "info")
-			expect(config).toHaveProperty("transport")
-			expect(config.transport.targets).toHaveLength(1)
-			expect(config.transport.targets[0].target).toBe("pino-pretty")
+			expect(config).toHaveProperty("formatters")
+			expect(config).toHaveProperty("serializers")
+			expect(config.stream).toBeUndefined() // No custom stream for console-only
 		})
 
 		it("should enable debug level when debug is true", () => {
@@ -64,60 +65,8 @@ describe("LoggerConfigManager", () => {
 
 			const config = LoggerConfigManager.createLoggerConfig(mockApiConfig)
 
-			// Should have console + file + error file targets
-			expect(config.transport.targets.length).toBeGreaterThan(1)
-
-			// Check that file targets are present
-			const fileTargets = config.transport.targets.filter(
-				(t: any) => t.target === "pino/file" && t.options.destination !== 1,
-			)
-			expect(fileTargets.length).toBeGreaterThanOrEqual(2) // main + error logs
-		})
-
-		it("should use development pretty printing for development environment", () => {
-			process.env.NODE_ENV = "development"
-
-			const config = LoggerConfigManager.createLoggerConfig(mockApiConfig)
-
-			const consoleTarget = config.transport.targets.find((t: any) => t.target === "pino-pretty")
-			expect(consoleTarget).toBeDefined()
-			expect(consoleTarget.options.colorize).toBe(true)
-		})
-
-		it("should use JSON logging for production environment", () => {
-			process.env.NODE_ENV = "production"
-
-			const config = LoggerConfigManager.createLoggerConfig(mockApiConfig)
-
-			// Should have JSON console target (not pino-pretty)
-			const jsonTarget = config.transport.targets.find(
-				(t: any) => t.target === "pino/file" && t.options.destination === 1,
-			)
-			expect(jsonTarget).toBeDefined()
-		})
-
-		it("should add rotation target for production with rotation enabled", () => {
-			process.env.NODE_ENV = "production"
-			process.env.LOG_FILE_ENABLED = "true"
-			process.env.LOG_ROTATION_ENABLED = "true"
-
-			const config = LoggerConfigManager.createLoggerConfig(mockApiConfig)
-
-			// Should include rotation target
-			expect(config.transport.targets.length).toBeGreaterThan(2)
-		})
-
-		it("should handle custom logs path", () => {
-			process.env.LOG_FILE_ENABLED = "true"
-			process.env.LOGS_PATH = "/custom/logs"
-
-			const config = LoggerConfigManager.createLoggerConfig(mockApiConfig)
-
-			const fileTarget = config.transport.targets.find(
-				(t: any) =>
-					t.target === "pino/file" && t.options.destination && t.options.destination.includes("/custom/logs"),
-			)
-			expect(fileTarget).toBeDefined()
+			expect(config).toHaveProperty("stream")
+			expect(typeof config.stream.write).toBe("function")
 		})
 
 		it("should create logs directory if it does not exist", () => {
@@ -139,6 +88,15 @@ describe("LoggerConfigManager", () => {
 			expect(() => {
 				LoggerConfigManager.createLoggerConfig(mockApiConfig)
 			}).not.toThrow()
+		})
+
+		it("should handle custom logs path", () => {
+			process.env.LOG_FILE_ENABLED = "true"
+			process.env.LOGS_PATH = "/custom/logs"
+
+			LoggerConfigManager.createLoggerConfig(mockApiConfig)
+
+			expect(mockFs.mkdirSync).toHaveBeenCalledWith("/custom/logs", { recursive: true })
 		})
 	})
 
@@ -284,6 +242,123 @@ describe("LoggerConfigManager", () => {
 			const serialized = config.serializers.err(error)
 
 			expect(serialized.stack).toBe("")
+		})
+	})
+
+	describe("multiWriteStream error detection", () => {
+		let mockApiStream: any
+		let mockErrorStream: any
+		let mockStdout: jest.SpyInstance
+
+		beforeEach(() => {
+			// Mock file streams
+			mockApiStream = { write: jest.fn() }
+			mockErrorStream = { write: jest.fn() }
+			mockStdout = jest.spyOn(process.stdout, "write").mockImplementation(() => true)
+
+			// Mock createWriteStream to return our mocks
+			mockFs.createWriteStream.mockImplementation((path: any) => {
+				if (path.toString().includes("api-error.log")) {
+					return mockErrorStream
+				}
+				return mockApiStream
+			})
+		})
+
+		afterEach(() => {
+			mockStdout.mockRestore()
+		})
+
+		it("should route error logs to error stream using JSON parsing", () => {
+			process.env.LOG_FILE_ENABLED = "true"
+
+			const config = LoggerConfigManager.createLoggerConfig(mockApiConfig)
+
+			// Simulate a Pino error log with numeric level
+			const errorLogChunk = '{"level":50,"time":"2024-01-01T00:00:00.000Z","msg":"Test error"}\n'
+			config.stream.write(errorLogChunk)
+
+			expect(mockApiStream.write).toHaveBeenCalledWith(errorLogChunk)
+			expect(mockErrorStream.write).toHaveBeenCalledWith(errorLogChunk)
+			expect(mockStdout).toHaveBeenCalledWith(errorLogChunk)
+		})
+
+		it("should route fatal logs to error stream using JSON parsing", () => {
+			process.env.LOG_FILE_ENABLED = "true"
+
+			const config = LoggerConfigManager.createLoggerConfig(mockApiConfig)
+
+			// Simulate a Pino fatal log (level 60)
+			const fatalLogChunk = '{"level":60,"time":"2024-01-01T00:00:00.000Z","msg":"Fatal error"}\n'
+			config.stream.write(fatalLogChunk)
+
+			expect(mockApiStream.write).toHaveBeenCalledWith(fatalLogChunk)
+			expect(mockErrorStream.write).toHaveBeenCalledWith(fatalLogChunk)
+		})
+
+		it("should route string-level error logs to error stream", () => {
+			process.env.LOG_FILE_ENABLED = "true"
+
+			const config = LoggerConfigManager.createLoggerConfig(mockApiConfig)
+
+			// Simulate a log with string level
+			const errorLogChunk = '{"level":"error","time":"2024-01-01T00:00:00.000Z","msg":"String level error"}\n'
+			config.stream.write(errorLogChunk)
+
+			expect(mockApiStream.write).toHaveBeenCalledWith(errorLogChunk)
+			expect(mockErrorStream.write).toHaveBeenCalledWith(errorLogChunk)
+		})
+
+		it("should not route info logs to error stream", () => {
+			process.env.LOG_FILE_ENABLED = "true"
+
+			const config = LoggerConfigManager.createLoggerConfig(mockApiConfig)
+
+			// Simulate an info log (level 30)
+			const infoLogChunk = '{"level":30,"time":"2024-01-01T00:00:00.000Z","msg":"Info message"}\n'
+			config.stream.write(infoLogChunk)
+
+			expect(mockApiStream.write).toHaveBeenCalledWith(infoLogChunk)
+			expect(mockErrorStream.write).not.toHaveBeenCalled()
+		})
+
+		it("should fallback to string matching when JSON parsing fails", () => {
+			process.env.LOG_FILE_ENABLED = "true"
+
+			const config = LoggerConfigManager.createLoggerConfig(mockApiConfig)
+
+			// Simulate malformed JSON that contains error level as string
+			const malformedLogChunk = 'invalid json but contains "level":"error" somewhere\n'
+			config.stream.write(malformedLogChunk)
+
+			expect(mockApiStream.write).toHaveBeenCalledWith(malformedLogChunk)
+			expect(mockErrorStream.write).toHaveBeenCalledWith(malformedLogChunk)
+		})
+
+		it("should fallback to string matching for numeric level when JSON parsing fails", () => {
+			process.env.LOG_FILE_ENABLED = "true"
+
+			const config = LoggerConfigManager.createLoggerConfig(mockApiConfig)
+
+			// Simulate malformed JSON that contains numeric error level
+			const malformedLogChunk = 'invalid json but contains "level":50 somewhere\n'
+			config.stream.write(malformedLogChunk)
+
+			expect(mockApiStream.write).toHaveBeenCalledWith(malformedLogChunk)
+			expect(mockErrorStream.write).toHaveBeenCalledWith(malformedLogChunk)
+		})
+
+		it("should not route non-error logs when JSON parsing fails and no error strings present", () => {
+			process.env.LOG_FILE_ENABLED = "true"
+
+			const config = LoggerConfigManager.createLoggerConfig(mockApiConfig)
+
+			// Simulate malformed JSON without error indicators
+			const malformedLogChunk = "invalid json with no error indicators\n"
+			config.stream.write(malformedLogChunk)
+
+			expect(mockApiStream.write).toHaveBeenCalledWith(malformedLogChunk)
+			expect(mockErrorStream.write).not.toHaveBeenCalled()
 		})
 	})
 })
