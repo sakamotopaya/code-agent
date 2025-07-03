@@ -173,6 +173,7 @@ async function main() {
 		},
 		external: [
 			// Only keep truly external dependencies that can't be bundled
+			"pino-pretty"
 		],
 		define: {
 			'process.env.VSCODE_CONTEXT': 'false',

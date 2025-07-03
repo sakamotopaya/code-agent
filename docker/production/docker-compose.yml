@@ -17,6 +17,14 @@ services:
       - API_VERBOSE=${API_VERBOSE:-false}
       - API_DEBUG=${API_DEBUG:-false}
       
+      # Logging Configuration
+      - LOGS_PATH=/app/logs
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FILE_ENABLED=${LOG_FILE_ENABLED:-true}
+      - LOG_ROTATION_ENABLED=${LOG_ROTATION_ENABLED:-true}
+      - LOG_MAX_SIZE=${LOG_MAX_SIZE:-50MB}
+      - LOG_MAX_FILES=${LOG_MAX_FILES:-7}
+      
       # Workspace Configuration
       - API_WORKSPACE_ROOT=/app/workspace
       - API_CLI_CONFIG_PATH=/app/config/agent-config.json
@@ -79,7 +87,7 @@ services:
       - ${ROO_CLI_STORAGE_PATH:-./cli-storage}:/app/.roo-cli:rw
       
       # Logs (persistent)
-      - api-logs:/app/logs:rw
+      - ${LOGS_PATH:-./logs}:/app/logs:rw
       
       # Temporary files (tmpfs for performance)
       - type: tmpfs
@@ -144,12 +152,6 @@ services:
   #   restart: unless-stopped
 
 volumes:
-  api-logs:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${LOGS_PATH:-./logs}
 
 networks:
   roo-api-network:

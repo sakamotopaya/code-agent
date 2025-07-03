@@ -17,6 +17,14 @@ services:
       - API_VERBOSE=${API_VERBOSE:-true}
       - API_DEBUG=${API_DEBUG:-true}
       
+      # Logging Configuration
+      - LOGS_PATH=/app/logs
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - LOG_FILE_ENABLED=${LOG_FILE_ENABLED:-true}
+      - LOG_ROTATION_ENABLED=${LOG_ROTATION_ENABLED:-false}
+      - LOG_MAX_SIZE=${LOG_MAX_SIZE:-10MB}
+      - LOG_MAX_FILES=${LOG_MAX_FILES:-3}
+      
       # Workspace Configuration
       - API_WORKSPACE_ROOT=/app/workspace
       - API_CLI_CONFIG_PATH=/app/config/agent-config.json
@@ -78,6 +86,9 @@ services:
       # CLI storage mounting (session history, REPL state)
       - ${ROO_CLI_STORAGE_PATH:-./cli-storage}:/app/.roo-cli:rw
       
+      # Logs mounting (persistent application logs)
+      - ${LOGS_PATH:-./logs}:/app/logs:rw
+      
       # Node modules cache (named volume for performance)
       - node_modules_dev:/app/node_modules
       
@@ -134,6 +145,14 @@ services:
       - API_CORS_CREDENTIALS=true
       - API_ENABLE_HELMET=false
       
+      # Test Logging Configuration
+      - LOGS_PATH=/app/logs
+      - LOG_LEVEL=${TEST_LOG_LEVEL:-info}
+      - LOG_FILE_ENABLED=${TEST_LOG_FILE_ENABLED:-true}
+      - LOG_ROTATION_ENABLED=${TEST_LOG_ROTATION_ENABLED:-false}
+      - LOG_MAX_SIZE=${TEST_LOG_MAX_SIZE:-5MB}
+      - LOG_MAX_FILES=${TEST_LOG_MAX_FILES:-2}
+      
       # Test Storage Configuration
       - ROO_GLOBAL_STORAGE_PATH=/app/.roo-storage
       - ROO_CLI_STORAGE_PATH=/app/.roo-cli
@@ -165,6 +184,9 @@ services:
       
       # Test CLI storage
       - ${TEST_ROO_CLI_STORAGE_PATH:-./cli-storage}:/app/.roo-cli:rw
+      
+      # Test logs mounting
+      - ${TEST_LOGS_PATH:-./logs}:/app/logs:rw
       
       # Separate node modules for test
       - node_modules_test:/app/node_modules

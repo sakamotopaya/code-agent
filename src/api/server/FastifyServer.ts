@@ -2,6 +2,7 @@ import fastify, { FastifyInstance, FastifyRequest, FastifyReply } from "fastify"
 import cors from "@fastify/cors"
 import helmet from "@fastify/helmet"
 import { ApiConfigManager } from "../config/ApiConfigManager"
+import { LoggerConfigManager } from "../config/LoggerConfigManager"
 import type { ApiServerOptions, ServerStatus, HealthCheck } from "../types/server"
 import type { CoreInterfaces } from "../../core/interfaces"
 import { JobManager } from "../jobs/JobManager"
@@ -38,10 +39,13 @@ export class FastifyServer {
 		this.questionManager = new ApiQuestionManager()
 		this.taskExecutionOrchestrator = new TaskExecutionOrchestrator()
 		this.app = fastify({
-			logger: {
-				level: config.getConfiguration().debug ? "debug" : "info",
-			},
+			logger: LoggerConfigManager.createLoggerConfig(config),
 		})
+
+		// Test log entry to verify logging is working
+		this.app.log.info("🚀 FastifyServer logger initialized successfully")
+		this.app.log.debug("🔧 Debug logging is enabled")
+		this.app.log.error("🧪 Test error log entry for validation")
 	}
 
 	/**
@@ -523,10 +527,22 @@ export class FastifyServer {
 			this.app.log.info(`🚀 API Server started at ${address}`)
 			this.app.log.info(`📁 Workspace: ${serverConfig.workspaceRoot}`)
 
+			// Log configuration information
+			const loggingInfo = LoggerConfigManager.getLoggingInfo()
+			if (loggingInfo.fileLoggingEnabled) {
+				this.app.log.info(`📝 File logging: enabled → ${loggingInfo.logsDir}`)
+				if (loggingInfo.rotationEnabled) {
+					this.app.log.info(`🔄 Log rotation: enabled`)
+				}
+			} else {
+				this.app.log.info(`📝 File logging: disabled (console only)`)
+			}
+
 			if (serverConfig.verbose) {
 				this.app.log.info(`🔧 Debug mode: ${serverConfig.debug ? "enabled" : "disabled"}`)
 				this.app.log.info(`🌐 CORS: ${serverConfig.cors ? "enabled" : "disabled"}`)
 				this.app.log.info(`🛡️  Security: ${serverConfig.security?.enableHelmet ? "enabled" : "disabled"}`)
+				this.app.log.info(`📊 Log level: ${loggingInfo.logLevel}`)
 			}
 		} catch (error) {
 			this.app.log.error("Failed to start server:", error)
