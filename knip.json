@@ -30,6 +30,8 @@
 				"cli/optimization/index.ts",
 				"cli/utils/output-validation.ts",
 				"core/question-handling/index.ts",
+				"core/index.ts",
+				"core/data/adapters/ExternalApplicationAdapter.ts",
 				"**/*.benchmark.{js,ts}",
 				"dist/**/*",
 				"out/**/*"
