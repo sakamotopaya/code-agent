@@ -292,8 +292,8 @@ export class FastifyServer {
 				const executionOptions = {
 					isInfoQuery,
 					infoQueryTimeoutMs: 120000, // 2 minutes for info queries
-					emergencyTimeoutMs: 60000, // 60 seconds emergency timeout
-					slidingTimeoutMs: 600000, // 10 minutes for regular tasks
+					// emergencyTimeoutMs removed - now relies on sliding timeout for long-running tasks
+					slidingTimeoutMs: (request.body as any)?.slidingTimeoutMs, // Allow API override, falls back to env var or 30min default
 					useSlidingTimeout: !isInfoQuery,
 					taskIdentifier: job.id,
 				}

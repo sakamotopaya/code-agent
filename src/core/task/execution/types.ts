@@ -64,14 +64,16 @@ export interface TaskExecutionOptions {
 	infoQueryTimeoutMs?: number
 
 	/**
-	 * Emergency timeout for all tasks (default: 60 seconds)
-	 */
-	emergencyTimeoutMs?: number
-
-	/**
-	 * Sliding timeout for regular tasks (default: 10 minutes)
+	 * Sliding timeout for regular tasks (default: 30 minutes)
+	 * This timeout resets on task activity and supports long-running tasks
 	 */
 	slidingTimeoutMs?: number
+
+	/**
+	 * Maximum allowed sliding timeout (default: 24 hours)
+	 * Used for validation when timeout is configured via API or environment
+	 */
+	maxSlidingTimeoutMs?: number
 
 	/**
 	 * Whether to use sliding timeout that resets on activity

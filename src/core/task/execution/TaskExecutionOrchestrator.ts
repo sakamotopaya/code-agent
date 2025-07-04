@@ -146,14 +146,8 @@ export class TaskExecutionOrchestrator {
 			}, infoTimeout)
 			state.timers.add(timeoutId)
 
-			// Emergency timeout
-			const emergencyTimeout = options.emergencyTimeoutMs || 60000
-			const emergencyTimeoutId = setTimeout(() => {
-				if (!state.isCompleted) {
-					rejectOnce(new Error(`Emergency timeout after ${emergencyTimeout / 1000} seconds`))
-				}
-			}, emergencyTimeout)
-			state.timers.add(emergencyTimeoutId)
+			// Note: Emergency timeout removed - info queries now rely only on info query timeout
+			// This allows for longer-running informational tasks when needed
 		})
 	}
 
@@ -167,7 +161,23 @@ export class TaskExecutionOrchestrator {
 		const { handler, options, taskId, task } = state
 
 		return new Promise((resolve, reject) => {
-			const timeoutMs = options.slidingTimeoutMs || 600000 // 10 minutes default
+			// Get sliding timeout with environment variable support
+			const defaultSlidingTimeoutMs = parseInt(process.env.TASK_DEFAULT_SLIDING_TIMEOUT_MS || "1800000") // 30 minutes default
+			const maxSlidingTimeoutMs = parseInt(process.env.TASK_MAX_SLIDING_TIMEOUT_MS || "86400000") // 24 hours max
+
+			let timeoutMs = options.slidingTimeoutMs || defaultSlidingTimeoutMs
+
+			// Validate timeout bounds
+			if (timeoutMs > maxSlidingTimeoutMs) {
+				handler.logDebug(
+					`[TaskExecutionOrchestrator] Sliding timeout ${timeoutMs}ms exceeds maximum ${maxSlidingTimeoutMs}ms, using maximum`,
+				)
+				timeoutMs = maxSlidingTimeoutMs
+			}
+
+			handler.logDebug(
+				`[TaskExecutionOrchestrator] Using sliding timeout: ${timeoutMs}ms (${timeoutMs / 60000} minutes)`,
+			)
 
 			const resetTimeout = () => {
 				state.lastActivityTime = Date.now()
