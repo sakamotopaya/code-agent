@@ -24,6 +24,7 @@ import { askFollowupQuestionTool } from "../tools/askFollowupQuestionTool"
 import { switchModeTool } from "../tools/switchModeTool"
 import { attemptCompletionTool } from "../tools/attemptCompletionTool"
 import { newTaskTool } from "../tools/newTaskTool"
+import { listModesTool } from "../tools/listModesTool"
 
 import { checkpointSave } from "../checkpoints"
 
@@ -192,6 +193,8 @@ export async function presentAssistantMessage(cline: Task) {
 						const modeName = getModeBySlug(mode, customModes)?.name ?? mode
 						return `[${block.name} in ${modeName} mode: '${message}']`
 					}
+					case "list_modes":
+						return `[${block.name}${block.params.filter ? ` filter: ${block.params.filter}` : ""}]`
 				}
 			}
 
@@ -453,6 +456,9 @@ export async function presentAssistantMessage(cline: Task) {
 					break
 				case "new_task":
 					await newTaskTool(cline, block, askApproval, handleError, pushToolResult, removeClosingTag)
+					break
+				case "list_modes":
+					await listModesTool(cline, block, askApproval, handleError, pushToolResult, removeClosingTag)
 					break
 				case "attempt_completion":
 					await attemptCompletionTool(

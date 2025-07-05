@@ -1,4 +1,5 @@
 import * as path from "path"
+import * as fs from "fs"
 import Parser from "web-tree-sitter"
 import {
 	javascriptQuery,
@@ -37,36 +38,68 @@ export interface LanguageParser {
 	}
 }
 
-async function loadLanguage(langName: string) {
+/**
+ * Get the directory containing tree-sitter WASM files.
+ * Supports environment variable override for Docker deployments.
+ */
+function getWasmDirectory(): string {
+	// Allow explicit override via environment variable (highest priority)
+	if (process.env.TREE_SITTER_WASM_DIR) {
+		const envDir = process.env.TREE_SITTER_WASM_DIR
+		console.log(`[tree-sitter] Using WASM directory from environment: ${envDir}`)
+
+		// Validate that the directory exists and contains tree-sitter.wasm
+		const treeSitterWasm = path.join(envDir, "tree-sitter.wasm")
+		if (!fs.existsSync(treeSitterWasm)) {
+			throw new Error(`TREE_SITTER_WASM_DIR points to invalid directory: ${envDir}. tree-sitter.wasm not found.`)
+		}
+
+		return envDir
+	}
+
+	// Fallback to context detection for backward compatibility
 	// Detect if we're running in CLI context by checking if __dirname ends with '/cli'
 	// When running as CLI, __dirname points to dist/cli/ but WASM files are in dist/
 	// When running as VSCode extension, __dirname points to dist/ where WASM files are
-	const isCliContext = __dirname.endsWith("/cli") || __dirname.endsWith("\\cli")
-	const wasmDir = isCliContext
-		? path.join(__dirname, "..") // CLI: go up one level from dist/cli/ to dist/
+	// When running as API, __dirname points to dist/api/ but WASM files are in dist/
+	const isSubContext =
+		__dirname.endsWith("/cli") ||
+		__dirname.endsWith("\\cli") ||
+		__dirname.endsWith("/api") ||
+		__dirname.endsWith("\\api")
+	const wasmDir = isSubContext
+		? path.join(__dirname, "..") // Sub-context: go up one level from dist/cli/ or dist/api/ to dist/
 		: __dirname // VSCode extension: use dist/ directly
 
-	return await Parser.Language.load(path.join(wasmDir, `tree-sitter-${langName}.wasm`))
+	console.log(`[tree-sitter] Using WASM directory from context detection: ${wasmDir}`)
+	return wasmDir
+}
+
+async function loadLanguage(langName: string) {
+	const wasmDir = getWasmDirectory()
+	const wasmPath = path.join(wasmDir, `tree-sitter-${langName}.wasm`)
+
+	console.log(`[tree-sitter] Loading language ${langName} from ${wasmPath}`)
+	return await Parser.Language.load(wasmPath)
 }
 
 let isParserInitialized = false
 
 async function initializeParser() {
 	if (!isParserInitialized) {
-		// Detect if we're running in CLI context by checking if __dirname ends with '/cli'
-		// When running as CLI, __dirname points to dist/cli/ but WASM files are in dist/
-		// When running as VSCode extension, __dirname points to dist/ where WASM files are
-		const isCliContext = __dirname.endsWith("/cli") || __dirname.endsWith("\\cli")
-		const wasmDir = isCliContext
-			? path.join(__dirname, "..") // CLI: go up one level from dist/cli/ to dist/
-			: __dirname // VSCode extension: use dist/ directly
+		const wasmDir = getWasmDirectory()
+
+		console.log(`[tree-sitter] Initializing parser with WASM directory: ${wasmDir}`)
 
 		await Parser.init({
 			locateFile(scriptName: string, scriptDirectory: string) {
-				return path.join(wasmDir, scriptName)
+				const wasmPath = path.join(wasmDir, scriptName)
+				console.log(`[tree-sitter] Locating file: ${scriptName} -> ${wasmPath}`)
+				return wasmPath
 			},
 		})
 		isParserInitialized = true
+		console.log(`[tree-sitter] Parser initialized successfully`)
 	}
 }
 

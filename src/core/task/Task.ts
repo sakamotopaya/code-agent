@@ -151,6 +151,9 @@ export type TaskOptions = {
 	mcpAutoConnect?: boolean
 	mcpTimeout?: number
 	mcpRetries?: number
+	// Logging configuration
+	logSystemPrompt?: boolean
+	logLlm?: boolean
 	// Data layer support
 	repositories?: RepositoryContainer
 	// Output adapter (to prevent duplicate creation)
@@ -224,6 +227,10 @@ export class Task extends EventEmitter<ClineEvents> {
 	private mcpRetries?: number
 	private cliMcpService?: any // CLIMcpService instance for CLI mode
 
+	// Logging configuration
+	private logSystemPrompt: boolean = false
+	private logLlm: boolean = false
+
 	// Modular components
 	private messaging: TaskMessaging
 	private lifecycle: TaskLifecycle
@@ -251,6 +258,32 @@ export class Task extends EventEmitter<ClineEvents> {
 
 	private logWarn(message: string, ...args: any[]): void {
 		this.logger.warn(message, ...args)
+	}
+
+	/**
+	 * Write system prompt to log file
+	 */
+	private async writeSystemPromptToFile(systemPrompt: string): Promise<void> {
+		try {
+			const fs = await import("fs/promises")
+			const path = await import("path")
+
+			// Create logs directory if it doesn't exist
+			const logsDir = path.join(this.globalStoragePath, "logs")
+			await fs.mkdir(logsDir, { recursive: true })
+
+			// Generate filename with timestamp
+			const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
+			const filename = `system-prompt-${timestamp}.txt`
+			const filepath = path.join(logsDir, filename)
+
+			// Write system prompt to file
+			await fs.writeFile(filepath, systemPrompt, "utf-8")
+
+			this.logInfo(`System prompt logged to: ${filepath}`)
+		} catch (error) {
+			this.logError("Failed to write system prompt to file:", error)
+		}
 	}
 
 	/**
@@ -476,6 +509,8 @@ export class Task extends EventEmitter<ClineEvents> {
 		mcpAutoConnect = true,
 		mcpTimeout,
 		mcpRetries,
+		logSystemPrompt = false,
+		logLlm = false,
 		repositories,
 		outputAdapter,
 	}: TaskOptions) {
@@ -508,6 +543,10 @@ export class Task extends EventEmitter<ClineEvents> {
 		this.mcpAutoConnect = mcpAutoConnect
 		this.mcpTimeout = mcpTimeout
 		this.mcpRetries = mcpRetries
+
+		// Store logging configuration
+		this.logSystemPrompt = logSystemPrompt
+		this.logLlm = logLlm
 
 		// Set up provider and storage
 		if (provider) {
@@ -1681,10 +1720,15 @@ ${getObjectiveSection()}
 
 ${await addCustomInstructions("", customInstructions || "", this.workspacePath, mode, { language: language ?? "English", rooIgnoreInstructions })}`
 
+			// Log system prompt if enabled
+			if (this.logSystemPrompt) {
+				await this.writeSystemPromptToFile(systemPrompt)
+			}
+
 			return systemPrompt
 		}
 
-		return SYSTEM_PROMPT(
+		const systemPrompt = await SYSTEM_PROMPT(
 			provider.context,
 			this.workspacePath,
 			(this.api.getModel().info.supportsComputerUse ?? false) && (browserToolEnabled ?? true),
@@ -1705,6 +1749,13 @@ ${await addCustomInstructions("", customInstructions || "", this.workspacePath, 
 				maxConcurrentFileReads,
 			},
 		)
+
+		// Log system prompt if enabled
+		if (this.logSystemPrompt) {
+			await this.writeSystemPromptToFile(systemPrompt)
+		}
+
+		return systemPrompt
 	}
 
 	/**

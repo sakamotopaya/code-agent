@@ -62,6 +62,7 @@ export const toolParamNames = [
 	"start_line",
 	"end_line",
 	"query",
+	"filter",
 ] as const
 
 export type ToolParamName = (typeof toolParamNames)[number]
@@ -161,6 +162,11 @@ export interface SearchAndReplaceToolUse extends ToolUse {
 		Partial<Pick<Record<ToolParamName, string>, "use_regex" | "ignore_case" | "start_line" | "end_line">>
 }
 
+export interface ListModesToolUse extends ToolUse {
+	name: "list_modes"
+	params: Partial<Pick<Record<ToolParamName, string>, "filter">>
+}
+
 // Define tool group configuration
 export type ToolGroupConfig = {
 	tools: readonly string[]
@@ -186,6 +192,7 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
 	insert_content: "insert content",
 	search_and_replace: "search and replace",
 	codebase_search: "codebase search",
+	list_modes: "list modes",
 } as const
 
 // Define available tool groups.
@@ -213,7 +220,7 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 		tools: ["use_mcp_tool", "access_mcp_resource"],
 	},
 	modes: {
-		tools: ["switch_mode", "new_task"],
+		tools: ["switch_mode", "new_task", "list_modes"],
 		alwaysAvailable: true,
 	},
 }
@@ -224,6 +231,7 @@ export const ALWAYS_AVAILABLE_TOOLS: ToolName[] = [
 	"attempt_completion",
 	"switch_mode",
 	"new_task",
+	"list_modes",
 ] as const
 
 export type DiffResult =

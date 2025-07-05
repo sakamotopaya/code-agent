@@ -33,6 +33,7 @@ export const toolNames = [
 	"new_task",
 	"fetch_instructions",
 	"codebase_search",
+	"list_modes",
 ] as const
 
 export const toolNamesSchema = z.enum(toolNames)

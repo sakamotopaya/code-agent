@@ -118,6 +118,7 @@ ENV NODE_ENV=production \
     API_WORKSPACE_ROOT=/app/workspace \
     API_VERBOSE=false \
     API_DEBUG=false \
+    TREE_SITTER_WASM_DIR=/app/src/dist \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
     NODE_OPTIONS="--max-old-space-size=1024" \

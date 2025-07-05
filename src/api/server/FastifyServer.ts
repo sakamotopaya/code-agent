@@ -15,6 +15,9 @@ import { TaskExecutionOrchestrator, ApiTaskExecutionHandler } from "../../core/t
 import { getStoragePath } from "../../shared/paths"
 import { SharedContentProcessor } from "../../core/content/SharedContentProcessor"
 import { SSEStreamingAdapter, SSEContentOutputAdapter } from "../../core/adapters/api/SSEOutputAdapters"
+import { UnifiedCustomModesService } from "../../shared/services/UnifiedCustomModesService"
+import { NodeFileWatcher } from "../../shared/services/watchers/NodeFileWatcher"
+import type { ModeConfig } from "@roo-code/types"
 
 /**
  * Fastify-based API server implementation
@@ -30,6 +33,7 @@ export class FastifyServer {
 	private streamManager: StreamManager
 	private questionManager: ApiQuestionManager
 	private taskExecutionOrchestrator: TaskExecutionOrchestrator
+	private customModesService: UnifiedCustomModesService
 
 	constructor(config: ApiConfigManager, adapters: CoreInterfaces) {
 		this.config = config
@@ -38,6 +42,15 @@ export class FastifyServer {
 		this.streamManager = new StreamManager()
 		this.questionManager = new ApiQuestionManager()
 		this.taskExecutionOrchestrator = new TaskExecutionOrchestrator()
+
+		// Initialize custom modes service with file watching for API context
+		const storagePath = process.env.ROO_GLOBAL_STORAGE_PATH || getStoragePath()
+		this.customModesService = new UnifiedCustomModesService({
+			storagePath,
+			fileWatcher: new NodeFileWatcher(), // File watching enabled for API
+			enableProjectModes: false, // API typically doesn't have workspace context
+		})
+
 		this.app = fastify({
 			logger: LoggerConfigManager.createLoggerConfig(config),
 		})
@@ -53,6 +66,14 @@ export class FastifyServer {
 	 */
 	async initialize(): Promise<void> {
 		const serverConfig = this.config.getConfiguration()
+
+		// Load custom modes
+		try {
+			await this.customModesService.loadCustomModes()
+			this.app.log.info("Custom modes loaded for API server")
+		} catch (error) {
+			this.app.log.warn("Failed to load custom modes:", error)
+		}
 
 		// Register CORS
 		if (serverConfig.cors) {
@@ -113,19 +134,37 @@ export class FastifyServer {
 			try {
 				const body = request.body as any
 				const task = body.task || "No task specified"
+				const mode = body.mode || "code" // Default to code mode
+				const logSystemPrompt = body.logSystemPrompt || false
+				const logLlm = body.logLlm || false
+
+				// Validate mode
+				const selectedMode = await this.validateMode(mode)
 
 				// For now, just return a simple response
 				// In full implementation, this would delegate to the Task engine
-				await this.adapters.userInterface.showInformation(`Received task: ${task}`)
+				await this.adapters.userInterface.showInformation(`Received task: ${task} (mode: ${mode})`)
 
 				return reply.send({
 					success: true,
 					message: "Task received",
 					task,
+					mode: selectedMode.slug,
 					timestamp: new Date().toISOString(),
 				})
 			} catch (error) {
 				this.app.log.error("Execute error:", error)
+
+				// Handle mode validation errors
+				if (error.message.includes("Invalid mode")) {
+					return reply.status(400).send({
+						success: false,
+						error: "Invalid mode",
+						message: error.message,
+						timestamp: new Date().toISOString(),
+					})
+				}
+
 				return reply.status(500).send({
 					success: false,
 					error: error instanceof Error ? error.message : "Unknown error",
@@ -141,10 +180,15 @@ export class FastifyServer {
 				const task = body.task || "No task specified"
 				const mode = body.mode || "code"
 				const verbose = body.verbose || false // Extract verbose flag from request
+				const logSystemPrompt = body.logSystemPrompt || false
+				const logLlm = body.logLlm || false
+
+				// Validate mode exists
+				const selectedMode = await this.validateMode(mode)
 
 				// Create job
 				const job = this.jobManager.createJob(task, {
-					mode,
+					mode: selectedMode.slug,
 					clientInfo: {
 						userAgent: request.headers["user-agent"],
 						ip: request.ip,
@@ -261,6 +305,9 @@ export class FastifyServer {
 					mcpRetries: this.config.getConfiguration().mcpRetries || 3,
 					// Use SSE adapter as CLI UI service equivalent for question handling
 					cliUIService: sseAdapter,
+					// Logging configuration
+					logSystemPrompt,
+					logLlm,
 					// Disable new adapters for now - go back to existing working logic
 					// streamingAdapter: sseStreamingAdapter,
 					// contentProcessor: sharedContentProcessor,
@@ -339,6 +386,24 @@ export class FastifyServer {
 				this.app.log.info(`Task execution orchestrator started for job ${job.id}`)
 			} catch (error) {
 				this.app.log.error("Stream execute error:", error)
+
+				// Handle mode validation errors
+				if (error.message.includes("Invalid mode")) {
+					try {
+						reply.raw.write(
+							`data: ${JSON.stringify({
+								type: "error",
+								error: "Invalid mode",
+								message: error.message,
+								timestamp: new Date().toISOString(),
+							})}\n\n`,
+						)
+					} catch (writeError) {
+						this.app.log.error("Failed to write mode error to stream:", writeError)
+					}
+					reply.raw.end()
+					return
+				}
 
 				// Try to send error through SSE if possible
 				try {
@@ -706,5 +771,20 @@ export class FastifyServer {
 		]
 
 		return infoPatterns.some((pattern) => pattern.test(lowerTask))
+	}
+
+	/**
+	 * Validate mode and return the mode config
+	 */
+	private async validateMode(mode: string): Promise<ModeConfig> {
+		const allModes = await this.customModesService.getAllModes()
+		const selectedMode = allModes.find((m) => m.slug === mode)
+
+		if (!selectedMode) {
+			const availableModes = allModes.map((m) => m.slug).join(", ")
+			throw new Error(`Invalid mode: ${mode}. Available modes: ${availableModes}`)
+		}
+
+		return selectedMode
 	}
 }

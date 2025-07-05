@@ -76,6 +76,47 @@ export class TaskApiHandler {
 		this.logger = logger
 	}
 
+	/**
+	 * Write LLM interaction to log file
+	 */
+	private async writeLlmInteractionToFile(systemPrompt: string, messages: any[], metadata: any): Promise<void> {
+		try {
+			const fs = await import("fs/promises")
+			const path = await import("path")
+
+			// Get global storage path from task
+			const task = this.taskRef?.deref()
+			const globalStoragePath = task?.globalStoragePath || process.cwd()
+
+			// Create logs directory if it doesn't exist
+			const logsDir = path.join(globalStoragePath, "logs")
+			await fs.mkdir(logsDir, { recursive: true })
+
+			// Generate filename with timestamp
+			const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
+			const filename = `llm-interaction-${timestamp}.json`
+			const filepath = path.join(logsDir, filename)
+
+			// Create interaction log object
+			const interactionLog = {
+				timestamp: new Date().toISOString(),
+				taskId: this.taskId,
+				instanceId: this.instanceId,
+				metadata,
+				systemPrompt,
+				messages,
+				apiModel: this.api.getModel()?.info,
+			}
+
+			// Write interaction to file
+			await fs.writeFile(filepath, JSON.stringify(interactionLog, null, 2), "utf-8")
+
+			this.log(`LLM interaction logged to: ${filepath}`)
+		} catch (error) {
+			this.log("Failed to write LLM interaction to file:", error)
+		}
+	}
+
 	async *attemptApiRequest(
 		retryAttempt: number = 0,
 		getSystemPrompt: () => Promise<string>,
@@ -328,6 +369,12 @@ export class TaskApiHandler {
 		this.log(`[TaskApiHandler] System prompt length: ${systemPrompt.length}`)
 		this.log(`[TaskApiHandler] Conversation history length: ${cleanConversationHistory.length}`)
 		this.log(`[TaskApiHandler] API handler model info:`, this.api.getModel()?.info)
+
+		// Log LLM interaction if enabled
+		const task = this.taskRef?.deref()
+		if (task && task.logLlm) {
+			await this.writeLlmInteractionToFile(systemPrompt, cleanConversationHistory, metadata)
+		}
 
 		const stream = this.api.createMessage(systemPrompt, cleanConversationHistory, metadata)
 		this.log(`[TaskApiHandler] API stream created successfully`)
