@@ -120,7 +120,7 @@ export type ClineEvents = {
 }
 
 export type TaskOptions = {
-	provider?: ClineProvider
+	provider?: ClineProvider | import("../providers/IProvider").IProvider
 	apiConfiguration: ProviderSettings
 	enableDiff?: boolean
 	enableCheckpoints?: boolean
@@ -573,8 +573,16 @@ export class Task extends EventEmitter<ClineEvents> {
 
 		// Set up provider and storage
 		if (provider) {
-			this.providerRef = new WeakRef(provider)
-			this.globalStoragePath = provider.context.globalStorageUri.fsPath
+			this.providerRef = new WeakRef(provider as any) // Type assertion for compatibility
+
+			// Check if provider has factory methods (IProvider) or is legacy ClineProvider
+			if ("getGlobalStoragePath" in provider) {
+				// New IProvider interface
+				this.globalStoragePath = (provider as any).getGlobalStoragePath()
+			} else {
+				// Legacy ClineProvider
+				this.globalStoragePath = (provider as any).context.globalStorageUri.fsPath
+			}
 		} else {
 			this.globalStoragePath = globalStoragePath || getGlobalStoragePath()
 		}
@@ -640,7 +648,14 @@ export class Task extends EventEmitter<ClineEvents> {
 		})
 
 		if (provider) {
-			this.fileContextTracker = new FileContextTracker(provider, this.taskId)
+			// Check if provider has factory methods (IProvider) or is legacy ClineProvider
+			if ("createFileContextTracker" in provider) {
+				// New IProvider interface
+				this.fileContextTracker = (provider as any).createFileContextTracker(this.taskId)
+			} else {
+				// Legacy ClineProvider
+				this.fileContextTracker = new FileContextTracker(provider as any, this.taskId)
+			}
 		} else {
 			// For CLI usage, use the CLI implementation
 			this.fileContextTracker = new CLIFileContextTracker(this.taskId)
@@ -668,8 +683,16 @@ export class Task extends EventEmitter<ClineEvents> {
 
 		// For backward compatibility with VS Code extension
 		if (provider) {
-			this.urlContentFetcher = new UrlContentFetcher(provider.context)
-			this.browserSession = new BrowserSession(provider.context)
+			// Check if provider has factory methods (IProvider) or is legacy ClineProvider
+			if ("createUrlContentFetcher" in provider) {
+				// New IProvider interface
+				this.urlContentFetcher = (provider as any).createUrlContentFetcher()
+				this.browserSession = (provider as any).createBrowserSession()
+			} else {
+				// Legacy ClineProvider
+				this.urlContentFetcher = new UrlContentFetcher((provider as any).context)
+				this.browserSession = new BrowserSession((provider as any).context)
+			}
 			this.diffViewProvider = new DiffViewProvider(this.workspacePath)
 		} else {
 			// For CLI usage, create CLI-compatible implementations
