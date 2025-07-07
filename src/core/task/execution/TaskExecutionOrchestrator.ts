@@ -351,6 +351,10 @@ export class TaskExecutionOrchestrator {
 
 		task.on("taskCompleted", (tid: string, tokenUsage: any, toolUsage: any) => {
 			handler.logDebug(`[TaskExecutionOrchestrator] Standard task completed: ${tid}`)
+			console.log(`[ORCHESTRATOR-DEBUG] Task completed with tokens:`, tokenUsage)
+			console.log(`[ORCHESTRATOR-DEBUG] Task completed with tools:`, toolUsage)
+			console.log(`[ORCHESTRATOR-DEBUG] Calling complete() with "Standard task completion"`)
+			console.log(`[ORCHESTRATOR-DEBUG] Stack trace:`, new Error().stack)
 			complete("Standard task completion")
 		})
 

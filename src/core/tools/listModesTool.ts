@@ -80,9 +80,13 @@ export async function listModesTool(
  */
 async function getCustomModesForContext(cline: Task): Promise<ModeConfig[]> {
 	try {
-		// For now, return empty array since we don't have direct access to custom modes service
-		// The getAllModes function will handle merging built-in modes with any custom modes
-		// that are passed to it from the calling context
+		// Check if the Task instance has a custom modes service
+		if (cline.customModesService) {
+			const customModes = await cline.customModesService.loadCustomModes()
+			return customModes
+		}
+
+		// Fallback: return empty array if no custom modes service is available
 		return []
 	} catch (error) {
 		console.warn("Failed to load custom modes:", error)

@@ -18,6 +18,7 @@ import {
 	type ClineSay,
 	type ToolProgressStatus,
 	type HistoryItem,
+	type ModeConfig,
 	TelemetryEventName,
 } from "@roo-code/types"
 import { ITelemetryService } from "../interfaces/ITelemetryService"
@@ -134,6 +135,8 @@ export type TaskOptions = {
 	parentTask?: Task
 	taskNumber?: number
 	onCreated?: (cline: Task) => void
+	// Mode configuration
+	mode?: string
 	// New interface dependencies
 	fileSystem?: IFileSystem
 	terminal?: ITerminal
@@ -158,6 +161,9 @@ export type TaskOptions = {
 	repositories?: RepositoryContainer
 	// Output adapter (to prevent duplicate creation)
 	outputAdapter?: import("../interfaces/IOutputAdapter").IOutputAdapter
+	// Unified tool execution support
+	customModesService?: import("../../shared/services/UnifiedCustomModesService").UnifiedCustomModesService
+	toolInterfaceAdapter?: import("../adapters/ToolInterfaceAdapter").ToolInterfaceAdapter
 }
 
 export class Task extends EventEmitter<ClineEvents> {
@@ -177,6 +183,7 @@ export class Task extends EventEmitter<ClineEvents> {
 	isInitialized = false
 	isPaused: boolean = false
 	pausedModeSlug: string = defaultModeSlug
+	mode: string = defaultModeSlug
 	private pauseInterval: NodeJS.Timeout | undefined
 
 	// API
@@ -238,6 +245,10 @@ export class Task extends EventEmitter<ClineEvents> {
 
 	// Data layer support (optional)
 	private repositories?: RepositoryContainer
+
+	// Unified tool execution support
+	customModesService?: import("../../shared/services/UnifiedCustomModesService").UnifiedCustomModesService
+	toolInterfaceAdapter?: import("../adapters/ToolInterfaceAdapter").ToolInterfaceAdapter
 
 	// Logging methods using injected logger
 	private logDebug(message: string, ...args: any[]): void {
@@ -495,6 +506,7 @@ export class Task extends EventEmitter<ClineEvents> {
 		parentTask,
 		taskNumber = -1,
 		onCreated,
+		mode = defaultModeSlug,
 		fileSystem,
 		terminal,
 		browser,
@@ -513,6 +525,8 @@ export class Task extends EventEmitter<ClineEvents> {
 		logLlm = false,
 		repositories,
 		outputAdapter,
+		customModesService,
+		toolInterfaceAdapter,
 	}: TaskOptions) {
 		super()
 
@@ -526,6 +540,11 @@ export class Task extends EventEmitter<ClineEvents> {
 			: workspacePath || getWorkspacePath(path.join(os.homedir(), "Desktop"))
 		this.instanceId = crypto.randomUUID().slice(0, 8)
 		this.taskNumber = taskNumber
+
+		// Store mode configuration
+		this.mode = mode
+		this.logDebug(`[Task] Constructor - mode set to: ${this.mode}`)
+		this.logDebug(`[Task] Constructor - customModesService available: ${!!this.customModesService}`)
 
 		// Store interface dependencies
 		this.fileSystem = fileSystem
@@ -547,6 +566,10 @@ export class Task extends EventEmitter<ClineEvents> {
 		// Store logging configuration
 		this.logSystemPrompt = logSystemPrompt
 		this.logLlm = logLlm
+
+		// Store unified tool execution support
+		this.customModesService = customModesService
+		this.toolInterfaceAdapter = toolInterfaceAdapter
 
 		// Set up provider and storage
 		if (provider) {
@@ -857,6 +880,21 @@ export class Task extends EventEmitter<ClineEvents> {
 		return formatResponse.toolError(formatResponse.missingToolParameterError(paramName))
 	}
 
+	// Unified tool execution method using presentAssistantMessage pattern
+	async executeUnifiedTools(): Promise<void> {
+		this.logDebug(`[Task] Executing unified tools via presentAssistantMessage`)
+
+		if (!this.toolInterfaceAdapter) {
+			throw new Error("Tool interface adapter not available for unified tool execution")
+		}
+
+		// Import presentAssistantMessage
+		const { presentAssistantMessage } = await import("../assistant-message/presentAssistantMessage")
+
+		// Execute tools using the unified pattern
+		await presentAssistantMessage(this)
+	}
+
 	// CLI-specific tool execution method
 	async executeCliTool(toolName: string, params: any): Promise<string> {
 		this.logDebug(`[Task] Executing CLI tool: ${toolName}`)
@@ -1036,6 +1074,42 @@ export class Task extends EventEmitter<ClineEvents> {
 				return questionService.formatResponseForTool(response)
 			}
 
+			case "list_modes": {
+				// Import and use the list modes tool
+				const { listModesTool } = await import("../tools/listModesTool")
+				const result = await this.executeToolWithCLIInterface(listModesTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
+			case "switch_mode": {
+				// Import and use the switch mode tool
+				const { switchModeTool } = await import("../tools/switchModeTool")
+				const result = await this.executeToolWithCLIInterface(switchModeTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
+			case "new_task": {
+				// Import and use the new task tool
+				const { newTaskTool } = await import("../tools/newTaskTool")
+				const result = await this.executeToolWithCLIInterface(newTaskTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
 			default:
 				throw new Error(`Tool ${toolName} not implemented for CLI mode`)
 		}
@@ -1209,7 +1283,9 @@ export class Task extends EventEmitter<ClineEvents> {
 
 	// Delegate lifecycle methods
 	private async startTask(task?: string, images?: string[]): Promise<void> {
+		console.log(`[TASK-DEBUG] startTask() called with task: "${task}", images: ${images?.length || 0}`)
 		await this.lifecycle.startTask(task, images, (userContent) => this.initiateTaskLoop(userContent))
+		console.log(`[TASK-DEBUG] startTask() completed, isInitialized: ${this.isInitialized}`)
 		this.isInitialized = true
 	}
 
@@ -1262,9 +1338,16 @@ export class Task extends EventEmitter<ClineEvents> {
 
 	// Task Loop
 	private async initiateTaskLoop(userContent: Anthropic.Messages.ContentBlockParam[]): Promise<void> {
-		this.logDebug(`[Task] Initiating task loop for task ${this.taskId}.${this.instanceId}`)
+		console.log(`[TASK-DEBUG] initiateTaskLoop() called for task ${this.taskId}.${this.instanceId}`)
+		console.log(`[TASK-DEBUG] Current mode: ${this.mode}`)
+		console.log(`[TASK-DEBUG] User content length: ${userContent.length}`)
+		console.log(`[TASK-DEBUG] About to call recursivelyMakeClineRequests`)
+		console.log(`[TASK-DEBUG] Abort flag: ${this.abort}`)
+		this.logDebug(`[Task] initiateTaskLoop() called for task ${this.taskId}.${this.instanceId}`)
+		this.logDebug(`[Task] Current mode: ${this.mode}`)
 		this.logDebug(`[Task] User content length: ${userContent.length}`)
 		this.logDebug(`[Task] User content:`, JSON.stringify(userContent, null, 2))
+		this.logDebug(`[Task] About to call recursivelyMakeClineRequests`)
 
 		try {
 			getCheckpointService(this)
@@ -1307,6 +1390,10 @@ export class Task extends EventEmitter<ClineEvents> {
 		userContent: Anthropic.Messages.ContentBlockParam[],
 		includeFileDetails: boolean = false,
 	): Promise<boolean> {
+		this.logDebug(`[Task] recursivelyMakeClineRequests() called`)
+		this.logDebug(`[Task] Current mode: ${this.mode}`)
+		this.logDebug(`[Task] About to call getSystemPrompt()`)
+
 		if (this.abort) {
 			throw new Error(`[RooCode#recursivelyMakeRooRequests] task ${this.taskId}.${this.instanceId} aborted`)
 		}
@@ -1349,6 +1436,8 @@ export class Task extends EventEmitter<ClineEvents> {
 			}
 		}
 
+		console.log(`[TASK-DEBUG] About to call apiHandler.recursivelyMakeClineRequests`)
+		console.log(`[TASK-DEBUG] Abort flag before API call: ${this.abort}`)
 		return this.apiHandler.recursivelyMakeClineRequests(
 			userContent,
 			includeFileDetails,
@@ -1360,7 +1449,14 @@ export class Task extends EventEmitter<ClineEvents> {
 			this.consecutiveMistakeCount,
 			this.consecutiveMistakeLimit,
 			() => this.ask("mistake_limit_reached", t("common:errors.mistake_limit_guidance")),
-			(taskId, tokenUsage, toolUsage) => this.emit("taskCompleted", taskId, tokenUsage, toolUsage),
+			(taskId, tokenUsage, toolUsage) => {
+				console.log(`[TASK-DEBUG] taskCompleted event about to be emitted`)
+				console.log(`[TASK-DEBUG] TaskId: ${taskId}`)
+				console.log(`[TASK-DEBUG] Token usage:`, tokenUsage)
+				console.log(`[TASK-DEBUG] Tool usage:`, toolUsage)
+				console.log(`[TASK-DEBUG] Stack trace:`, new Error().stack)
+				this.emit("taskCompleted", taskId, tokenUsage, toolUsage)
+			},
 			async (taskApiHandler) => {
 				this.logDebug(`[Task] CLI tool execution function called`)
 
@@ -1515,166 +1611,250 @@ export class Task extends EventEmitter<ClineEvents> {
 	}
 
 	private async getSystemPrompt(): Promise<string> {
-		// Debug: Getting system prompt (only log in verbose mode)
+		this.logDebug(`[Task] Starting system prompt generation...`)
 
-		// Check if we're in CLI mode (no provider)
-		const provider = this.providerRef?.deref()
-		const isCliMode = !provider
+		try {
+			// Check if we're in CLI mode (no provider)
+			const provider = this.providerRef?.deref()
+			const isCliMode = !provider
 
-		// Debug: CLI mode status (only log in verbose mode)
+			// Debug: CLI mode status (only log in verbose mode)
 
-		let mcpHub: any | undefined
-		let state: any = {}
+			let mcpHub: any | undefined
+			let state: any = {}
 
-		if (!isCliMode) {
-			// VSCode mode - use provider
-			try {
-				state = (await provider.getState()) ?? {}
-				const { mcpEnabled } = state
+			if (!isCliMode) {
+				// VSCode mode - use provider
+				try {
+					state = (await provider.getState()) ?? {}
+					const { mcpEnabled } = state
 
-				if (mcpEnabled ?? true) {
-					const { McpServerManager } = await import("../../services/mcp/McpServerManager")
-					mcpHub = await McpServerManager.getInstance(provider.context, provider)
+					if (mcpEnabled ?? true) {
+						const { McpServerManager } = await import("../../services/mcp/McpServerManager")
+						mcpHub = await McpServerManager.getInstance(provider.context, provider)
 
-					if (mcpHub) {
-						await pWaitFor(() => !mcpHub!.isConnecting, { timeout: 10_000 }).catch(() => {
-							this.logError("MCP servers failed to connect in time")
-						})
+						if (mcpHub) {
+							await pWaitFor(() => !mcpHub!.isConnecting, { timeout: 10_000 }).catch(() => {
+								this.logError("MCP servers failed to connect in time")
+							})
+						}
 					}
+				} catch (error) {
+					this.logWarn(`[Task] Failed to get provider state:`, error)
 				}
-			} catch (error) {
-				this.logWarn(`[Task] Failed to get provider state:`, error)
+			} else {
+				// CLI mode - use defaults and enable MCP
+				// Debug: Using default CLI settings (only log in verbose mode)
+				state = {
+					mcpEnabled: true, // Enable MCP in CLI mode
+					browserViewportSize: "900x600",
+					mode: "code",
+					customModes: [],
+					customModePrompts: {},
+					customInstructions: "",
+				}
+
+				// Use global MCP service for CLI mode
+				try {
+					const { GlobalCLIMcpService } = await import("../../cli/services/GlobalCLIMcpService")
+					const globalMcpService = GlobalCLIMcpService.getInstance()
+
+					if (globalMcpService.isInitialized()) {
+						// Get the shared MCP service instance
+						this.cliMcpService = globalMcpService.getMcpService()
+
+						// Create a compatible interface for getMcpServersSection
+						mcpHub = globalMcpService.createMcpHub()
+
+						// Populate tools and resources for each server
+						if (mcpHub) {
+							await globalMcpService.populateServerCapabilities(mcpHub)
+						}
+					} else {
+						this.logDebug("[Task] Global MCP service not initialized - MCP features will be unavailable")
+					}
+				} catch (error) {
+					this.logDebug(`[Task] Failed to use global MCP service:`, error)
+				}
 			}
-		} else {
-			// CLI mode - use defaults and enable MCP
-			// Debug: Using default CLI settings (only log in verbose mode)
-			state = {
-				mcpEnabled: true, // Enable MCP in CLI mode
-				browserViewportSize: "900x600",
-				mode: "code",
-				customModes: [],
-				customModePrompts: {},
-				customInstructions: "",
+
+			const rooIgnoreInstructions = this.rooIgnoreController?.getInstructions()
+
+			const {
+				browserViewportSize,
+				mode,
+				customModes,
+				customModePrompts,
+				customInstructions,
+				experiments,
+				enableMcpServerCreation,
+				browserToolEnabled,
+				language,
+				maxConcurrentFileReads,
+				maxReadFileLine,
+			} = state ?? {}
+
+			// Use the provider we already got above, or null for CLI mode
+			if (!isCliMode && !provider) {
+				throw new Error("Provider not available")
 			}
 
-			// Use global MCP service for CLI mode
-			try {
-				const { GlobalCLIMcpService } = await import("../../cli/services/GlobalCLIMcpService")
-				const globalMcpService = GlobalCLIMcpService.getInstance()
+			if (isCliMode) {
+				// Generate CLI-specific system prompt using the same components as VSCode extension
+				const {
+					getRulesSection,
+					getSystemInfoSection,
+					getObjectiveSection,
+					getSharedToolUseSection,
+					getMcpServersSection,
+					getToolUseGuidelinesSection,
+					getCapabilitiesSection,
+					markdownFormattingSection,
+				} = await import("../prompts/sections")
 
-				if (globalMcpService.isInitialized()) {
-					// Get the shared MCP service instance
-					this.cliMcpService = globalMcpService.getMcpService()
+				const { getToolDescriptionsForMode } = await import("../prompts/tools")
+				const { getModeSelection } = await import("../../shared/modes")
+				const { modes } = await import("../../shared/modes")
 
-					// Create a compatible interface for getMcpServersSection
-					mcpHub = globalMcpService.createMcpHub()
+				// Get mode configuration
+				const mode = this.mode
+				this.logDebug(`[Task] getSystemPrompt() called with mode: ${mode}`)
+				this.logDebug(`[Task] customModesService available: ${!!this.customModesService}`)
 
-					// Populate tools and resources for each server
-					if (mcpHub) {
-						await globalMcpService.populateServerCapabilities(mcpHub)
+				let modeConfig: ModeConfig | undefined
+				let allCustomModes: ModeConfig[] = []
+
+				// First check custom modes if available
+				if (this.customModesService) {
+					this.logDebug(`[Task] Attempting to load custom modes...`)
+					console.log(`[SYSTEM-PROMPT-DEBUG] About to call customModesService.getAllModes()`)
+					try {
+						allCustomModes = await this.customModesService.getAllModes()
+						console.log(`[SYSTEM-PROMPT-DEBUG] Successfully loaded ${allCustomModes.length} custom modes`)
+						this.logDebug(
+							`[Task] Loaded ${allCustomModes.length} custom modes:`,
+							allCustomModes.map((m) => m.slug),
+						)
+						modeConfig = allCustomModes.find((m) => m.slug === mode)
+						console.log(`[SYSTEM-PROMPT-DEBUG] Found custom mode config for '${mode}':`, !!modeConfig)
+						this.logDebug(`[Task] Found custom mode config for '${mode}':`, !!modeConfig)
+						if (modeConfig) {
+							this.logDebug(`[Task] Custom mode details:`, {
+								slug: modeConfig.slug,
+								name: modeConfig.name,
+							})
+						}
+					} catch (error) {
+						console.log(`[SYSTEM-PROMPT-DEBUG] Error loading custom modes:`, error)
+						this.logDebug(`[Task] Failed to load custom modes:`, error)
+						throw error // Re-throw to see if this is causing the completion
 					}
 				} else {
-					this.logDebug("[Task] Global MCP service not initialized - MCP features will be unavailable")
+					this.logDebug(`[Task] No customModesService available, using built-in modes only`)
 				}
-			} catch (error) {
-				this.logDebug(`[Task] Failed to use global MCP service:`, error)
+
+				// Fall back to built-in modes if not found in custom modes
+				if (!modeConfig) {
+					this.logDebug(`[Task] Custom mode not found, checking built-in modes...`)
+					modeConfig = modes.find((m) => m.slug === mode) || modes[0]
+					this.logDebug(`[Task] Built-in mode found for '${mode}':`, !!modes.find((m) => m.slug === mode))
+					this.logDebug(`[Task] Final mode config:`, { slug: modeConfig.slug, name: modeConfig.name })
+				}
+
+				this.logDebug(
+					`[Task] Calling getModeSelection with mode: ${mode}, customModes count: ${allCustomModes.length}`,
+				)
+				console.log(`[SYSTEM-PROMPT-DEBUG] About to call getModeSelection`)
+				const { roleDefinition } = getModeSelection(mode, undefined, allCustomModes)
+				console.log(
+					`[SYSTEM-PROMPT-DEBUG] getModeSelection completed, roleDefinition length: ${roleDefinition?.length || 0}`,
+				)
+				this.logDebug(
+					`[Task] getModeSelection completed, roleDefinition length: ${roleDefinition?.length || 0}`,
+				)
+
+				// Check if this mode supports MCP
+				console.log(`[SYSTEM-PROMPT-DEBUG] About to check modeConfig.groups, modeConfig:`, modeConfig)
+				const enableMcpServerCreation = modeConfig.groups.some(
+					(groupEntry) => (typeof groupEntry === "string" ? groupEntry : groupEntry[0]) === "mcp",
+				)
+				console.log(
+					`[SYSTEM-PROMPT-DEBUG] MCP check completed, enableMcpServerCreation: ${enableMcpServerCreation}`,
+				)
+
+				// Build the same comprehensive prompt as VSCode extension
+				console.log(`[SYSTEM-PROMPT-DEBUG] About to build system prompt`)
+				console.log(`[SYSTEM-PROMPT-DEBUG] roleDefinition length: ${roleDefinition?.length}`)
+
+				console.log(`[SYSTEM-PROMPT-DEBUG] Calling markdownFormattingSection()`)
+				const markdownSection = markdownFormattingSection()
+				console.log(`[SYSTEM-PROMPT-DEBUG] markdownFormattingSection() completed`)
+
+				console.log(`[SYSTEM-PROMPT-DEBUG] Calling getSharedToolUseSection()`)
+				const sharedToolSection = getSharedToolUseSection()
+				console.log(`[SYSTEM-PROMPT-DEBUG] getSharedToolUseSection() completed`)
+
+				console.log(`[SYSTEM-PROMPT-DEBUG] Calling getToolDescriptionsForMode()`)
+				const toolDescriptions = getToolDescriptionsForMode(
+					mode,
+					this.workspacePath,
+					false, // supportsComputerUse - disable browser tool in CLI
+					undefined, // codeIndexManager - CLI doesn't need code indexing
+					undefined, // diffStrategy
+					"900x600", // browserViewportSize
+					mcpHub, // mcpHub - now enabled in CLI
+					allCustomModes, // customModeConfigs - pass the loaded custom modes
+					{}, // experiments
+					true, // partialReadsEnabled
+					{}, // settings
+				)
+				console.log(`[SYSTEM-PROMPT-DEBUG] getToolDescriptionsForMode() completed`)
+
+				console.log(`[SYSTEM-PROMPT-DEBUG] Calling getMcpServersSection()`)
+				const mcpServersSection = await getMcpServersSection(mcpHub, undefined, enableMcpServerCreation)
+				console.log(`[SYSTEM-PROMPT-DEBUG] getMcpServersSection() completed`)
+
+				console.log(`[SYSTEM-PROMPT-DEBUG] Calling remaining sections`)
+				const toolUseGuidelines = getToolUseGuidelinesSection()
+				const capabilities = getCapabilitiesSection(this.workspacePath, false, undefined, undefined, undefined)
+				const rules = getRulesSection(this.workspacePath, false, undefined)
+				const systemInfo = getSystemInfoSection(this.workspacePath)
+				const objective = getObjectiveSection()
+				console.log(`[SYSTEM-PROMPT-DEBUG] All sections completed`)
+
+				const systemPrompt = `${roleDefinition}
+
+${markdownSection}
+
+${sharedToolSection}
+
+${toolDescriptions}
+
+${mcpServersSection}
+
+${toolUseGuidelines}
+
+${capabilities}
+
+${rules}
+
+${systemInfo}
+
+${objective}`
+
+				return systemPrompt
 			}
-		}
 
-		const rooIgnoreInstructions = this.rooIgnoreController?.getInstructions()
+			// In CLI mode, provider might be undefined, so we need to handle this case
+			if (!provider) {
+				// For CLI mode, create a minimal system prompt that includes MCP server information
+				const mcpServersSection = await getMcpServersSection(
+					mcpHub,
+					this.diffEnabled ? this.diffStrategy : undefined,
+					enableMcpServerCreation,
+				)
 
-		const {
-			browserViewportSize,
-			mode,
-			customModes,
-			customModePrompts,
-			customInstructions,
-			experiments,
-			enableMcpServerCreation,
-			browserToolEnabled,
-			language,
-			maxConcurrentFileReads,
-			maxReadFileLine,
-		} = state ?? {}
-
-		// Use the provider we already got above, or null for CLI mode
-		if (!isCliMode && !provider) {
-			throw new Error("Provider not available")
-		}
-
-		if (isCliMode) {
-			// Generate CLI-specific system prompt using the same components as VSCode extension
-			const {
-				getRulesSection,
-				getSystemInfoSection,
-				getObjectiveSection,
-				getSharedToolUseSection,
-				getMcpServersSection,
-				getToolUseGuidelinesSection,
-				getCapabilitiesSection,
-				markdownFormattingSection,
-			} = await import("../prompts/sections")
-
-			const { getToolDescriptionsForMode } = await import("../prompts/tools")
-			const { getModeSelection } = await import("../../shared/modes")
-			const { modes } = await import("../../shared/modes")
-
-			// Get mode configuration
-			const mode = "code"
-			const modeConfig = modes.find((m) => m.slug === mode) || modes[0]
-			const { roleDefinition } = getModeSelection(mode, undefined, [])
-
-			// Check if this mode supports MCP
-			const enableMcpServerCreation = modeConfig.groups.some(
-				(groupEntry) => (typeof groupEntry === "string" ? groupEntry : groupEntry[0]) === "mcp",
-			)
-
-			// Build the same comprehensive prompt as VSCode extension
-			const systemPrompt = `${roleDefinition}
-
-${markdownFormattingSection()}
-
-${getSharedToolUseSection()}
-
-${getToolDescriptionsForMode(
-	mode,
-	this.workspacePath,
-	false, // supportsComputerUse - disable browser tool in CLI
-	undefined, // codeIndexManager - CLI doesn't need code indexing
-	undefined, // diffStrategy
-	"900x600", // browserViewportSize
-	mcpHub, // mcpHub - now enabled in CLI
-	[], // customModeConfigs
-	{}, // experiments
-	true, // partialReadsEnabled
-	{}, // settings
-)}
-
-${await getMcpServersSection(mcpHub, undefined, enableMcpServerCreation)}
-
-${getToolUseGuidelinesSection()}
-
-${getCapabilitiesSection(this.workspacePath, false, undefined, undefined, undefined)}
-
-${getRulesSection(this.workspacePath, false, undefined)}
-
-${getSystemInfoSection(this.workspacePath)}
-
-${getObjectiveSection()}`
-
-			return systemPrompt
-		}
-
-		// In CLI mode, provider might be undefined, so we need to handle this case
-		if (!provider) {
-			// For CLI mode, create a minimal system prompt that includes MCP server information
-			const mcpServersSection = await getMcpServersSection(
-				mcpHub,
-				this.diffEnabled ? this.diffStrategy : undefined,
-				enableMcpServerCreation,
-			)
-
-			const systemPrompt = `You are Roo, a highly skilled software engineer with extensive knowledge in many programming languages, frameworks, design patterns, and best practices. Applying the wisdom in this document (docs/prompts/development-prompt.md), you write the application code
+				const systemPrompt = `You are Roo, a highly skilled software engineer with extensive knowledge in many programming languages, frameworks, design patterns, and best practices. Applying the wisdom in this document (docs/prompts/development-prompt.md), you write the application code
 
 ====
 
@@ -1720,42 +1900,47 @@ ${getObjectiveSection()}
 
 ${await addCustomInstructions("", customInstructions || "", this.workspacePath, mode, { language: language ?? "English", rooIgnoreInstructions })}`
 
+				// Log system prompt if enabled
+				if (this.logSystemPrompt) {
+					await this.writeSystemPromptToFile(systemPrompt)
+				}
+
+				return systemPrompt
+			}
+
+			const systemPrompt = await SYSTEM_PROMPT(
+				provider.context,
+				this.workspacePath,
+				(this.api.getModel().info.supportsComputerUse ?? false) && (browserToolEnabled ?? true),
+				mcpHub,
+				this.diffStrategy,
+				browserViewportSize,
+				mode,
+				customModePrompts,
+				customModes,
+				customInstructions,
+				this.diffEnabled,
+				experiments,
+				enableMcpServerCreation,
+				language,
+				rooIgnoreInstructions,
+				maxReadFileLine !== -1,
+				{
+					maxConcurrentFileReads,
+				},
+			)
+
 			// Log system prompt if enabled
 			if (this.logSystemPrompt) {
 				await this.writeSystemPromptToFile(systemPrompt)
 			}
 
+			this.logDebug(`[Task] System prompt generation completed successfully`)
 			return systemPrompt
+		} catch (error) {
+			this.logDebug(`[Task] Error in getSystemPrompt():`, error)
+			throw error
 		}
-
-		const systemPrompt = await SYSTEM_PROMPT(
-			provider.context,
-			this.workspacePath,
-			(this.api.getModel().info.supportsComputerUse ?? false) && (browserToolEnabled ?? true),
-			mcpHub,
-			this.diffStrategy,
-			browserViewportSize,
-			mode,
-			customModePrompts,
-			customModes,
-			customInstructions,
-			this.diffEnabled,
-			experiments,
-			enableMcpServerCreation,
-			language,
-			rooIgnoreInstructions,
-			maxReadFileLine !== -1,
-			{
-				maxConcurrentFileReads,
-			},
-		)
-
-		// Log system prompt if enabled
-		if (this.logSystemPrompt) {
-			await this.writeSystemPromptToFile(systemPrompt)
-		}
-
-		return systemPrompt
 	}
 
 	/**

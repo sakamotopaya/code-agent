@@ -132,9 +132,13 @@ export class TaskApiHandler {
 		let autoApprovalEnabled: boolean = false
 		let alwaysApproveResubmit: boolean = false
 		let requestDelaySeconds: number = 0
-		let mode: string = "code"
+		// Get mode from Task instance if available, fallback to "code"
+		const taskInstance = this.taskRef?.deref()
+		let mode: string = taskInstance?.mode || "code"
 		let autoCondenseContext: boolean = true
 		let autoCondenseContextPercent: number = 100
+
+		this.log(`[TaskApiHandler.attemptApiRequest] Task mode from instance: ${taskInstance?.mode}`)
 
 		if (this.cliMode) {
 			this.log(`[TaskApiHandler.attemptApiRequest] Running in CLI mode, using default configuration`)
@@ -143,7 +147,7 @@ export class TaskApiHandler {
 			autoApprovalEnabled = true // Auto-approve in CLI mode
 			alwaysApproveResubmit = true // Auto-retry in CLI mode
 			requestDelaySeconds = 0
-			mode = "code"
+			mode = taskInstance?.mode || "code" // Use Task's mode property, fallback to "code"
 			autoCondenseContext = true
 			autoCondenseContextPercent = 100
 		} else {
@@ -164,7 +168,8 @@ export class TaskApiHandler {
 			autoApprovalEnabled = stateValues.autoApprovalEnabled ?? false
 			alwaysApproveResubmit = stateValues.alwaysApproveResubmit ?? false
 			requestDelaySeconds = stateValues.requestDelaySeconds ?? 0
-			mode = stateValues.mode ?? "code"
+			// Use provider mode if available, otherwise use Task's mode property, fallback to "code"
+			mode = stateValues.mode ?? taskInstance?.mode ?? "code"
 			autoCondenseContext = stateValues.autoCondenseContext ?? true
 			autoCondenseContextPercent = stateValues.autoCondenseContextPercent ?? 100
 		}
@@ -277,7 +282,9 @@ export class TaskApiHandler {
 		this.lastApiRequestTime = Date.now()
 
 		this.log(`[TaskApiHandler.attemptApiRequest] Getting system prompt...`)
+		console.log(`[API-HANDLER-DEBUG] About to call getSystemPrompt()`)
 		const systemPrompt = await getSystemPrompt()
+		console.log(`[API-HANDLER-DEBUG] getSystemPrompt() completed, length: ${systemPrompt.length}`)
 		this.log(`[TaskApiHandler.attemptApiRequest] System prompt retrieved, length: ${systemPrompt.length}`)
 
 		this.log(`[TaskApiHandler.attemptApiRequest] Getting token usage...`)
@@ -376,7 +383,12 @@ export class TaskApiHandler {
 			await this.writeLlmInteractionToFile(systemPrompt, cleanConversationHistory, metadata)
 		}
 
+		console.log(`[API-HANDLER-DEBUG] About to call this.api.createMessage()`)
+		console.log(`[API-HANDLER-DEBUG] systemPrompt length:`, systemPrompt.length)
+		console.log(`[API-HANDLER-DEBUG] cleanConversationHistory length:`, cleanConversationHistory.length)
+		console.log(`[API-HANDLER-DEBUG] metadata:`, metadata)
 		const stream = this.api.createMessage(systemPrompt, cleanConversationHistory, metadata)
+		console.log(`[API-HANDLER-DEBUG] API stream created successfully`)
 		this.log(`[TaskApiHandler] API stream created successfully`)
 
 		const iterator = stream[Symbol.asyncIterator]()
@@ -498,6 +510,11 @@ export class TaskApiHandler {
 		onTaskCompleted?: (taskId: string, tokenUsage: any, toolUsage: any) => void,
 		executeTools?: (taskApiHandler: TaskApiHandler) => Promise<void>,
 	): Promise<boolean> {
+		console.log(`[API-HANDLER-DEBUG] recursivelyMakeClineRequests() called`)
+		console.log(`[API-HANDLER-DEBUG] User content:`, userContent)
+		console.log(`[API-HANDLER-DEBUG] Include file details:`, includeFileDetails)
+		console.log(`[API-HANDLER-DEBUG] Initial assistantMessageContent:`, this.assistantMessageContent)
+		console.log(`[API-HANDLER-DEBUG] About to make LLM request`)
 		this.log(`[TaskApiHandler] Starting recursivelyMakeClineRequests for task ${this.taskId}.${this.instanceId}`)
 		this.log(`[TaskApiHandler] User content length: ${userContent.length}`)
 		this.log(`[TaskApiHandler] Include file details: ${includeFileDetails}`)
@@ -622,13 +639,16 @@ export class TaskApiHandler {
 
 			const stream = this.attemptApiRequest(0, getSystemPrompt, getTokenUsage, abort)
 			this.log(`[TaskApiHandler] API request stream created`)
+			console.log(`[API-HANDLER-DEBUG] Stream created, about to iterate`)
 			let assistantMessage = ""
 			let reasoningMessage = ""
 			this.isStreaming = true
 
 			try {
 				this.log(`[TaskApiHandler] Starting to iterate over stream...`)
+				console.log(`[API-HANDLER-DEBUG] About to start for-await loop`)
 				for await (const chunk of stream) {
+					console.log(`[API-HANDLER-DEBUG] Received chunk in for-await loop:`, chunk)
 					this.log(`[TaskApiHandler] Received chunk type: ${chunk?.type}`)
 					if (!chunk) continue
 
@@ -771,6 +791,10 @@ export class TaskApiHandler {
 			}
 
 			this.didCompleteReadingStream = true
+			console.log(
+				`[API-HANDLER-DEBUG] Completed reading stream, assistantMessageContent:`,
+				this.assistantMessageContent,
+			)
 
 			// Set any blocks to be complete
 			const partialBlocks = this.assistantMessageContent.filter((block) => block.partial)
@@ -884,18 +908,32 @@ export class TaskApiHandler {
 			}
 
 			// Check if task should be completed
+			console.log(`[API-HANDLER-DEBUG] Checking completion conditions`)
+			console.log(`[API-HANDLER-DEBUG] assistantMessageContent:`, this.assistantMessageContent)
+			console.log(`[API-HANDLER-DEBUG] didEndLoop:`, didEndLoop)
+
 			const didUseAttemptCompletion = this.assistantMessageContent.some((block) => {
 				if (block.type === "tool_use" && block.name === "attempt_completion") {
+					console.log(`[API-HANDLER-DEBUG] Found attempt_completion tool use`)
 					return true
 				}
 				// Also check in text content for CLI mode
 				if (block.type === "text" && block.content.includes("<tool_name>attempt_completion</tool_name>")) {
+					console.log(`[API-HANDLER-DEBUG] Found attempt_completion in text content`)
 					return true
 				}
 				return false
 			})
 
+			console.log(`[API-HANDLER-DEBUG] didUseAttemptCompletion:`, didUseAttemptCompletion)
+			console.log(
+				`[API-HANDLER-DEBUG] Final completion check: didUseAttemptCompletion=${didUseAttemptCompletion} || didEndLoop=${didEndLoop}`,
+			)
+
 			if (didUseAttemptCompletion || didEndLoop) {
+				console.log(
+					`[API-HANDLER-DEBUG] Task completing because: didUseAttemptCompletion=${didUseAttemptCompletion}, didEndLoop=${didEndLoop}`,
+				)
 				this.log(`[TaskApiHandler] Task completed, calling onTaskCompleted callback`)
 				// Emit task completion
 				if (onTaskCompleted) {

@@ -621,4 +621,48 @@ export class SSEOutputAdapter implements IUserInterface {
 	resetContentFilter(): void {
 		this.allowedContentTypes = new Set(["content", "tool_call", "tool_result"])
 	}
+
+	/**
+	 * Emit tool result events for unified tool execution
+	 */
+	async emitToolResult(result: string): Promise<void> {
+		const event: SSEEvent = {
+			type: SSE_EVENTS.TOOL_USE,
+			jobId: this.jobId,
+			timestamp: new Date().toISOString(),
+			message: result,
+			result,
+		}
+		this.emitEvent(event)
+	}
+
+	/**
+	 * Emit tool start events for unified tool execution
+	 */
+	async emitToolStart(toolName: string, params?: any): Promise<void> {
+		const event: SSEEvent = {
+			type: SSE_EVENTS.TOOL_USE,
+			jobId: this.jobId,
+			timestamp: new Date().toISOString(),
+			toolName,
+			message: `Starting tool: ${toolName}`,
+			result: params,
+		}
+		this.emitEvent(event)
+	}
+
+	/**
+	 * Emit tool completion events for unified tool execution
+	 */
+	async emitToolComplete(toolName: string, success: boolean): Promise<void> {
+		const event: SSEEvent = {
+			type: SSE_EVENTS.TOOL_USE,
+			jobId: this.jobId,
+			timestamp: new Date().toISOString(),
+			toolName,
+			message: `Tool ${toolName} ${success ? "completed successfully" : "failed"}`,
+			result: { success },
+		}
+		this.emitEvent(event)
+	}
 }

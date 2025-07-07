@@ -183,8 +183,24 @@ export class FastifyServer {
 				const logSystemPrompt = body.logSystemPrompt || false
 				const logLlm = body.logLlm || false
 
+				console.log(`[FastifyServer] /execute/stream request received`)
+				console.log(`[FastifyServer] Mode parameter: ${mode}`)
+				console.log(`[FastifyServer] Task: ${task}`)
+				console.log(`[FastifyServer] Verbose: ${verbose}`)
+
 				// Validate mode exists
 				const selectedMode = await this.validateMode(mode)
+				console.log(`[FastifyServer] Mode validation result:`, {
+					requested: mode,
+					selected: selectedMode.slug,
+					name: selectedMode.name,
+				})
+				console.log(`[MODE-DEBUG] Custom mode validation result:`, {
+					requested: mode,
+					selected: selectedMode.slug,
+					name: selectedMode.name,
+					source: selectedMode.source || "unknown",
+				})
 
 				// Create job
 				const job = this.jobManager.createJob(task, {
@@ -286,9 +302,17 @@ export class FastifyServer {
 					}
 				}
 
+				console.log(`[API-CONFIG-DEBUG] API configuration loaded:`, {
+					provider: apiConfiguration.apiProvider,
+					hasApiKey: !!apiConfiguration.apiKey,
+					model: apiConfiguration.apiModelId,
+					keyPrefix: apiConfiguration.apiKey?.substring(0, 10),
+				})
+
 				const taskOptions = {
 					apiConfiguration,
 					task,
+					mode: selectedMode.slug, // Pass the validated mode
 					startTask: true, // This will start the task automatically
 					fileSystem: taskAdapters.fileSystem,
 					terminal: taskAdapters.terminal,
@@ -308,6 +332,8 @@ export class FastifyServer {
 					// Logging configuration
 					logSystemPrompt,
 					logLlm,
+					// Custom modes service for unified tool execution
+					customModesService: this.customModesService,
 					// Disable new adapters for now - go back to existing working logic
 					// streamingAdapter: sseStreamingAdapter,
 					// contentProcessor: sharedContentProcessor,
@@ -315,11 +341,22 @@ export class FastifyServer {
 				}
 
 				this.app.log.info(`Task options prepared for job ${job.id}`)
+				console.log(`[FastifyServer] Task options for job ${job.id}:`, {
+					mode: taskOptions.mode,
+					task: taskOptions.task,
+					customModesService: !!taskOptions.customModesService,
+					startTask: taskOptions.startTask,
+					logSystemPrompt: taskOptions.logSystemPrompt,
+					logLlm: taskOptions.logLlm,
+				})
 
 				// Create and start the task - this returns [instance, promise]
+				console.log(`[FastifyServer] About to call Task.create() for job ${job.id}`)
 				const [taskInstance, taskPromise] = Task.create(taskOptions)
-				this.app.log.info(`Task.create() completed for job ${job.id}`)
-				this.app.log.info(`Task instance created:`, taskInstance ? "SUCCESS" : "FAILED")
+				console.log(`[FastifyServer] Task.create() completed for job ${job.id}`)
+				console.log(`[FastifyServer] Task instance created:`, taskInstance ? "SUCCESS" : "FAILED")
+				console.log(`[FastifyServer] Task instance mode:`, taskInstance?.mode)
+				console.log(`[FastifyServer] Task instance customModesService:`, !!taskInstance?.customModesService)
 
 				// Start job tracking (for job status management)
 				await this.jobManager.startJob(job.id, taskInstance)
@@ -332,30 +369,41 @@ export class FastifyServer {
 					this.config.getConfiguration().debug || false,
 				)
 
-				// Determine if this is an informational query
-				const isInfoQuery = this.isInformationalQuery(task)
+				// FIXED: Remove informational query detection to match VS Code extension behavior
+				// All API tasks now use standard execution regardless of their phrasing
+				// const isInfoQuery = this.isInformationalQuery(task)
+				const isInfoQuery = false // Force standard execution for all API tasks
+
+				console.log(`[FastifyServer] Informational query detection bypassed - using standard execution`)
+				console.log(`[FastifyServer] Task will execute normally regardless of phrasing`)
 
 				// Set up execution options
 				const executionOptions = {
-					isInfoQuery,
-					infoQueryTimeoutMs: 120000, // 2 minutes for info queries
+					isInfoQuery: false, // Force standard execution for all API tasks
+					infoQueryTimeoutMs: 120000, // 2 minutes for info queries (unused since isInfoQuery is false)
 					// emergencyTimeoutMs removed - now relies on sliding timeout for long-running tasks
 					slidingTimeoutMs: (request.body as any)?.slidingTimeoutMs, // Allow API override, falls back to env var or 30min default
-					useSlidingTimeout: !isInfoQuery,
+					useSlidingTimeout: true, // Always use sliding timeout since isInfoQuery is false
 					taskIdentifier: job.id,
 				}
 
-				this.app.log.info(`Starting task execution for job ${job.id}, isInfoQuery: ${isInfoQuery}`)
+				console.log(`[FastifyServer] Starting task execution for job ${job.id}`)
+				console.log(`[FastifyServer] Execution options:`, {
+					isInfoQuery: false,
+					mode: selectedMode.slug,
+					taskIdentifier: job.id,
+				})
 
 				// Execute task with orchestrator (this replaces all the custom timeout/monitoring logic)
 				this.taskExecutionOrchestrator
 					.executeTask(taskInstance, taskPromise, executionHandler, executionOptions)
 					.then(async (result) => {
-						this.app.log.info(`Task execution completed for job ${job.id}:`, result.reason)
-						this.app.log.info(`Task execution result:`, {
+						console.log(`[FastifyServer] Task execution completed for job ${job.id}:`, result.reason)
+						console.log(`[FastifyServer] Task execution result:`, {
 							success: result.success,
 							reason: result.reason,
 							durationMs: result.durationMs,
+							mode: selectedMode.slug,
 							tokenUsage: result.tokenUsage,
 							toolUsage: result.toolUsage,
 						})
