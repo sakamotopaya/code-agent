@@ -1349,7 +1349,7 @@ export class Task extends EventEmitter<ClineEvents> {
 		this.rooIgnoreController?.dispose()
 		this.fileContextTracker.dispose()
 
-		if (this.apiHandler.isStreaming && this.diffViewProvider.isEditing) {
+		if (this.isStreaming && this.diffViewProvider.isEditing) {
 			await this.diffViewProvider.revertChanges()
 		}
 
