@@ -10,7 +10,14 @@ import { Task } from "../../core/task/Task"
 export class JobManager {
 	private store: JobStore
 	private logger = getCLILogger()
-	private activeJobs = new Map<string, { task: Task; abortController: AbortController }>()
+	private activeJobs = new Map<
+		string,
+		{
+			task: Task
+			abortController: AbortController
+			orchestrator?: import("../../core/task/execution").TaskExecutionOrchestrator
+		}
+	>()
 	private jobTimeouts = new Map<string, NodeJS.Timeout>()
 	private defaultTimeout = 300000 // 5 minutes default timeout
 
@@ -48,7 +55,11 @@ export class JobManager {
 	/**
 	 * Start a job with a Task instance
 	 */
-	async startJob(jobId: string, taskInstance: Task): Promise<void> {
+	async startJob(
+		jobId: string,
+		taskInstance: Task,
+		orchestrator?: import("../../core/task/execution").TaskExecutionOrchestrator,
+	): Promise<void> {
 		const job = this.store.get(jobId)
 		if (!job) {
 			throw new Error(`Job ${jobId} not found`)
@@ -66,7 +77,7 @@ export class JobManager {
 
 		// Create abort controller for cancellation
 		const abortController = new AbortController()
-		this.activeJobs.set(jobId, { task: taskInstance, abortController })
+		this.activeJobs.set(jobId, { task: taskInstance, abortController, orchestrator })
 
 		// Set up timeout
 		const timeout = this.getJobTimeout(job)
@@ -112,6 +123,13 @@ export class JobManager {
 		// Cancel running task
 		const activeJob = this.activeJobs.get(jobId)
 		if (activeJob) {
+			// Cancel via orchestrator if available
+			if (activeJob.orchestrator) {
+				activeJob.orchestrator.cancelExecution(jobId, reason || "Job cancelled").catch((error) => {
+					this.logger.error(`Error cancelling orchestrator execution for job ${jobId}:`, error)
+				})
+			}
+
 			activeJob.abortController.abort()
 			this.activeJobs.delete(jobId)
 		}

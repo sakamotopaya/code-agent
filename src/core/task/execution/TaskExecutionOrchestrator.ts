@@ -642,27 +642,72 @@ export class TaskExecutionOrchestrator {
 	async cancelExecution(taskId: string, reason: string = "Cancelled"): Promise<boolean> {
 		const state = this.activeExecutions.get(taskId)
 		if (!state) {
+			console.log(`[TaskExecutionOrchestrator] Cannot cancel ${taskId}: execution not found`)
 			return false
 		}
 
 		state.handler.logDebug(`[TaskExecutionOrchestrator] Cancelling execution ${taskId}: ${reason}`)
 
 		try {
+			// Mark as completed to prevent further processing
+			state.isCompleted = true
+
+			// Clear all timers first to prevent race conditions
+			this.clearAllTimers(state)
+
 			// Abort the task if possible
 			if (typeof state.task.abortTask === "function") {
+				state.handler.logDebug(`[TaskExecutionOrchestrator] Calling task.abortTask() for ${taskId}`)
 				await state.task.abortTask()
+			} else {
+				state.handler.logDebug(`[TaskExecutionOrchestrator] Task ${taskId} does not have abortTask method`)
 			}
 
-			// Clean up
+			// Clean up execution state
 			this.cleanup(state)
 			this.activeExecutions.delete(taskId)
 
+			// Notify handler of cancellation
 			await state.handler.onTaskFailed(taskId, new Error(reason))
+
+			state.handler.logDebug(`[TaskExecutionOrchestrator] Successfully cancelled execution ${taskId}`)
 			return true
 		} catch (error) {
-			state.handler.logDebug(`[TaskExecutionOrchestrator] Error cancelling execution:`, error)
+			state.handler.logDebug(`[TaskExecutionOrchestrator] Error cancelling execution ${taskId}:`, error)
+
+			// Still clean up even if there was an error
+			try {
+				this.cleanup(state)
+				this.activeExecutions.delete(taskId)
+			} catch (cleanupError) {
+				state.handler.logDebug(`[TaskExecutionOrchestrator] Error during cleanup:`, cleanupError)
+			}
+
 			return false
 		}
+	}
+
+	/**
+	 * Check if an execution can be cancelled
+	 */
+	canCancelExecution(taskId: string): boolean {
+		return this.activeExecutions.has(taskId)
+	}
+
+	/**
+	 * Get execution status
+	 */
+	getExecutionStatus(taskId: string): "running" | "completed" | "not-found" {
+		const state = this.activeExecutions.get(taskId)
+		if (!state) return "not-found"
+		return state.isCompleted ? "completed" : "running"
+	}
+
+	/**
+	 * Get list of active execution IDs
+	 */
+	getActiveExecutionIds(): string[] {
+		return Array.from(this.activeExecutions.keys())
 	}
 }
 

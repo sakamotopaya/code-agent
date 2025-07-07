@@ -359,7 +359,7 @@ export class FastifyServer {
 				console.log(`[FastifyServer] Task instance customModesService:`, !!taskInstance?.customModesService)
 
 				// Start job tracking (for job status management)
-				await this.jobManager.startJob(job.id, taskInstance)
+				await this.jobManager.startJob(job.id, taskInstance, this.taskExecutionOrchestrator)
 				this.app.log.info(`JobManager.startJob() completed for job ${job.id}`)
 
 				// Create API task execution handler
@@ -413,13 +413,21 @@ export class FastifyServer {
 						this.streamManager.closeStream(job.id)
 					})
 					.catch(async (error: any) => {
-						this.app.log.error(`Task execution orchestrator failed for job ${job.id}:`, error)
-						this.app.log.error(`Error details:`, {
-							message: error?.message,
-							stack: error?.stack,
-							name: error?.name,
-							code: error?.code,
-						})
+						// Handle cancellation gracefully
+						if (
+							error.message &&
+							(error.message.includes("cancelled") || error.message.includes("aborted"))
+						) {
+							this.app.log.info(`Task execution cancelled for job ${job.id}: ${error.message}`)
+						} else {
+							this.app.log.error(`Task execution orchestrator failed for job ${job.id}:`, error)
+							this.app.log.error(`Error details:`, {
+								message: error?.message,
+								stack: error?.stack,
+								name: error?.name,
+								code: error?.code,
+							})
+						}
 
 						// Send error if not already sent by orchestrator
 						try {

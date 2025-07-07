@@ -1,6 +1,7 @@
 import { CLIMcpService, ICLIMcpService } from "./CLIMcpService"
 import { McpServerConfig } from "../types/mcp-types"
 import { getCLILogger } from "./CLILogger"
+import { McpDebugLogger } from "../../shared/mcp/McpDebugLogger"
 
 /**
  * Global singleton MCP service for CLI mode.
@@ -16,6 +17,7 @@ class GlobalCLIMcpService {
 	private mcpTimeout?: number
 	private mcpRetries?: number
 	private verbose = false
+	private serverCapabilities: Map<string, any> = new Map()
 
 	private constructor() {}
 
@@ -149,14 +151,22 @@ class GlobalCLIMcpService {
 
 		return {
 			getServers: () => {
-				return this.mcpService!.getConnectedServers().map((conn: any) => ({
-					name: conn.config.name,
-					status: conn.status,
-					config: JSON.stringify(conn.config),
-					tools: [], // Will be populated by caller if needed
-					resources: [],
-					resourceTemplates: [],
-				}))
+				return this.mcpService!.getConnectedServers().map((conn: any) => {
+					const capabilities = this.serverCapabilities.get(conn.config.name) || {
+						tools: [],
+						resources: [],
+						resourceTemplates: [],
+					}
+
+					return {
+						name: conn.config.name,
+						status: conn.status,
+						config: JSON.stringify(conn.config),
+						tools: capabilities.tools,
+						resources: capabilities.resources,
+						resourceTemplates: capabilities.resourceTemplates,
+					}
+				})
 			},
 			isConnecting: false,
 		}
@@ -166,16 +176,33 @@ class GlobalCLIMcpService {
 	 * Populate tools and resources for servers in the mcpHub
 	 */
 	async populateServerCapabilities(mcpHub: any): Promise<void> {
+		McpDebugLogger.section("populateServerCapabilities", "Starting capability population")
+
 		if (!this.mcpService || !mcpHub) {
+			McpDebugLogger.section("populateServerCapabilities", "Missing mcpService or mcpHub")
 			return
 		}
 
 		const servers = mcpHub.getServers()
+		McpDebugLogger.section("populateServerCapabilities", `Processing ${servers.length} servers`)
+
 		for (const server of servers) {
+			McpDebugLogger.section("populateServerCapabilities", `Processing server: ${server.name}`)
 			try {
 				const connection = this.mcpService
 					.getConnectedServers()
 					.find((conn: any) => conn.config.name === server.name)
+
+				McpDebugLogger.section(
+					"populateServerCapabilities",
+					`Connection found for ${server.name}:`,
+					!!connection,
+				)
+				McpDebugLogger.section(
+					"populateServerCapabilities",
+					`Connection ready for ${server.name}:`,
+					connection?.isCapabilityReady(),
+				)
 
 				if (connection?.client && connection.isCapabilityReady()) {
 					// Import MCP types for proper request format
@@ -184,17 +211,47 @@ class GlobalCLIMcpService {
 					)
 
 					try {
+						McpDebugLogger.section("populateServerCapabilities", `Requesting tools for ${server.name}`)
 						// Get tools using correct MCP protocol method
 						const toolsResult = await connection.client.request(
 							{ method: "tools/list" },
 							ListToolsResultSchema,
 						)
-						server.tools = toolsResult.tools.map((tool: any) => ({
+						McpDebugLogger.section(
+							"populateServerCapabilities",
+							`Tools result for ${server.name}:`,
+							toolsResult.tools.length,
+							"tools",
+						)
+						McpDebugLogger.section(
+							"populateServerCapabilities",
+							`Tool names for ${server.name}:`,
+							toolsResult.tools.map((t: any) => t.name),
+						)
+
+						const tools = toolsResult.tools.map((tool: any) => ({
 							name: tool.name,
 							description: tool.description,
 							inputSchema: tool.inputSchema,
 						}))
+						server.tools = tools
+						McpDebugLogger.section(
+							"populateServerCapabilities",
+							`Server ${server.name} now has ${server.tools.length} tools`,
+						)
+
+						// Store tools persistently for createMcpHub to access
+						const existingCapabilities = this.serverCapabilities.get(server.name) || {}
+						this.serverCapabilities.set(server.name, {
+							...existingCapabilities,
+							tools: tools,
+						})
 					} catch (error: any) {
+						McpDebugLogger.section(
+							"populateServerCapabilities",
+							`Error getting tools for ${server.name}:`,
+							error.message,
+						)
 						if (error.code !== -32601) {
 							getCLILogger().debug(`Error getting tools for ${server.name}:`, error)
 						}
@@ -208,11 +265,19 @@ class GlobalCLIMcpService {
 							{ method: "resources/list" },
 							ListResourcesResultSchema,
 						)
-						server.resources = resourcesResult.resources.map((resource: any) => ({
+						const resources = resourcesResult.resources.map((resource: any) => ({
 							uri: resource.uri,
 							name: resource.name,
 							description: resource.description,
 						}))
+						server.resources = resources
+
+						// Store resources persistently for createMcpHub to access
+						const existingCapabilities = this.serverCapabilities.get(server.name) || {}
+						this.serverCapabilities.set(server.name, {
+							...existingCapabilities,
+							resources: resources,
+						})
 					} catch (error: any) {
 						if (error.code !== -32601) {
 							getCLILogger().debug(`Error getting resources for ${server.name}:`, error)

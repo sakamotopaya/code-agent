@@ -38,11 +38,16 @@ export interface ApiHandlerCreateMessageMetadata {
 	taskId: string
 }
 
+export interface ApiHandlerCreateMessageOptions {
+	signal?: AbortSignal
+}
+
 export interface ApiHandler {
 	createMessage(
 		systemPrompt: string,
 		messages: Anthropic.Messages.MessageParam[],
 		metadata?: ApiHandlerCreateMessageMetadata,
+		options?: ApiHandlerCreateMessageOptions,
 	): ApiStream
 
 	getModel(): { id: string; info: ModelInfo }

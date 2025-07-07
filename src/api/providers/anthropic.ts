@@ -16,7 +16,7 @@ import { ApiStream } from "../transform/stream"
 import { getModelParams } from "../transform/model-params"
 
 import { BaseProvider } from "./base-provider"
-import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata } from "../index"
+import type { SingleCompletionHandler, ApiHandlerCreateMessageMetadata, ApiHandlerCreateMessageOptions } from "../index"
 
 export class AnthropicHandler extends BaseProvider implements SingleCompletionHandler {
 	private options: ApiHandlerOptions
@@ -39,6 +39,7 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 		systemPrompt: string,
 		messages: Anthropic.Messages.MessageParam[],
 		metadata?: ApiHandlerCreateMessageMetadata,
+		options?: ApiHandlerCreateMessageOptions,
 	): ApiStream {
 		let stream: AnthropicStream<Anthropic.Messages.RawMessageStreamEvent>
 		const cacheControl: CacheControlEphemeral = { type: "ephemeral" }
@@ -102,6 +103,13 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 						// https://github.com/anthropics/anthropic-sdk-typescript/commit/c920b77fc67bd839bfeb6716ceab9d7c9bbe7393
 
 						// Then check for models that support prompt caching
+						const baseOptions: any = {}
+
+						// Add AbortSignal if provided
+						if (options?.signal) {
+							baseOptions.signal = options.signal
+						}
+
 						switch (modelId) {
 							case "claude-sonnet-4-20250514":
 							case "claude-opus-4-20250514":
@@ -111,23 +119,37 @@ export class AnthropicHandler extends BaseProvider implements SingleCompletionHa
 							case "claude-3-opus-20240229":
 							case "claude-3-haiku-20240307":
 								betas.push("prompt-caching-2024-07-31")
-								return { headers: { "anthropic-beta": betas.join(",") } }
+								return {
+									...baseOptions,
+									headers: { "anthropic-beta": betas.join(",") },
+								}
 							default:
-								return undefined
+								return baseOptions.signal ? baseOptions : undefined
 						}
 					})(),
 				)
 				break
 			}
 			default: {
-				stream = (await this.client.messages.create({
+				const createOptions: any = {
 					model: modelId,
 					max_tokens: maxTokens ?? ANTHROPIC_DEFAULT_MAX_TOKENS,
 					temperature,
 					system: [{ text: systemPrompt, type: "text" }],
 					messages,
 					stream: true,
-				})) as any
+				}
+
+				// Add AbortSignal if provided
+				const requestOptions: any = {}
+				if (options?.signal) {
+					requestOptions.signal = options.signal
+				}
+
+				stream = (await this.client.messages.create(
+					createOptions,
+					Object.keys(requestOptions).length > 0 ? requestOptions : undefined,
+				)) as any
 				break
 			}
 		}

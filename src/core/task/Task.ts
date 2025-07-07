@@ -35,6 +35,7 @@ import { cleanOutput } from "../../utils/cleanOutput"
 import { ClineAskResponse } from "../../shared/WebviewMessage"
 import { defaultModeSlug } from "../../shared/modes"
 import { DiffStrategy } from "../../shared/tools"
+import { McpDebugLogger } from "../../shared/mcp/McpDebugLogger"
 
 // services
 import { UrlContentFetcher } from "../../services/browser/UrlContentFetcher"
@@ -1329,6 +1330,14 @@ export class Task extends EventEmitter<ClineEvents> {
 
 		this.abort = true
 
+		// NEW: Abort active API operations
+		try {
+			await this.apiHandler.abortCurrentOperations()
+			this.logDebug(`[Task] API operations aborted successfully`)
+		} catch (error) {
+			this.logError(`[Task] Error aborting API operations:`, error)
+		}
+
 		if (this.pauseInterval) {
 			clearInterval(this.pauseInterval)
 			this.pauseInterval = undefined
@@ -1340,7 +1349,7 @@ export class Task extends EventEmitter<ClineEvents> {
 		this.rooIgnoreController?.dispose()
 		this.fileContextTracker.dispose()
 
-		if (this.apiHandler.streamingState.isStreaming && this.diffViewProvider.isEditing) {
+		if (this.apiHandler.isStreaming && this.diffViewProvider.isEditing) {
 			await this.diffViewProvider.revertChanges()
 		}
 
@@ -1385,8 +1394,20 @@ export class Task extends EventEmitter<ClineEvents> {
 				loopCount++
 				this.logDebug(`[Task] Loop iteration ${loopCount}, abort=${this.abort}`)
 
+				// Check abort before each iteration
+				if (this.abort) {
+					this.logDebug(`[Task] Breaking loop due to abort flag before iteration`)
+					break
+				}
+
 				const didEndLoop = await this.recursivelyMakeClineRequests(nextUserContent, includeFileDetails)
 				this.logDebug(`[Task] Loop iteration ${loopCount} completed, didEndLoop=${didEndLoop}`)
+
+				// Check abort after each iteration
+				if (this.abort) {
+					this.logDebug(`[Task] Breaking loop due to abort flag after iteration`)
+					break
+				}
 
 				includeFileDetails = false
 
@@ -1833,9 +1854,19 @@ export class Task extends EventEmitter<ClineEvents> {
 				)
 				console.log(`[SYSTEM-PROMPT-DEBUG] getToolDescriptionsForMode() completed`)
 
-				console.log(`[SYSTEM-PROMPT-DEBUG] Calling getMcpServersSection()`)
+				console.log(
+					`[SYSTEM-PROMPT-DEBUG] Calling getMcpServersSection() with mcpHub:`,
+					mcpHub ? `${mcpHub.getServers().length} servers` : "null",
+				)
 				const mcpServersSection = await getMcpServersSection(mcpHub, undefined, enableMcpServerCreation)
-				console.log(`[SYSTEM-PROMPT-DEBUG] getMcpServersSection() completed`)
+				console.log(
+					`[SYSTEM-PROMPT-DEBUG] getMcpServersSection() completed, section length:`,
+					mcpServersSection.length,
+				)
+				console.log(`[MCP-SECTION-CONTENT] MCP servers section content:`)
+				console.log(`--- START MCP SECTION ---`)
+				console.log(mcpServersSection)
+				console.log(`--- END MCP SECTION ---`)
 
 				console.log(`[SYSTEM-PROMPT-DEBUG] Calling remaining sections`)
 				const toolUseGuidelines = getToolUseGuidelinesSection()

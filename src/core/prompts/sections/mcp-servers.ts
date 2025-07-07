@@ -1,21 +1,39 @@
 import { DiffStrategy } from "../../../shared/tools"
 import { McpHub } from "../../../services/mcp/McpHub"
+import { McpDebugLogger } from "../../../shared/mcp/McpDebugLogger"
 
 export async function getMcpServersSection(
 	mcpHub?: McpHub,
 	diffStrategy?: DiffStrategy,
 	enableMcpServerCreation?: boolean,
 ): Promise<string> {
+	McpDebugLogger.section("getMcpServersSection", "Called with mcpHub:", mcpHub ? "present" : "null")
+
 	if (!mcpHub) {
+		McpDebugLogger.section("getMcpServersSection", "No mcpHub provided, returning empty string")
 		return ""
 	}
 
+	const allServers = mcpHub.getServers()
+	McpDebugLogger.section("getMcpServersSection", "Total servers:", allServers.length)
+	McpDebugLogger.section(
+		"getMcpServersSection",
+		"All servers:",
+		allServers.map((s: any) => ({ name: s.name, status: s.status, toolCount: s.tools?.length || 0 })),
+	)
+
 	const connectedServers =
-		mcpHub.getServers().length > 0
-			? `${mcpHub
-					.getServers()
+		allServers.length > 0
+			? `${allServers
 					.filter((server) => server.status === "connected")
 					.map((server) => {
+						McpDebugLogger.section(
+							"getMcpServersSection",
+							"Processing server:",
+							server.name,
+							"tools:",
+							server.tools?.length || 0,
+						)
 						const tools = server.tools
 							?.map((tool) => {
 								const schemaStr = tool.inputSchema
@@ -60,11 +78,19 @@ When a server is connected, you can use the server's tools via the \`use_mcp_too
 
 ${connectedServers}`
 
+	McpDebugLogger.section("getMcpServersSection", "Base section length:", baseSection.length)
+	McpDebugLogger.section(
+		"getMcpServersSection",
+		"Connected servers content:",
+		connectedServers.substring(0, 500) + (connectedServers.length > 500 ? "..." : ""),
+	)
+
 	if (!enableMcpServerCreation) {
+		McpDebugLogger.section("getMcpServersSection", "Returning base section (no server creation)")
 		return baseSection
 	}
 
-	return (
+	const finalSection =
 		baseSection +
 		`
 ## Creating an MCP Server
@@ -73,5 +99,7 @@ The user may ask you something along the lines of "add a tool" that does some fu
 <fetch_instructions>
 <task>create_mcp_server</task>
 </fetch_instructions>`
-	)
+
+	McpDebugLogger.section("getMcpServersSection", "Returning final section, length:", finalSection.length)
+	return finalSection
 }

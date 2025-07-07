@@ -41,6 +41,10 @@ export class TaskApiHandler {
 	private didCompleteReadingStream = false
 	private logger: ILogger
 
+	// Abort control properties
+	private currentAbortController?: AbortController
+	private isAborted: boolean = false
+
 	constructor(
 		private taskId: string,
 		private instanceId: string,
@@ -74,6 +78,68 @@ export class TaskApiHandler {
 	 */
 	setLogger(logger: ILogger): void {
 		this.logger = logger
+	}
+
+	/**
+	 * Check if the task has been aborted
+	 */
+	public isTaskAborted(): boolean {
+		return this.isAborted || this.currentAbortController?.signal.aborted || false
+	}
+
+	/**
+	 * Abort current operations including active LLM streams
+	 */
+	public async abortCurrentOperations(): Promise<void> {
+		this.log(`[TaskApiHandler] Aborting current operations for task ${this.taskId}`)
+		this.isAborted = true
+
+		if (this.currentAbortController) {
+			this.log(`[TaskApiHandler] Aborting current AbortController`)
+			this.currentAbortController.abort()
+			this.currentAbortController = undefined
+		}
+
+		// Stop streaming
+		if (this.isStreaming) {
+			this.log(`[TaskApiHandler] Stopping active stream`)
+			this.isStreaming = false
+		}
+
+		// Reset streaming state
+		this.isWaitingForFirstChunk = false
+		this.didCompleteReadingStream = true
+
+		this.log(`[TaskApiHandler] Current operations aborted successfully`)
+	}
+
+	/**
+	 * Terminate active streams and cleanup resources
+	 */
+	public async terminateActiveStreams(): Promise<void> {
+		this.log(`[TaskApiHandler] Terminating active streams for task ${this.taskId}`)
+
+		// Abort current controller
+		if (this.currentAbortController) {
+			this.currentAbortController.abort()
+			this.currentAbortController = undefined
+		}
+
+		// Reset streaming state
+		this.isStreaming = false
+		this.isWaitingForFirstChunk = false
+		this.didCompleteReadingStream = true
+
+		// Clear message content to prevent further processing
+		this.assistantMessageContent = []
+		this.userMessageContent = []
+		this.userMessageContentReady = true
+
+		// Reset tool state
+		this.didRejectTool = false
+		this.didAlreadyUseTool = false
+
+		this.log(`[TaskApiHandler] Stream termination completed`)
 	}
 
 	/**
@@ -126,6 +192,15 @@ export class TaskApiHandler {
 		this.log(
 			`[TaskApiHandler.attemptApiRequest] Starting API request for task ${this.taskId}.${this.instanceId}, retry attempt: ${retryAttempt}`,
 		)
+
+		// Create AbortController for this request
+		this.currentAbortController = new AbortController()
+
+		// Check if already aborted
+		if (abort || this.isAborted) {
+			this.log(`[TaskApiHandler.attemptApiRequest] Task ${this.taskId} aborted before API request`)
+			throw new Error(`Task ${this.taskId} aborted before API request`)
+		}
 
 		let state: any = null
 		let apiConfiguration: any = null
@@ -387,7 +462,14 @@ export class TaskApiHandler {
 		console.log(`[API-HANDLER-DEBUG] systemPrompt length:`, systemPrompt.length)
 		console.log(`[API-HANDLER-DEBUG] cleanConversationHistory length:`, cleanConversationHistory.length)
 		console.log(`[API-HANDLER-DEBUG] metadata:`, metadata)
-		const stream = this.api.createMessage(systemPrompt, cleanConversationHistory, metadata)
+
+		// Create options with AbortSignal
+		const options = {
+			signal: this.currentAbortController?.signal,
+		}
+		console.log(`[API-HANDLER-DEBUG] options:`, { hasSignal: !!options.signal })
+
+		const stream = this.api.createMessage(systemPrompt, cleanConversationHistory, metadata, options)
 		console.log(`[API-HANDLER-DEBUG] API stream created successfully`)
 		this.log(`[TaskApiHandler] API stream created successfully`)
 
@@ -651,6 +733,14 @@ export class TaskApiHandler {
 					console.log(`[API-HANDLER-DEBUG] Received chunk in for-await loop:`, chunk)
 					this.log(`[TaskApiHandler] Received chunk type: ${chunk?.type}`)
 					if (!chunk) continue
+
+					// Check abort status on every chunk
+					if (abort || this.isTaskAborted()) {
+						this.log(
+							`[TaskApiHandler] Breaking due to abort signal - abort: ${abort}, isTaskAborted: ${this.isTaskAborted()}`,
+						)
+						break
+					}
 
 					switch (chunk.type) {
 						case "reasoning":
