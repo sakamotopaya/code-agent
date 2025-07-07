@@ -59,3 +59,5 @@ docker/*/.env
 docker/*/.env.*
 !docker/*/.env.*.sample
 !docker/*/.env.*.example
+
+**/vibe-dev

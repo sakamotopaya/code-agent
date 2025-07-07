@@ -1,4 +1,5 @@
 import { EventEmitter } from "events"
+import { randomBytes } from "crypto"
 import type { ProviderSettings } from "@roo-code/types"
 
 /**
@@ -160,10 +161,11 @@ export abstract class BaseProvider extends EventEmitter implements IProvider {
 	}
 
 	/**
-	 * Generate a unique session ID
+	 * Generate a unique session ID using cryptographically secure random generation
 	 */
 	protected generateSessionId(): string {
-		return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+		const randomPart = randomBytes(6).toString("base64url")
+		return `session_${Date.now()}_${randomPart}`
 	}
 
 	/**
