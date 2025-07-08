@@ -207,7 +207,8 @@ export async function getEnvironmentDetails(cline: Task, includeFileDetails: boo
 		language,
 	} = state ?? {}
 
-	const currentMode = mode ?? defaultModeSlug
+	// Use provider mode if available, otherwise use Task's mode property, fallback to default
+	const currentMode = mode ?? cline.mode ?? defaultModeSlug
 
 	const modeDetails = await getFullModeDetails(currentMode, customModes, customModePrompts, {
 		cwd: cline.cwd,

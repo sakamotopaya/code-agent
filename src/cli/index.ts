@@ -18,9 +18,11 @@ import { PerformanceConfigManager } from "./config/performance-config"
 import { initializeCLILogger, getCLILogger, formatDebugMessage } from "./services/CLILogger"
 import { UnifiedMcpService } from "./services/UnifiedMcpService"
 import { LoggerFactory } from "../core/services/LoggerFactory"
-import { AGENTZ_DIR_NAME } from "../shared/paths"
+import { AGENTZ_DIR_NAME, getStoragePath } from "../shared/paths"
 import { LoggerPlatform } from "../core/interfaces/ILogger"
 import { createCLILoggerFromOptions } from "../core/adapters/cli/CLILoggerAdapter"
+import { UnifiedCustomModesService } from "../shared/services/UnifiedCustomModesService"
+import { NoOpFileWatcher } from "../shared/services/watchers/NoOpFileWatcher"
 import chalk from "chalk"
 import * as fs from "fs"
 
@@ -68,24 +70,75 @@ interface CliOptions {
 	sessionDirectory?: string
 }
 
+// Global custom modes service for CLI
+let globalCustomModesService: UnifiedCustomModesService | null = null
+
 // Validation functions
-function validateMode(value: string): string {
-	const validModes = [
-		"code",
-		"debug",
-		"architect",
-		"ask",
-		"test",
-		"design-engineer",
-		"release-engineer",
-		"translate",
-		"product-owner",
-		"orchestrator",
-	]
-	if (!validModes.includes(value)) {
-		throw new Error(`Invalid mode: ${value}. Valid modes are: ${validModes.join(", ")}`)
+async function validateMode(value: string): Promise<string> {
+	if (!globalCustomModesService) {
+		// Initialize custom modes service if not already done
+		const storagePath = getStoragePath()
+		globalCustomModesService = new UnifiedCustomModesService({
+			storagePath,
+			fileWatcher: new NoOpFileWatcher(), // No file watching in CLI
+			enableProjectModes: true,
+			workspacePath: process.cwd(),
+		})
 	}
-	return value
+
+	try {
+		const allModes = await globalCustomModesService.getAllModes()
+		const validModes = allModes.map((m) => m.slug)
+
+		if (!validModes.includes(value)) {
+			const builtInModes = [
+				"code",
+				"debug",
+				"architect",
+				"ask",
+				"test",
+				"design-engineer",
+				"release-engineer",
+				"translate",
+				"product-owner",
+				"orchestrator",
+			]
+			const customModes = allModes.filter((m) => !builtInModes.includes(m.slug)).map((m) => m.slug)
+
+			let errorMessage = `Invalid mode: ${value}.`
+			errorMessage += `\n\nAvailable modes:`
+			errorMessage += `\n  Built-in: ${builtInModes.join(", ")}`
+			if (customModes.length > 0) {
+				errorMessage += `\n  Custom: ${customModes.join(", ")}`
+			}
+			errorMessage += `\n\nUse one of the available modes or check your custom modes configuration.`
+
+			throw new Error(errorMessage)
+		}
+		return value
+	} catch (error) {
+		if (error.message.includes("Invalid mode:")) {
+			throw error
+		}
+		// If custom modes loading fails, fall back to built-in modes only
+		console.warn("Warning: Failed to load custom modes, using built-in modes only:", error.message)
+		const builtInModes = [
+			"code",
+			"debug",
+			"architect",
+			"ask",
+			"test",
+			"design-engineer",
+			"release-engineer",
+			"translate",
+			"product-owner",
+			"orchestrator",
+		]
+		if (!builtInModes.includes(value)) {
+			throw new Error(`Invalid mode: ${value}. Valid built-in modes are: ${builtInModes.join(", ")}`)
+		}
+		return value
+	}
 }
 
 function validateFormat(value: string): string {
@@ -137,8 +190,7 @@ program
 	.option("-m, --model <name>", "AI model to use (overrides config)")
 	.option(
 		"--mode <mode>",
-		"Agent mode (code, debug, architect, ask, test, design-engineer, release-engineer, translate, product-owner, orchestrator)",
-		validateMode,
+		"Agent mode. Built-in modes: code, debug, architect, ask, test, design-engineer, release-engineer, translate, product-owner, orchestrator. Custom modes loaded from storage path.",
 	)
 	.option("-f, --format <format>", "Output format (json, plain, yaml, csv, markdown)", validateFormat)
 	.option("-o, --output <file>", "Output file path")
@@ -346,7 +398,14 @@ program
 				cliOverrides.model = options.model
 			}
 			if (options.mode) {
-				cliOverrides.mode = options.mode
+				// Validate mode with custom modes support
+				try {
+					await validateMode(options.mode)
+					cliOverrides.mode = options.mode
+				} catch (error) {
+					logger.error(error.message)
+					process.exit(1)
+				}
 			}
 
 			// Apply session directory configuration override
@@ -507,6 +566,18 @@ program
 							await mcpService.dispose()
 							if (options.verbose) {
 								logger.debug("Unified MCP service disposed")
+							}
+						}
+
+						// Dispose custom modes service before exit
+						if (globalCustomModesService) {
+							if (options.verbose) {
+								logger.debug("Disposing custom modes service before exit...")
+							}
+							globalCustomModesService.dispose()
+							globalCustomModesService = null
+							if (options.verbose) {
+								logger.debug("Custom modes service disposed")
 							}
 						}
 					} catch (error) {

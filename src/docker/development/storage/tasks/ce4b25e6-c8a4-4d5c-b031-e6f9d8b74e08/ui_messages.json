@@ -1,0 +1,51 @@
+[
+	{ "ts": 1751731987972, "type": "say", "say": "text", "text": "list the modes available to you" },
+	{
+		"ts": 1751731987978,
+		"type": "say",
+		"say": "api_req_started",
+		"text": "{\"request\":\"<task>\\nlist the modes available to you\\n</task>\\n\\n<environment_details>\\n# VSCode Visible Files\\n\\n\\n# VSCode Open Tabs\\n\\n\\n# Current Time\\n7/5/2025, 11:13:07 AM (America/Chicago, UTC-5:00)\\n\\n# Current Context Size (Tokens)\\n(Not available)\\n\\n# Current Cost\\n$0.00\\n\\n# Current Mode\\n<slug>code</slug>\\n<name>💻 Code</name>\\n<model>claude-3-5-sonnet-20241022</model>\\n\\n\\n# Current Workspace Directory (docker/development/workspace) Files\\nNo files found.\\n</environment_details>\"}"
+	},
+	{
+		"ts": 1751731988105,
+		"type": "say",
+		"say": "api_req_retry_delayed",
+		"text": "Could not resolve authentication method. Expected either apiKey or authToken to be set. Or for one of the \"X-Api-Key\" or \"Authorization\" headers to be explicitly omitted\n\nRetry attempt 1\nRetrying now...",
+		"partial": false
+	},
+	{
+		"ts": 1751731993117,
+		"type": "say",
+		"say": "api_req_retry_delayed",
+		"text": "Could not resolve authentication method. Expected either apiKey or authToken to be set. Or for one of the \"X-Api-Key\" or \"Authorization\" headers to be explicitly omitted\n\nRetry attempt 2\nRetrying now...",
+		"partial": false
+	},
+	{
+		"ts": 1751732003137,
+		"type": "say",
+		"say": "api_req_retry_delayed",
+		"text": "Could not resolve authentication method. Expected either apiKey or authToken to be set. Or for one of the \"X-Api-Key\" or \"Authorization\" headers to be explicitly omitted\n\nRetry attempt 3\nRetrying now...",
+		"partial": false
+	},
+	{
+		"ts": 1751732023167,
+		"type": "say",
+		"say": "api_req_retry_delayed",
+		"text": "Could not resolve authentication method. Expected either apiKey or authToken to be set. Or for one of the \"X-Api-Key\" or \"Authorization\" headers to be explicitly omitted\n\nRetry attempt 4\nRetrying now...",
+		"partial": false
+	},
+	{
+		"ts": 1751732063218,
+		"type": "say",
+		"say": "api_req_retry_delayed",
+		"text": "Could not resolve authentication method. Expected either apiKey or authToken to be set. Or for one of the \"X-Api-Key\" or \"Authorization\" headers to be explicitly omitted\n\nRetry attempt 5\nRetrying now...",
+		"partial": false
+	},
+	{
+		"ts": 1751732143324,
+		"type": "say",
+		"say": "api_req_retry_delayed",
+		"text": "Could not resolve authentication method. Expected either apiKey or authToken to be set. Or for one of the \"X-Api-Key\" or \"Authorization\" headers to be explicitly omitted\n\nRetry attempt 6\nRetrying in 160 seconds...",
+		"partial": true
+	}
+]

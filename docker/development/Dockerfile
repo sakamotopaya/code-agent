@@ -125,6 +125,7 @@ ENV NODE_ENV=development \
     API_VERBOSE=true \
     API_DEBUG=true \
     API_WORKSPACE_ROOT=/app/workspace \
+    TREE_SITTER_WASM_DIR=/app/src/dist \
     NODE_OPTIONS="--max-old-space-size=2048" \
     UV_THREADPOOL_SIZE=128
 

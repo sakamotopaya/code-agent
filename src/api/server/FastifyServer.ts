@@ -12,9 +12,13 @@ import { ApiQuestionManager } from "../questions/ApiQuestionManager"
 import { Task } from "../../core/task/Task"
 import { createApiAdapters } from "../../core/adapters/api"
 import { TaskExecutionOrchestrator, ApiTaskExecutionHandler } from "../../core/task/execution"
+import { TimeoutValidator, ValidationError } from "../../core/task/execution/TimeoutValidator"
 import { getStoragePath } from "../../shared/paths"
 import { SharedContentProcessor } from "../../core/content/SharedContentProcessor"
 import { SSEStreamingAdapter, SSEContentOutputAdapter } from "../../core/adapters/api/SSEOutputAdapters"
+import { UnifiedCustomModesService } from "../../shared/services/UnifiedCustomModesService"
+import { NodeFileWatcher } from "../../shared/services/watchers/NodeFileWatcher"
+import type { ModeConfig } from "@roo-code/types"
 
 /**
  * Fastify-based API server implementation
@@ -30,6 +34,7 @@ export class FastifyServer {
 	private streamManager: StreamManager
 	private questionManager: ApiQuestionManager
 	private taskExecutionOrchestrator: TaskExecutionOrchestrator
+	private customModesService: UnifiedCustomModesService
 
 	constructor(config: ApiConfigManager, adapters: CoreInterfaces) {
 		this.config = config
@@ -38,6 +43,15 @@ export class FastifyServer {
 		this.streamManager = new StreamManager()
 		this.questionManager = new ApiQuestionManager()
 		this.taskExecutionOrchestrator = new TaskExecutionOrchestrator()
+
+		// Initialize custom modes service with file watching for API context
+		const storagePath = process.env.ROO_GLOBAL_STORAGE_PATH || getStoragePath()
+		this.customModesService = new UnifiedCustomModesService({
+			storagePath,
+			fileWatcher: new NodeFileWatcher(), // File watching enabled for API
+			enableProjectModes: false, // API typically doesn't have workspace context
+		})
+
 		this.app = fastify({
 			logger: LoggerConfigManager.createLoggerConfig(config),
 		})
@@ -53,6 +67,14 @@ export class FastifyServer {
 	 */
 	async initialize(): Promise<void> {
 		const serverConfig = this.config.getConfiguration()
+
+		// Load custom modes
+		try {
+			await this.customModesService.loadCustomModes()
+			this.app.log.info("Custom modes loaded for API server")
+		} catch (error) {
+			this.app.log.warn("Failed to load custom modes:", error)
+		}
 
 		// Register CORS
 		if (serverConfig.cors) {
@@ -113,19 +135,37 @@ export class FastifyServer {
 			try {
 				const body = request.body as any
 				const task = body.task || "No task specified"
+				const mode = body.mode || "code" // Default to code mode
+				const logSystemPrompt = body.logSystemPrompt || false
+				const logLlm = body.logLlm || false
+
+				// Validate mode
+				const selectedMode = await this.validateMode(mode)
 
 				// For now, just return a simple response
 				// In full implementation, this would delegate to the Task engine
-				await this.adapters.userInterface.showInformation(`Received task: ${task}`)
+				await this.adapters.userInterface.showInformation(`Received task: ${task} (mode: ${mode})`)
 
 				return reply.send({
 					success: true,
 					message: "Task received",
 					task,
+					mode: selectedMode.slug,
 					timestamp: new Date().toISOString(),
 				})
 			} catch (error) {
 				this.app.log.error("Execute error:", error)
+
+				// Handle mode validation errors
+				if (error.message.includes("Invalid mode")) {
+					return reply.status(400).send({
+						success: false,
+						error: "Invalid mode",
+						message: error.message,
+						timestamp: new Date().toISOString(),
+					})
+				}
+
 				return reply.status(500).send({
 					success: false,
 					error: error instanceof Error ? error.message : "Unknown error",
@@ -141,10 +181,31 @@ export class FastifyServer {
 				const task = body.task || "No task specified"
 				const mode = body.mode || "code"
 				const verbose = body.verbose || false // Extract verbose flag from request
+				const logSystemPrompt = body.logSystemPrompt || false
+				const logLlm = body.logLlm || false
+
+				console.log(`[FastifyServer] /execute/stream request received`)
+				console.log(`[FastifyServer] Mode parameter: ${mode}`)
+				console.log(`[FastifyServer] Task: ${task}`)
+				console.log(`[FastifyServer] Verbose: ${verbose}`)
+
+				// Validate mode exists
+				const selectedMode = await this.validateMode(mode)
+				console.log(`[FastifyServer] Mode validation result:`, {
+					requested: mode,
+					selected: selectedMode.slug,
+					name: selectedMode.name,
+				})
+				console.log(`[MODE-DEBUG] Custom mode validation result:`, {
+					requested: mode,
+					selected: selectedMode.slug,
+					name: selectedMode.name,
+					source: selectedMode.source || "unknown",
+				})
 
 				// Create job
 				const job = this.jobManager.createJob(task, {
-					mode,
+					mode: selectedMode.slug,
 					clientInfo: {
 						userAgent: request.headers["user-agent"],
 						ip: request.ip,
@@ -242,9 +303,17 @@ export class FastifyServer {
 					}
 				}
 
+				console.log(`[API-CONFIG-DEBUG] API configuration loaded:`, {
+					provider: apiConfiguration.apiProvider,
+					hasApiKey: !!apiConfiguration.apiKey,
+					model: apiConfiguration.apiModelId,
+					keyPrefix: apiConfiguration.apiKey?.substring(0, 10),
+				})
+
 				const taskOptions = {
 					apiConfiguration,
 					task,
+					mode: selectedMode.slug, // Pass the validated mode
 					startTask: true, // This will start the task automatically
 					fileSystem: taskAdapters.fileSystem,
 					terminal: taskAdapters.terminal,
@@ -261,6 +330,11 @@ export class FastifyServer {
 					mcpRetries: this.config.getConfiguration().mcpRetries || 3,
 					// Use SSE adapter as CLI UI service equivalent for question handling
 					cliUIService: sseAdapter,
+					// Logging configuration
+					logSystemPrompt,
+					logLlm,
+					// Custom modes service for unified tool execution
+					customModesService: this.customModesService,
 					// Disable new adapters for now - go back to existing working logic
 					// streamingAdapter: sseStreamingAdapter,
 					// contentProcessor: sharedContentProcessor,
@@ -268,14 +342,25 @@ export class FastifyServer {
 				}
 
 				this.app.log.info(`Task options prepared for job ${job.id}`)
+				console.log(`[FastifyServer] Task options for job ${job.id}:`, {
+					mode: taskOptions.mode,
+					task: taskOptions.task,
+					customModesService: !!taskOptions.customModesService,
+					startTask: taskOptions.startTask,
+					logSystemPrompt: taskOptions.logSystemPrompt,
+					logLlm: taskOptions.logLlm,
+				})
 
 				// Create and start the task - this returns [instance, promise]
+				console.log(`[FastifyServer] About to call Task.create() for job ${job.id}`)
 				const [taskInstance, taskPromise] = Task.create(taskOptions)
-				this.app.log.info(`Task.create() completed for job ${job.id}`)
-				this.app.log.info(`Task instance created:`, taskInstance ? "SUCCESS" : "FAILED")
+				console.log(`[FastifyServer] Task.create() completed for job ${job.id}`)
+				console.log(`[FastifyServer] Task instance created:`, taskInstance ? "SUCCESS" : "FAILED")
+				console.log(`[FastifyServer] Task instance mode:`, taskInstance?.mode)
+				console.log(`[FastifyServer] Task instance customModesService:`, !!taskInstance?.customModesService)
 
 				// Start job tracking (for job status management)
-				await this.jobManager.startJob(job.id, taskInstance)
+				await this.jobManager.startJob(job.id, taskInstance, this.taskExecutionOrchestrator)
 				this.app.log.info(`JobManager.startJob() completed for job ${job.id}`)
 
 				// Create API task execution handler
@@ -285,30 +370,60 @@ export class FastifyServer {
 					this.config.getConfiguration().debug || false,
 				)
 
-				// Determine if this is an informational query
-				const isInfoQuery = this.isInformationalQuery(task)
+				// FIXED: Remove informational query detection to match VS Code extension behavior
+				// All API tasks now use standard execution regardless of their phrasing
+				// const isInfoQuery = this.isInformationalQuery(task)
+				const isInfoQuery = false // Force standard execution for all API tasks
 
-				// Set up execution options
+				console.log(`[FastifyServer] Informational query detection bypassed - using standard execution`)
+				console.log(`[FastifyServer] Task will execute normally regardless of phrasing`)
+
+				// Set up execution options with validated timeouts
+				let validatedSlidingTimeoutMs: number | undefined
+				try {
+					if ((request.body as any)?.slidingTimeoutMs !== undefined) {
+						validatedSlidingTimeoutMs = TimeoutValidator.validateSlidingTimeout(
+							(request.body as any).slidingTimeoutMs,
+							"api_request",
+						)
+					}
+				} catch (error) {
+					if (error instanceof ValidationError) {
+						return reply.status(400).send({
+							error: "Invalid timeout value",
+							message: error.message,
+							details: "Timeout values must be between 1 second (1000ms) and 24 hours (86400000ms)",
+						})
+					}
+					throw error
+				}
+
 				const executionOptions = {
-					isInfoQuery,
-					infoQueryTimeoutMs: 120000, // 2 minutes for info queries
-					emergencyTimeoutMs: 60000, // 60 seconds emergency timeout
-					slidingTimeoutMs: 600000, // 10 minutes for regular tasks
-					useSlidingTimeout: !isInfoQuery,
+					isInfoQuery: false, // Force standard execution for all API tasks
+					infoQueryTimeoutMs: 120000, // 2 minutes for info queries (unused since isInfoQuery is false)
+					// emergencyTimeoutMs removed - now relies on sliding timeout for long-running tasks
+					slidingTimeoutMs: validatedSlidingTimeoutMs, // Use validated timeout or undefined to fall back to defaults
+					useSlidingTimeout: true, // Always use sliding timeout since isInfoQuery is false
 					taskIdentifier: job.id,
 				}
 
-				this.app.log.info(`Starting task execution for job ${job.id}, isInfoQuery: ${isInfoQuery}`)
+				console.log(`[FastifyServer] Starting task execution for job ${job.id}`)
+				console.log(`[FastifyServer] Execution options:`, {
+					isInfoQuery: false,
+					mode: selectedMode.slug,
+					taskIdentifier: job.id,
+				})
 
 				// Execute task with orchestrator (this replaces all the custom timeout/monitoring logic)
 				this.taskExecutionOrchestrator
 					.executeTask(taskInstance, taskPromise, executionHandler, executionOptions)
 					.then(async (result) => {
-						this.app.log.info(`Task execution completed for job ${job.id}:`, result.reason)
-						this.app.log.info(`Task execution result:`, {
+						console.log(`[FastifyServer] Task execution completed for job ${job.id}:`, result.reason)
+						console.log(`[FastifyServer] Task execution result:`, {
 							success: result.success,
 							reason: result.reason,
 							durationMs: result.durationMs,
+							mode: selectedMode.slug,
 							tokenUsage: result.tokenUsage,
 							toolUsage: result.toolUsage,
 						})
@@ -318,13 +433,21 @@ export class FastifyServer {
 						this.streamManager.closeStream(job.id)
 					})
 					.catch(async (error: any) => {
-						this.app.log.error(`Task execution orchestrator failed for job ${job.id}:`, error)
-						this.app.log.error(`Error details:`, {
-							message: error?.message,
-							stack: error?.stack,
-							name: error?.name,
-							code: error?.code,
-						})
+						// Handle cancellation gracefully
+						if (
+							error.message &&
+							(error.message.includes("cancelled") || error.message.includes("aborted"))
+						) {
+							this.app.log.info(`Task execution cancelled for job ${job.id}: ${error.message}`)
+						} else {
+							this.app.log.error(`Task execution orchestrator failed for job ${job.id}:`, error)
+							this.app.log.error(`Error details:`, {
+								message: error?.message,
+								stack: error?.stack,
+								name: error?.name,
+								code: error?.code,
+							})
+						}
 
 						// Send error if not already sent by orchestrator
 						try {
@@ -339,6 +462,24 @@ export class FastifyServer {
 				this.app.log.info(`Task execution orchestrator started for job ${job.id}`)
 			} catch (error) {
 				this.app.log.error("Stream execute error:", error)
+
+				// Handle mode validation errors
+				if (error.message.includes("Invalid mode")) {
+					try {
+						reply.raw.write(
+							`data: ${JSON.stringify({
+								type: "error",
+								error: "Invalid mode",
+								message: error.message,
+								timestamp: new Date().toISOString(),
+							})}\n\n`,
+						)
+					} catch (writeError) {
+						this.app.log.error("Failed to write mode error to stream:", writeError)
+					}
+					reply.raw.end()
+					return
+				}
 
 				// Try to send error through SSE if possible
 				try {
@@ -706,5 +847,20 @@ export class FastifyServer {
 		]
 
 		return infoPatterns.some((pattern) => pattern.test(lowerTask))
+	}
+
+	/**
+	 * Validate mode and return the mode config
+	 */
+	private async validateMode(mode: string): Promise<ModeConfig> {
+		const allModes = await this.customModesService.getAllModes()
+		const selectedMode = allModes.find((m) => m.slug === mode)
+
+		if (!selectedMode) {
+			const availableModes = allModes.map((m) => m.slug).join(", ")
+			throw new Error(`Invalid mode: ${mode}. Available modes: ${availableModes}`)
+		}
+
+		return selectedMode
 	}
 }

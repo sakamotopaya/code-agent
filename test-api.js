@@ -21,17 +21,22 @@ let useStream = false
 let host = "localhost"
 let port = 3000
 let task = "Test task from API client"
+let mode = "code" // Default mode
 let showHelp = false
 let verbose = false
 let showThinking = false
 let showTools = false
 let showSystem = false
+let logSystemPrompt = false
+let logLlm = false
 
 for (let i = 0; i < args.length; i++) {
 	const arg = args[i]
 
 	if (arg === "--stream") {
 		useStream = true
+	} else if (arg === "--mode") {
+		mode = args[++i] || "code"
 	} else if (arg === "--host") {
 		host = args[++i] || host
 	} else if (arg === "--port") {
@@ -44,6 +49,10 @@ for (let i = 0; i < args.length; i++) {
 		showTools = true
 	} else if (arg === "--show-system") {
 		showSystem = true
+	} else if (arg === "--log-system-prompt") {
+		logSystemPrompt = true
+	} else if (arg === "--log-llm") {
+		logLlm = true
 	} else if (arg === "--help" || arg === "-h") {
 		showHelp = true
 	} else if (!arg.startsWith("--")) {
@@ -58,11 +67,17 @@ if (showHelp) {
 Usage: node test-api.js [options] "Your task here"
 
 Options:
+  --mode           Agent mode (default: code)
+                   Built-in: code, debug, architect, ask, test, design-engineer,
+                            release-engineer, translate, product-owner, orchestrator
+                   Custom modes loaded from server storage
   --stream         Test SSE streaming endpoint (default: false)
   --verbose        Show full JSON payload (default: false)
   --show-thinking  Show thinking sections in LLM output (default: false)
   --show-tools     Show tool call content (default: false)
   --show-system    Show system content (default: false)
+  --log-system-prompt  Log system prompt to file (default: false)
+  --log-llm        Log raw LLM interactions to file (default: false)
   --host           API host (default: localhost)
   --port           API port (default: 3000)
   --help           Show this help
@@ -75,11 +90,20 @@ Content Display:
   Use --verbose to see full JSON payloads with all metadata.
 
 Examples:
-  node test-api.js --stream "where does the vscode extension code store it's mode config files?"
-  node test-api.js --verbose --stream "list your MCP servers"
-  node test-api.js --stream --show-thinking "Write a React component"
-  node test-api.js --stream --show-tools --show-thinking "Debug this code"
-  node test-api.js --host api.example.com --port 8080 "Debug this code"
+  # Built-in modes
+  node test-api.js --stream --mode code "Fix this bug"
+  node test-api.js --stream --mode architect "Plan this feature"
+  
+  # Custom modes (if configured on server)
+  node test-api.js --stream --mode product-owner "Create a PRD for user auth"
+  node test-api.js --stream --mode ticket-oracle "Check ticket status"
+  
+  # Default mode
+  node test-api.js --stream "Test task" # Uses code mode
+  
+  # Other examples
+  node test-api.js --verbose --stream --mode debug "Debug this issue"
+  node test-api.js --host api.example.com --port 8080 --mode ask "Explain this"
 `)
 	process.exit(0)
 }
@@ -89,11 +113,14 @@ const baseUrl = `http://${host}:${port}`
 if (verbose) {
 	console.log(`🚀 Testing Roo Code Agent API at ${baseUrl}`)
 	console.log(`📝 Task: "${task}"`)
+	console.log(`🎭 Mode: ${mode}`)
 	console.log(`🌊 Streaming: ${useStream ? "enabled" : "disabled"}`)
 	console.log(`📊 Verbose: ${verbose ? "enabled" : "disabled"}`)
 	console.log(`🧠 Show Thinking: ${showThinking ? "enabled" : "disabled"}`)
 	console.log(`🔧 Show Tools: ${showTools ? "enabled" : "disabled"}`)
 	console.log(`⚙️  Show System: ${showSystem ? "enabled" : "disabled"}`)
+	console.log(`📝 Log System Prompt: ${logSystemPrompt ? "enabled" : "disabled"}`)
+	console.log(`🤖 Log LLM: ${logLlm ? "enabled" : "disabled"}`)
 	console.log("")
 }
 
@@ -221,7 +248,12 @@ async function testExecuteEndpoint() {
 	}
 
 	try {
-		const payload = JSON.stringify({ task })
+		const payload = JSON.stringify({
+			task,
+			mode, // Add mode to payload
+			logSystemPrompt,
+			logLlm,
+		})
 
 		const response = await makeRequest(
 			{
@@ -369,7 +401,13 @@ function testStreamingEndpoint() {
 			console.log("🌊 Testing POST /execute/stream (SSE)...\n")
 		}
 
-		const payload = JSON.stringify({ task })
+		const payload = JSON.stringify({
+			task,
+			mode, // Add mode to payload
+			verbose,
+			logSystemPrompt,
+			logLlm,
+		})
 
 		const req = http.request(
 			{
@@ -488,6 +526,18 @@ function testStreamingEndpoint() {
 									switch (data.type) {
 										case "start":
 											// Don't output anything for start
+											break
+										case "error":
+											if (data.error === "Invalid mode") {
+												console.log(`❌ Invalid mode '${mode}': ${data.message}`)
+												console.log(
+													`💡 Tip: Check available modes on the server or use a built-in mode`,
+												)
+												res.destroy()
+												return
+											}
+											// Handle other errors normally
+											console.log(`❌ Error: ${data.error || data.message}`)
 											break
 										case "question_ask":
 											// Handle interactive question - prompt user and submit answer

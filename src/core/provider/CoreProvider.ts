@@ -11,7 +11,7 @@ import { Task, TaskOptions } from "../task/Task"
 import { McpHub } from "../../services/mcp/McpHub"
 import { defaultModeSlug } from "../../shared/modes"
 import { ProviderSettingsManager } from "../config/ProviderSettingsManager"
-import { CustomModesManager } from "../config/CustomModesManager"
+import { UnifiedCustomModesService } from "../../shared/services/UnifiedCustomModesService"
 import { ILogger, NoOpLogger } from "../interfaces/ILogger"
 
 export type CoreProviderEvents = {
@@ -28,7 +28,7 @@ export class CoreProvider extends EventEmitter<CoreProviderEvents> {
 	private taskStack: Task[] = []
 	protected mcpHub?: McpHub
 	protected providerSettingsManager?: ProviderSettingsManager
-	protected customModesManager?: CustomModesManager
+	protected customModesManager?: UnifiedCustomModesService
 	protected logger: ILogger = new NoOpLogger()
 
 	constructor(

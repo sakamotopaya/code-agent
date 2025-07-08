@@ -54,7 +54,8 @@ import { fileExistsAtPath } from "../../utils/fs"
 import { setTtsEnabled, setTtsSpeed } from "../../utils/tts"
 import { ContextProxy } from "../config/ContextProxy"
 import { ProviderSettingsManager } from "../config/ProviderSettingsManager"
-import { CustomModesManager } from "../config/CustomModesManager"
+import { UnifiedCustomModesService } from "../../shared/services/UnifiedCustomModesService"
+import { VSCodeFileWatcher } from "../../shared/services/watchers/VSCodeFileWatcher"
 import { buildApiHandler } from "../../api"
 import { Task, TaskOptions } from "../task/Task"
 import { getNonce } from "./getNonce"
@@ -108,7 +109,7 @@ export class ClineProvider
 	public settingsImportedAt?: number
 	public readonly latestAnnouncementId = "may-29-2025-3-19" // Update for v3.19.0 announcement
 	public readonly providerSettingsManager: ProviderSettingsManager
-	public readonly customModesManager: CustomModesManager
+	public readonly customModesManager: UnifiedCustomModesService
 
 	constructor(
 		readonly context: vscode.ExtensionContext,
@@ -136,8 +137,14 @@ export class ClineProvider
 
 		this.providerSettingsManager = new ProviderSettingsManager(this.context)
 
-		this.customModesManager = new CustomModesManager(this.context, async () => {
-			await this.postStateToWebview()
+		this.customModesManager = new UnifiedCustomModesService({
+			storagePath: this.context.globalStorageUri.fsPath,
+			fileWatcher: new VSCodeFileWatcher(this.context),
+			enableProjectModes: true,
+			workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+			onUpdate: async () => {
+				await this.postStateToWebview()
+			},
 		})
 
 		// Initialize MCP Hub through the singleton manager

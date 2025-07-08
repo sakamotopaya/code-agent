@@ -11,6 +11,7 @@ import {
 	TaskExecutionMode,
 	TaskActivityType,
 } from "./types"
+import { TimeoutValidator } from "./TimeoutValidator"
 
 export class TaskExecutionOrchestrator {
 	private activeExecutions = new Map<string, TaskExecutionState>()
@@ -137,8 +138,8 @@ export class TaskExecutionOrchestrator {
 				}
 			})
 
-			// Info query timeout
-			const infoTimeout = options.infoQueryTimeoutMs || 30000
+			// Info query timeout - use validator to prevent resource exhaustion
+			const infoTimeout = TimeoutValidator.validateInfoQueryTimeout(options.infoQueryTimeoutMs, "info_query")
 			const timeoutId = setTimeout(() => {
 				if (!state.isCompleted) {
 					completeOnce(`Information query timeout (${infoTimeout / 1000}s)`)
@@ -146,14 +147,8 @@ export class TaskExecutionOrchestrator {
 			}, infoTimeout)
 			state.timers.add(timeoutId)
 
-			// Emergency timeout
-			const emergencyTimeout = options.emergencyTimeoutMs || 60000
-			const emergencyTimeoutId = setTimeout(() => {
-				if (!state.isCompleted) {
-					rejectOnce(new Error(`Emergency timeout after ${emergencyTimeout / 1000} seconds`))
-				}
-			}, emergencyTimeout)
-			state.timers.add(emergencyTimeoutId)
+			// Note: Emergency timeout removed - info queries now rely only on info query timeout
+			// This allows for longer-running informational tasks when needed
 		})
 	}
 
@@ -167,7 +162,27 @@ export class TaskExecutionOrchestrator {
 		const { handler, options, taskId, task } = state
 
 		return new Promise((resolve, reject) => {
-			const timeoutMs = options.slidingTimeoutMs || 600000 // 10 minutes default
+			// Get and validate sliding timeout - prevents resource exhaustion attacks
+			const defaultSlidingTimeoutMs = TimeoutValidator.validateEnvironmentTimeout(
+				process.env.TASK_DEFAULT_SLIDING_TIMEOUT_MS,
+				"TASK_DEFAULT_SLIDING_TIMEOUT_MS",
+				"sliding",
+			)
+
+			let timeoutMs: number
+			try {
+				timeoutMs = TimeoutValidator.validateSlidingTimeout(
+					options.slidingTimeoutMs || defaultSlidingTimeoutMs,
+					"sliding_timeout",
+				)
+			} catch (error) {
+				handler.logDebug(`[TaskExecutionOrchestrator] Timeout validation failed: ${error.message}`)
+				throw error
+			}
+
+			handler.logDebug(
+				`[TaskExecutionOrchestrator] Using validated sliding timeout: ${timeoutMs}ms (${timeoutMs / 60000} minutes)`,
+			)
 
 			const resetTimeout = () => {
 				state.lastActivityTime = Date.now()
@@ -215,6 +230,7 @@ export class TaskExecutionOrchestrator {
 				state.isWaitingForUserInput = false
 				this.clearTimeoutTimers(state)
 
+				// Use validated timeoutMs - security fix: this value was already validated above
 				const timeoutId = setTimeout(() => {
 					handler.logDebug(
 						`[TaskExecutionOrchestrator] Task execution timeout after ${timeoutMs}ms of inactivity`,
@@ -341,6 +357,10 @@ export class TaskExecutionOrchestrator {
 
 		task.on("taskCompleted", (tid: string, tokenUsage: any, toolUsage: any) => {
 			handler.logDebug(`[TaskExecutionOrchestrator] Standard task completed: ${tid}`)
+			console.log(`[ORCHESTRATOR-DEBUG] Task completed with tokens:`, tokenUsage)
+			console.log(`[ORCHESTRATOR-DEBUG] Task completed with tools:`, toolUsage)
+			console.log(`[ORCHESTRATOR-DEBUG] Calling complete() with "Standard task completion"`)
+			console.log(`[ORCHESTRATOR-DEBUG] Stack trace:`, new Error().stack)
 			complete("Standard task completion")
 		})
 
@@ -628,27 +648,72 @@ export class TaskExecutionOrchestrator {
 	async cancelExecution(taskId: string, reason: string = "Cancelled"): Promise<boolean> {
 		const state = this.activeExecutions.get(taskId)
 		if (!state) {
+			console.log(`[TaskExecutionOrchestrator] Cannot cancel ${taskId}: execution not found`)
 			return false
 		}
 
 		state.handler.logDebug(`[TaskExecutionOrchestrator] Cancelling execution ${taskId}: ${reason}`)
 
 		try {
+			// Mark as completed to prevent further processing
+			state.isCompleted = true
+
+			// Clear all timers first to prevent race conditions
+			this.clearAllTimers(state)
+
 			// Abort the task if possible
 			if (typeof state.task.abortTask === "function") {
+				state.handler.logDebug(`[TaskExecutionOrchestrator] Calling task.abortTask() for ${taskId}`)
 				await state.task.abortTask()
+			} else {
+				state.handler.logDebug(`[TaskExecutionOrchestrator] Task ${taskId} does not have abortTask method`)
 			}
 
-			// Clean up
+			// Clean up execution state
 			this.cleanup(state)
 			this.activeExecutions.delete(taskId)
 
+			// Notify handler of cancellation
 			await state.handler.onTaskFailed(taskId, new Error(reason))
+
+			state.handler.logDebug(`[TaskExecutionOrchestrator] Successfully cancelled execution ${taskId}`)
 			return true
 		} catch (error) {
-			state.handler.logDebug(`[TaskExecutionOrchestrator] Error cancelling execution:`, error)
+			state.handler.logDebug(`[TaskExecutionOrchestrator] Error cancelling execution ${taskId}:`, error)
+
+			// Still clean up even if there was an error
+			try {
+				this.cleanup(state)
+				this.activeExecutions.delete(taskId)
+			} catch (cleanupError) {
+				state.handler.logDebug(`[TaskExecutionOrchestrator] Error during cleanup:`, cleanupError)
+			}
+
 			return false
 		}
+	}
+
+	/**
+	 * Check if an execution can be cancelled
+	 */
+	canCancelExecution(taskId: string): boolean {
+		return this.activeExecutions.has(taskId)
+	}
+
+	/**
+	 * Get execution status
+	 */
+	getExecutionStatus(taskId: string): "running" | "completed" | "not-found" {
+		const state = this.activeExecutions.get(taskId)
+		if (!state) return "not-found"
+		return state.isCompleted ? "completed" : "running"
+	}
+
+	/**
+	 * Get list of active execution IDs
+	 */
+	getActiveExecutionIds(): string[] {
+		return Array.from(this.activeExecutions.keys())
 	}
 }
 

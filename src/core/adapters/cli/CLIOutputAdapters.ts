@@ -338,6 +338,60 @@ export class CLIOutputAdapter implements IOutputAdapter {
 		}
 	}
 
+	// Tool Support Methods
+	/**
+	 * Display tool results in CLI format
+	 */
+	showToolResult(result: string): void {
+		const formatted = this.formatToolResult(result)
+		console.log(formatted)
+	}
+
+	/**
+	 * Display error messages in CLI format
+	 */
+	async showError(errorMessage: string): Promise<void> {
+		await this.outputLogger.logMethodCall("showError", errorMessage)
+
+		if (this.useColor) {
+			console.error(chalk.red(`❌ ${errorMessage}`))
+		} else {
+			console.error(`❌ ${errorMessage}`)
+		}
+	}
+
+	/**
+	 * Check if CLI is in interactive mode
+	 */
+	isInteractive(): boolean {
+		return process.stdin.isTTY && !process.env.CI && !process.env.NON_INTERACTIVE
+	}
+
+	/**
+	 * Prompt user for input in interactive mode
+	 */
+	async promptUser(message: string): Promise<boolean> {
+		if (!this.isInteractive()) {
+			return true // Auto-approve in non-interactive mode
+		}
+
+		// TODO: Implement interactive prompting
+		// For now, auto-approve
+		console.log(this.useColor ? chalk.yellow(`❓ ${message}`) : `❓ ${message}`)
+		console.log(this.useColor ? chalk.gray("(Auto-approved)") : "(Auto-approved)")
+		return true
+	}
+
+	/**
+	 * Format tool results for CLI display
+	 */
+	private formatToolResult(result: string): string {
+		if (this.useColor) {
+			return chalk.green("✓ ") + chalk.gray(result)
+		}
+		return "✓ " + result
+	}
+
 	// Lifecycle
 	reset(): void {
 		// Log the method call (not awaited since this is a sync method)

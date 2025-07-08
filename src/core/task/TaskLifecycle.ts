@@ -67,6 +67,14 @@ export class TaskLifecycle {
 
 		if (initiateTaskLoop) {
 			this.log(`[TaskLifecycle] Calling initiateTaskLoop...`)
+			console.log(`[LIFECYCLE-DEBUG] About to call initiateTaskLoop with task: "${task}"`)
+			console.log(`[LIFECYCLE-DEBUG] UserContent will be:`, [
+				{
+					type: "text",
+					text: `<task>\n${task}\n</task>`,
+				},
+				...imageBlocks,
+			])
 			try {
 				await initiateTaskLoop([
 					{
@@ -75,8 +83,10 @@ export class TaskLifecycle {
 					},
 					...imageBlocks,
 				])
+				console.log(`[LIFECYCLE-DEBUG] initiateTaskLoop completed successfully`)
 				// Debug: TaskLifecycle completed successfully (only log in verbose mode)
 			} catch (error) {
+				console.error(`[LIFECYCLE-DEBUG] Error in initiateTaskLoop:`, error)
 				console.error(`[TaskLifecycle] Error in initiateTaskLoop:`, error)
 				throw error
 			}

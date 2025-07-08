@@ -3,13 +3,12 @@
  * Creates timestamped log files to track complete conversation
  */
 
-import { promises as fs } from "fs"
+import fs from "fs/promises"
 import path from "path"
 
 export class LLMContentLogger {
 	private logFilePath: string
 	private isEnabled: boolean
-	private logStream: fs.FileHandle | null = null
 	private isFirstChunk: boolean = true
 
 	constructor(enabled: boolean = true, logDir?: string) {
@@ -17,10 +16,10 @@ export class LLMContentLogger {
 
 		// Create timestamped log file name
 		const timestamp = new Date().toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, -5)
-		const fileName = `llm-${timestamp}.log`
+		const fileName = `raw-llm-${timestamp}.log`
 
-		// Use provided log directory or default to current working directory
-		const baseDir = logDir || process.cwd()
+		// Use logs directory (same as LoggerConfigManager) or provided logDir or fallback to cwd
+		const baseDir = logDir || process.env.LOGS_PATH || "./logs"
 		this.logFilePath = path.join(baseDir, fileName)
 	}
 
@@ -35,12 +34,9 @@ export class LLMContentLogger {
 			const logDir = path.dirname(this.logFilePath)
 			await fs.mkdir(logDir, { recursive: true })
 
-			// Open the log file for writing
-			this.logStream = await fs.open(this.logFilePath, "a")
-
 			// Write header
 			const header = `=== LLM Content Log - ${new Date().toISOString()} ===\n`
-			await this.writeToLog(header)
+			await fs.appendFile(this.logFilePath, header)
 		} catch (error) {
 			console.error(`[LLMContentLogger] Failed to initialize log file: ${error}`)
 			this.isEnabled = false
@@ -64,16 +60,12 @@ export class LLMContentLogger {
 	 * Write content to log file
 	 */
 	private async writeToLog(content: string): Promise<void> {
-		if (!this.logStream) {
-			await this.initialize()
-		}
+		if (!this.isEnabled) return
 
-		if (this.logStream) {
-			try {
-				await this.logStream.write(content)
-			} catch (error) {
-				console.error(`[LLMContentLogger] Failed to write to log: ${error}`)
-			}
+		try {
+			await fs.appendFile(this.logFilePath, content)
+		} catch (error) {
+			console.error(`[LLMContentLogger] Failed to write to log: ${error}`)
 		}
 	}
 
@@ -81,14 +73,7 @@ export class LLMContentLogger {
 	 * Close the log file
 	 */
 	async close(): Promise<void> {
-		if (this.logStream) {
-			try {
-				await this.logStream.close()
-				this.logStream = null
-			} catch (error) {
-				console.error(`[LLMContentLogger] Failed to close log file: ${error}`)
-			}
-		}
+		// No-op since we're using appendFile which doesn't require explicit closing
 	}
 
 	/**
@@ -114,17 +99,28 @@ let globalLLMContentLogger: LLMContentLogger | null = null
  */
 export function getGlobalLLMContentLogger(): LLMContentLogger {
 	if (!globalLLMContentLogger) {
-		globalLLMContentLogger = new LLMContentLogger(true)
+		// Use logs directory by default for global instance
+		const logsDir = process.env.LOGS_PATH || "./logs"
+		globalLLMContentLogger = new LLMContentLogger(true, logsDir)
 	}
 	return globalLLMContentLogger
 }
 
 /**
  * Initialize the global LLM content logger
+ * Creates a new logger instance with a fresh timestamp for each interaction
  */
 export async function initializeGlobalLLMContentLogger(): Promise<void> {
-	const logger = getGlobalLLMContentLogger()
-	await logger.initialize()
+	// Close existing logger if it exists
+	if (globalLLMContentLogger) {
+		await globalLLMContentLogger.close()
+		globalLLMContentLogger = null
+	}
+
+	// Create a new logger instance with fresh timestamp
+	const logsDir = process.env.LOGS_PATH || "./logs"
+	globalLLMContentLogger = new LLMContentLogger(true, logsDir)
+	await globalLLMContentLogger.initialize()
 }
 
 /**

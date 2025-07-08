@@ -243,24 +243,41 @@ export class SSEOutputAdapter implements IUserInterface {
 			}
 			this.emitEvent(event)
 		} else {
-			// In non-verbose mode, use MessageBuffer to filter content
-			const processedMessages = this.messageBuffer.processMessage(message)
+			// Check for MessageBuffer enable flag (disabled by default)
+			const enableMessageBuffer = process.env.ENABLE_MESSAGE_BUFFER === "true"
 
-			for (const processedMessage of processedMessages) {
-				// Only emit events for content that should be shown to users
-				if (this.shouldEmitContentType(processedMessage.contentType)) {
-					const event: SSEEvent = {
-						type: SSE_EVENTS.PROGRESS,
-						jobId: this.jobId,
-						timestamp: new Date().toISOString(),
-						message: processedMessage.content,
-						progress,
-						contentType: processedMessage.contentType,
-						isComplete: processedMessage.isComplete,
-						toolName: processedMessage.toolName,
+			if (enableMessageBuffer) {
+				console.log(`[SSE-PROGRESS] 🔄 MessageBuffer enabled - processing content`)
+				// Use MessageBuffer to filter content
+				const processedMessages = this.messageBuffer.processMessage(message)
+
+				for (const processedMessage of processedMessages) {
+					// Only emit events for content that should be shown to users
+					if (this.shouldEmitContentType(processedMessage.contentType)) {
+						const event: SSEEvent = {
+							type: SSE_EVENTS.PROGRESS,
+							jobId: this.jobId,
+							timestamp: new Date().toISOString(),
+							message: processedMessage.content,
+							progress,
+							contentType: processedMessage.contentType,
+							isComplete: processedMessage.isComplete,
+							toolName: processedMessage.toolName,
+						}
+						this.emitEvent(event)
 					}
-					this.emitEvent(event)
 				}
+			} else {
+				console.log(`[SSE-PROGRESS] ✅ MessageBuffer disabled (default) - emitting raw content`)
+				// Default: emit raw content directly (like VSCode extension)
+				const event: SSEEvent = {
+					type: SSE_EVENTS.PROGRESS,
+					jobId: this.jobId,
+					timestamp: new Date().toISOString(),
+					message,
+					progress,
+				}
+				this.emitEvent(event)
 			}
 		}
 	}
@@ -295,24 +312,41 @@ export class SSEOutputAdapter implements IUserInterface {
 			}
 			this.emitEvent(event)
 		} else {
-			// In non-verbose mode, use MessageBuffer to filter content
-			const processedMessages = this.messageBuffer.processMessage(message)
+			// Check for MessageBuffer enable flag (disabled by default)
+			const enableMessageBuffer = process.env.ENABLE_MESSAGE_BUFFER === "true"
 
-			for (const processedMessage of processedMessages) {
-				// Only emit events for content that should be shown to users
-				if (this.shouldEmitContentType(processedMessage.contentType)) {
-					const event: SSEEvent = {
-						type: SSE_EVENTS.LOG,
-						jobId: this.jobId,
-						timestamp: new Date().toISOString(),
-						message: processedMessage.content,
-						level,
-						contentType: processedMessage.contentType,
-						isComplete: processedMessage.isComplete,
-						toolName: processedMessage.toolName,
+			if (enableMessageBuffer) {
+				console.log(`[SSE-LOG] 🔄 MessageBuffer enabled - processing content`)
+				// Use MessageBuffer to filter content
+				const processedMessages = this.messageBuffer.processMessage(message)
+
+				for (const processedMessage of processedMessages) {
+					// Only emit events for content that should be shown to users
+					if (this.shouldEmitContentType(processedMessage.contentType)) {
+						const event: SSEEvent = {
+							type: SSE_EVENTS.LOG,
+							jobId: this.jobId,
+							timestamp: new Date().toISOString(),
+							message: processedMessage.content,
+							level,
+							contentType: processedMessage.contentType,
+							isComplete: processedMessage.isComplete,
+							toolName: processedMessage.toolName,
+						}
+						this.emitEvent(event)
 					}
-					this.emitEvent(event)
 				}
+			} else {
+				console.log(`[SSE-LOG] ✅ MessageBuffer disabled (default) - emitting raw content`)
+				// Default: emit raw content directly (like VSCode extension)
+				const event: SSEEvent = {
+					type: SSE_EVENTS.LOG,
+					jobId: this.jobId,
+					timestamp: new Date().toISOString(),
+					message,
+					level,
+				}
+				this.emitEvent(event)
 			}
 		}
 	}
@@ -415,52 +449,69 @@ export class SSEOutputAdapter implements IUserInterface {
 			console.log(`[SSE-COMPLETION] 📤 About to emit single event with timestamp: ${event.timestamp}`)
 			this.emitEvent(event)
 		} else {
-			// In non-verbose mode, use MessageBuffer to filter content
-			console.log(`[SSE-COMPLETION] 🔄 Non-verbose mode - processing through MessageBuffer`)
-			const bufferStartTime = Date.now()
-			const processedMessages = this.messageBuffer.processMessage(message)
-			const bufferEndTime = Date.now()
+			// Check for MessageBuffer enable flag (disabled by default)
+			const enableMessageBuffer = process.env.ENABLE_MESSAGE_BUFFER === "true"
 
-			console.log(`[SSE-COMPLETION] 🔄 MessageBuffer processing took ${bufferEndTime - bufferStartTime}ms`)
-			console.log(`[SSE-COMPLETION] 📊 Generated ${processedMessages.length} processed messages`)
+			if (enableMessageBuffer) {
+				console.log(`[SSE-COMPLETION] 🔄 MessageBuffer enabled - processing content`)
+				// Use MessageBuffer to filter content
+				const bufferStartTime = Date.now()
+				const processedMessages = this.messageBuffer.processMessage(message)
+				const bufferEndTime = Date.now()
 
-			let eventIndex = 0
-			for (const processedMessage of processedMessages) {
-				const eventStartTime = Date.now()
-				console.log(`[SSE-COMPLETION] 📋 Processing message ${eventIndex + 1}/${processedMessages.length}:`)
-				console.log(
-					`[SSE-COMPLETION] 📋   Content: "${processedMessage.content.substring(0, 100)}${processedMessage.content.length > 100 ? "..." : ""}" (${processedMessage.content.length} chars)`,
-				)
-				console.log(`[SSE-COMPLETION] 📋   ContentType: ${processedMessage.contentType}`)
-				console.log(`[SSE-COMPLETION] 📋   IsComplete: ${processedMessage.isComplete}`)
-				console.log(`[SSE-COMPLETION] 📋   ToolName: ${processedMessage.toolName}`)
+				console.log(`[SSE-COMPLETION] 🔄 MessageBuffer processing took ${bufferEndTime - bufferStartTime}ms`)
+				console.log(`[SSE-COMPLETION] 📊 Generated ${processedMessages.length} processed messages`)
 
-				// Only emit events for content that should be shown to users
-				if (this.shouldEmitContentType(processedMessage.contentType)) {
-					const event: SSEEvent = {
-						type: SSE_EVENTS.COMPLETION,
-						jobId: this.jobId,
-						timestamp: new Date().toISOString(),
-						message: processedMessage.content,
-						result,
-						contentType: processedMessage.contentType,
-						isComplete: processedMessage.isComplete,
-						toolName: processedMessage.toolName,
+				let eventIndex = 0
+				for (const processedMessage of processedMessages) {
+					const eventStartTime = Date.now()
+					console.log(`[SSE-COMPLETION] 📋 Processing message ${eventIndex + 1}/${processedMessages.length}:`)
+					console.log(
+						`[SSE-COMPLETION] 📋   Content: "${processedMessage.content.substring(0, 100)}${processedMessage.content.length > 100 ? "..." : ""}" (${processedMessage.content.length} chars)`,
+					)
+					console.log(`[SSE-COMPLETION] 📋   ContentType: ${processedMessage.contentType}`)
+					console.log(`[SSE-COMPLETION] 📋   IsComplete: ${processedMessage.isComplete}`)
+					console.log(`[SSE-COMPLETION] 📋   ToolName: ${processedMessage.toolName}`)
+
+					// Only emit events for content that should be shown to users
+					if (this.shouldEmitContentType(processedMessage.contentType)) {
+						const event: SSEEvent = {
+							type: SSE_EVENTS.COMPLETION,
+							jobId: this.jobId,
+							timestamp: new Date().toISOString(),
+							message: processedMessage.content,
+							result,
+							contentType: processedMessage.contentType,
+							isComplete: processedMessage.isComplete,
+							toolName: processedMessage.toolName,
+						}
+						console.log(
+							`[SSE-COMPLETION] 📤 About to emit event ${eventIndex + 1} with timestamp: ${event.timestamp}`,
+						)
+						this.emitEvent(event)
+						const eventEndTime = Date.now()
+						console.log(
+							`[SSE-COMPLETION] ✅ Event ${eventIndex + 1} emitted in ${eventEndTime - eventStartTime}ms`,
+						)
+					} else {
+						console.log(
+							`[SSE-COMPLETION] ❌ Skipping event ${eventIndex + 1} - content type ${processedMessage.contentType} not allowed`,
+						)
 					}
-					console.log(
-						`[SSE-COMPLETION] 📤 About to emit event ${eventIndex + 1} with timestamp: ${event.timestamp}`,
-					)
-					this.emitEvent(event)
-					const eventEndTime = Date.now()
-					console.log(
-						`[SSE-COMPLETION] ✅ Event ${eventIndex + 1} emitted in ${eventEndTime - eventStartTime}ms`,
-					)
-				} else {
-					console.log(
-						`[SSE-COMPLETION] ❌ Skipping event ${eventIndex + 1} - content type ${processedMessage.contentType} not allowed`,
-					)
+					eventIndex++
 				}
-				eventIndex++
+			} else {
+				console.log(`[SSE-COMPLETION] ✅ MessageBuffer disabled (default) - emitting raw content`)
+				// Default: emit raw content directly (like VSCode extension)
+				const event: SSEEvent = {
+					type: SSE_EVENTS.COMPLETION,
+					jobId: this.jobId,
+					timestamp: new Date().toISOString(),
+					message,
+					result,
+				}
+				console.log(`[SSE-COMPLETION] 📤 About to emit single event with timestamp: ${event.timestamp}`)
+				this.emitEvent(event)
 			}
 		}
 
@@ -620,5 +671,49 @@ export class SSEOutputAdapter implements IUserInterface {
 	 */
 	resetContentFilter(): void {
 		this.allowedContentTypes = new Set(["content", "tool_call", "tool_result"])
+	}
+
+	/**
+	 * Emit tool result events for unified tool execution
+	 */
+	async emitToolResult(result: string): Promise<void> {
+		const event: SSEEvent = {
+			type: SSE_EVENTS.TOOL_USE,
+			jobId: this.jobId,
+			timestamp: new Date().toISOString(),
+			message: result,
+			result,
+		}
+		this.emitEvent(event)
+	}
+
+	/**
+	 * Emit tool start events for unified tool execution
+	 */
+	async emitToolStart(toolName: string, params?: any): Promise<void> {
+		const event: SSEEvent = {
+			type: SSE_EVENTS.TOOL_USE,
+			jobId: this.jobId,
+			timestamp: new Date().toISOString(),
+			toolName,
+			message: `Starting tool: ${toolName}`,
+			result: params,
+		}
+		this.emitEvent(event)
+	}
+
+	/**
+	 * Emit tool completion events for unified tool execution
+	 */
+	async emitToolComplete(toolName: string, success: boolean): Promise<void> {
+		const event: SSEEvent = {
+			type: SSE_EVENTS.TOOL_USE,
+			jobId: this.jobId,
+			timestamp: new Date().toISOString(),
+			toolName,
+			message: `Tool ${toolName} ${success ? "completed successfully" : "failed"}`,
+			result: { success },
+		}
+		this.emitEvent(event)
 	}
 }

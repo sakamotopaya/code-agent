@@ -12,6 +12,7 @@ import { importSettings, exportSettings } from "../importExport"
 import { ProviderSettingsManager } from "../ProviderSettingsManager"
 import { ContextProxy } from "../ContextProxy"
 import { CustomModesManager } from "../CustomModesManager"
+import { UnifiedCustomModesService } from "../../../shared/services/UnifiedCustomModesService"
 
 jest.mock("vscode", () => ({
 	window: {
@@ -37,7 +38,7 @@ describe("importExport", () => {
 	let mockProviderSettingsManager: jest.Mocked<ProviderSettingsManager>
 	let mockContextProxy: jest.Mocked<ContextProxy>
 	let mockExtensionContext: jest.Mocked<vscode.ExtensionContext>
-	let mockCustomModesManager: jest.Mocked<CustomModesManager>
+	let mockCustomModesManager: jest.Mocked<UnifiedCustomModesService>
 
 	beforeEach(() => {
 		jest.clearAllMocks()
@@ -59,7 +60,23 @@ describe("importExport", () => {
 			setProviderSettings: jest.fn(),
 		} as unknown as jest.Mocked<ContextProxy>
 
-		mockCustomModesManager = { updateCustomMode: jest.fn() } as unknown as jest.Mocked<CustomModesManager>
+		mockCustomModesManager = {
+			updateCustomMode: jest.fn(),
+			loadCustomModes: jest.fn().mockResolvedValue([]),
+			getMode: jest.fn().mockResolvedValue(undefined),
+			getAllModes: jest.fn().mockResolvedValue([]),
+			invalidateCache: jest.fn(),
+			dispose: jest.fn(),
+			getCustomModesFilePath: jest.fn().mockResolvedValue("/mock/path"),
+			getCustomModes: jest.fn().mockResolvedValue([]),
+			deleteCustomMode: jest.fn().mockResolvedValue(undefined),
+			resetCustomModes: jest.fn().mockResolvedValue(undefined),
+			isDisposed: false,
+			options: {
+				storagePath: "/mock/storage",
+				enableProjectModes: false,
+			},
+		} as unknown as jest.Mocked<UnifiedCustomModesService>
 
 		const map = new Map<string, string>()
 

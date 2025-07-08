@@ -29,6 +29,9 @@ services:
       - API_WORKSPACE_ROOT=/app/workspace
       - API_CLI_CONFIG_PATH=/app/config/agent-config.json
       
+      # Tree-sitter WASM Configuration
+      - TREE_SITTER_WASM_DIR=/app/src/dist
+      
       # Storage Configuration (CRITICAL for state persistence)
       - ROO_GLOBAL_STORAGE_PATH=/app/.roo-storage
       - ROO_CLI_STORAGE_PATH=/app/.roo-cli
@@ -157,6 +160,9 @@ services:
       - ROO_GLOBAL_STORAGE_PATH=/app/.roo-storage
       - ROO_CLI_STORAGE_PATH=/app/.roo-cli
       - API_STORAGE_ROOT=/app/.roo-storage
+      
+      # Tree-sitter WASM Configuration
+      - TREE_SITTER_WASM_DIR=/app/src/dist
       
       # Test MCP configuration
       - MCP_CONFIG_PATH=/app/config/test-mcp-config.json
