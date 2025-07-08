@@ -349,7 +349,7 @@ const taskAdapters = {
 
 - [ ] Both CLI and API use SharedContentProcessor (same logic)
 - [ ] API mode gets tool indicators like CLI mode
-- [ ] Immediate streaming works in both modes (test with test-api.js)
+- [ ] Immediate streaming works in both modes (test with api-client.js)
 - [ ] No duplicated content processing logic
 - [ ] All existing CLI functionality preserved
 - [ ] Both modes share MessageBuffer and ContentHandlers logic

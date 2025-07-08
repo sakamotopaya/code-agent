@@ -1,8 +1,8 @@
-# test-api.js Deep Analysis
+# api-client.js Deep Analysis
 
 ## Parameter Handling Analysis
 
-After thoroughly reviewing the `test-api.js` script, I can confirm that **the --stream parameter is NOT being ignored when --mode is passed**. Here's the evidence:
+After thoroughly reviewing the `api-client.js` script, I can confirm that **the --stream parameter is NOT being ignored when --mode is passed**. Here's the evidence:
 
 ### Argument Parsing (Lines 33-61)
 
@@ -78,7 +78,7 @@ This happens AFTER the task completes, not before. The sequence is:
 
 ## Conclusion
 
-**The test-api.js script is working correctly.** The issue is NOT with parameter handling or client behavior. The real problem is that the task is completing immediately on the server side without actually executing the LLM.
+**The api-client.js script is working correctly.** The issue is NOT with parameter handling or client behavior. The real problem is that the task is completing immediately on the server side without actually executing the LLM.
 
 The 0 token usage in the logs proves the LLM was never called, which means the issue is in the server-side task execution logic, not the client script.
 

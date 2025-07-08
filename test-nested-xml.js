@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Test script to verify nested XML tag handling
-const { ClientContentFilter } = require("./test-api.js")
+const { ClientContentFilter } = require("./api-client.js")
 
 console.log("🧪 Testing Nested XML Tag Handling\n")
 

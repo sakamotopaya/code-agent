@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Simple test script to verify XML tag filtering works
-const { ClientContentFilter } = require("./test-api.js")
+const { ClientContentFilter } = require("./api-client.js")
 
 console.log("🧪 Testing ClientContentFilter XML Tag Filtering\n")
 

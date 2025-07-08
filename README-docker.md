@@ -180,13 +180,13 @@ docker-compose up -d --scale roo-api=3
 
 ```bash
 # Test basic SSE
-./test-api.js --stream "list the current directory contents"
+./api-client.js --stream "list the current directory contents"
 
 # Test interactive questions
-./test-api.js --stream "use the github mcp server to create a new issue"
+./api-client.js --stream "use the github mcp server to create a new issue"
 
 # Test with verbose output
-./test-api.js --stream --verbose --show-thinking "debug this code issue"
+./api-client.js --stream --verbose --show-thinking "debug this code issue"
 ```
 
 ## 🔍 Monitoring & Troubleshooting

@@ -52,18 +52,18 @@ const { roleDefinition } = getModeSelection(mode, undefined, [])
 1. Test with built-in modes (should continue working):
 
     ```bash
-    ./test-api.js --stream --mode debug "what is your current mode"
+    ./api-client.js --stream --mode debug "what is your current mode"
     ```
 
 2. Test with custom modes (should now work):
 
     ```bash
-    ./test-api.js --stream --mode ticket-oracle "what is your current mode"
+    ./api-client.js --stream --mode ticket-oracle "what is your current mode"
     ```
 
 3. Test with invalid modes (should fall back to code mode):
     ```bash
-    ./test-api.js --stream --mode invalid-mode "what is your current mode"
+    ./api-client.js --stream --mode invalid-mode "what is your current mode"
     ```
 
 ## Expected Outcome

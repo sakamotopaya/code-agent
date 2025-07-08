@@ -2,7 +2,7 @@
 
 ## User Story
 
-As a developer using the test-api.js client, I want nested XML tags to be preserved correctly within outer tags, so that complex structured content like `<attempt_completion><result>data</result></attempt_completion>` is handled properly without losing inner XML structure.
+As a developer using the api-client.js client, I want nested XML tags to be preserved correctly within outer tags, so that complex structured content like `<attempt_completion><result>data</result></attempt_completion>` is handled properly without losing inner XML structure.
 
 ## Problem Statement
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Test script to verify XML tag filtering integration with SSE processing
-const { ClientContentFilter } = require("./test-api.js")
+const { ClientContentFilter } = require("./api-client.js")
 
 console.log("🧪 Testing ClientContentFilter SSE Integration\n")
 

@@ -71,10 +71,10 @@ if (mode && mode !== "code" && provider) {
 
 ```bash
 # Test with mode parameter
-./test-api.js --stream --mode ticket-oracle "what is your current mode"
+./api-client.js --stream --mode ticket-oracle "what is your current mode"
 
 # Test without mode parameter
-./test-api.js --stream "what is your current mode"
+./api-client.js --stream "what is your current mode"
 
 # Verify responses show correct mode
 ```

@@ -119,7 +119,7 @@ MessageBuffer should be used **only for display formatting**, not for tool parsi
 Test with:
 
 ```bash
-./test-api.js --stream --mode ticket-oracle "list your mcp servers and available tools"
+./api-client.js --stream --mode ticket-oracle "list your mcp servers and available tools"
 ```
 
 Should see:

@@ -2,7 +2,7 @@
 
 ## User Story
 
-As a developer using the test-api.js client, I want to filter out `<thinking></thinking>` sections from the SSE stream output unless I explicitly request them with `--show-thinking`, so that I can focus on the relevant output without being distracted by internal reasoning.
+As a developer using the api-client.js client, I want to filter out `<thinking></thinking>` sections from the SSE stream output unless I explicitly request them with `--show-thinking`, so that I can focus on the relevant output without being distracted by internal reasoning.
 
 ## Acceptance Criteria
 
@@ -193,7 +193,7 @@ The XML parser should be designed to easily support additional tags:
 
 - Jest testing framework
 - Existing `ClientContentFilter` class structure
-- SSE data processing pipeline in `test-api.js`
+- SSE data processing pipeline in `api-client.js`
 
 ## Estimated Effort
 

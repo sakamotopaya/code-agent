@@ -72,7 +72,7 @@ console.error(`DEBUG: About to output: ${content.substring(0, 50)}...`)
 Create a simple test to isolate the issue:
 
 ```bash
-./test-api.js --stream --mode code "hello world" 2>debug.log
+./api-client.js --stream --mode code "hello world" 2>debug.log
 ```
 
 This will capture debug output to stderr while showing the duplicate issue.

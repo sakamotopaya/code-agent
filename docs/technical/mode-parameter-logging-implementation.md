@@ -6,7 +6,7 @@ Comprehensive logging has been implemented throughout the task execution chain t
 
 ## Problem Statement
 
-When using `./test-api.js --stream --mode ticket-oracle "what is your current mode"`, the task completes immediately with "Standard task completion" instead of executing properly in the requested custom mode.
+When using `./api-client.js --stream --mode ticket-oracle "what is your current mode"`, the task completes immediately with "Standard task completion" instead of executing properly in the requested custom mode.
 
 ## Logging Implementation
 

@@ -2,7 +2,7 @@
 
 /**
  * Test script for Roo Code Agent API Server
- * Usage: node test-api.js [options] "Your task here"
+ * Usage: node api-client.js [options] "Your task here"
  *
  * Options:
  *   --stream    Test SSE streaming endpoint (default: false)
@@ -73,7 +73,7 @@ if (showHelp) {
 	console.log(`
 🧪 Roo Code Agent API Test Client
 
-Usage: node test-api.js [options] "Your task here"
+Usage: node api-client.js [options] "Your task here"
 
 Options:
   --mode           Agent mode (default: code)
@@ -106,22 +106,22 @@ Content Display:
 
 Examples:
   # Built-in modes
-  node test-api.js --stream --mode code "Fix this bug"
-  node test-api.js --stream --mode architect "Plan this feature"
+  node api-client.js --stream --mode code "Fix this bug"
+  node api-client.js --stream --mode architect "Plan this feature"
   
   # Custom modes (if configured on server)
-  node test-api.js --stream --mode product-owner "Create a PRD for user auth"
-  node test-api.js --stream --mode ticket-oracle "Check ticket status"
+  node api-client.js --stream --mode product-owner "Create a PRD for user auth"
+  node api-client.js --stream --mode ticket-oracle "Check ticket status"
   
   # Default mode
-  node test-api.js --stream "Test task" # Uses code mode
+  node api-client.js --stream "Test task" # Uses code mode
   
   # Show final response
-  node test-api.js --stream --show-response "Complete this task"
+  node api-client.js --stream --show-response "Complete this task"
   
   # Other examples
-  node test-api.js --verbose --stream --mode debug "Debug this issue"
-  node test-api.js --host api.example.com --port 8080 --mode ask "Explain this"
+  node api-client.js --verbose --stream --mode debug "Debug this issue"
+  node api-client.js --host api.example.com --port 8080 --mode ask "Explain this"
 `)
 	process.exit(0)
 }
@@ -890,11 +890,6 @@ function testStreamingEndpoint() {
 			console.log("🌊 Testing POST /execute/stream (SSE)...\n")
 		}
 
-		// DEBUG: Log initial variable state
-		console.error(
-			`DEBUG: Initial state - showResponse=${showResponse}, showCompletion=${showCompletion}, showThinking=${showThinking}, showTools=${showTools}, showSystem=${showSystem}, showMcpUse=${showMcpUse}`,
-		)
-
 		// Create content filter instance
 		const contentFilter = new ClientContentFilter({
 			verbose,
@@ -949,14 +944,10 @@ function testStreamingEndpoint() {
 								const data = JSON.parse(line.slice(6))
 								const timestamp = new Date(data.timestamp).toLocaleTimeString()
 
-								// DEBUG: Log received event type
-								console.error(`DEBUG: Received event type: ${data.type}`)
-
 								// Process data through content filter
 								const filterResult = contentFilter.processData(data)
 
 								if (!filterResult.shouldOutput) {
-									console.error(`DEBUG: Filter says NOT to output this data`)
 									continue // Skip this data if filter says not to output
 								}
 
@@ -1051,11 +1042,6 @@ function testStreamingEndpoint() {
 											})()
 											break
 										case "progress":
-											// DEBUG: Log progress event details
-											console.error(
-												`DEBUG: Progress event - contentType=${filteredData.contentType}, messageLength=${filteredData.message?.length || 0}`,
-											)
-
 											// Stream progress messages with content type filtering
 											if (
 												filteredData.message &&
@@ -1063,9 +1049,6 @@ function testStreamingEndpoint() {
 												!messageIsSystem &&
 												shouldDisplay
 											) {
-												console.error(
-													`DEBUG: About to output progress content: ${filteredData.message.substring(0, 100)}...`,
-												)
 												// Only add prefix for non-content types and when content isn't just XML
 												if (
 													filteredData.contentType &&
@@ -1081,44 +1064,17 @@ function testStreamingEndpoint() {
 													}
 												}
 												process.stdout.write(filteredData.message)
-											} else {
-												console.error(
-													`DEBUG: NOT outputting progress - message empty/processing: ${!filteredData.message || filteredData.message === "Processing..."}, messageIsSystem: ${messageIsSystem}, shouldDisplay: ${shouldDisplay}`,
-												)
 											}
 											break
 										case "complete":
 										case "completion":
-											// DEBUG: Log completion event details
-											console.error(
-												`DEBUG: Completion event - showResponse=${showResponse}, shouldDisplay=${shouldDisplay}`,
-											)
-											console.error(
-												`DEBUG: filteredData.result exists: ${!!filteredData.result}, length: ${filteredData.result?.length || 0}`,
-											)
-											console.error(
-												`DEBUG: filteredData.message exists: ${!!filteredData.message}, length: ${filteredData.message?.length || 0}`,
-											)
-											console.error(
-												`DEBUG: resultIsSystem=${resultIsSystem}, messageIsSystem=${messageIsSystem}`,
-											)
-
 											// Only show final result if --show-response is explicitly enabled
 											if (showResponse && shouldDisplay) {
-												console.error(
-													`DEBUG: About to output completion content (showResponse=true)`,
-												)
 												let outputSomething = false
 												if (!resultIsSystem && filteredData.result) {
-													console.error(
-														`DEBUG: Outputting result: ${filteredData.result.substring(0, 100)}...`,
-													)
 													process.stdout.write(filteredData.result)
 													outputSomething = true
 												} else if (!messageIsSystem && filteredData.message) {
-													console.error(
-														`DEBUG: Outputting message: ${filteredData.message.substring(0, 100)}...`,
-													)
 													process.stdout.write(filteredData.message)
 													outputSomething = true
 												}
@@ -1127,9 +1083,6 @@ function testStreamingEndpoint() {
 													process.stdout.write("\n")
 												}
 											} else {
-												console.error(
-													`DEBUG: NOT outputting completion content (showResponse=${showResponse}, shouldDisplay=${shouldDisplay})`,
-												)
 												// Default behavior: just ensure we end with a newline for clean terminal output
 												process.stdout.write("\n")
 											}
@@ -1139,11 +1092,6 @@ function testStreamingEndpoint() {
 											console.log(`❌ Error: ${filteredData.error}`)
 											break
 										default:
-											// DEBUG: Log default case details
-											console.error(
-												`DEBUG: Default case - eventType=${filteredData.type}, messageLength=${filteredData.message?.length || 0}`,
-											)
-
 											// Special handling for log events that might contain final results
 											if (
 												filteredData.type === "log" &&
@@ -1151,22 +1099,14 @@ function testStreamingEndpoint() {
 												filteredData.message.length > 500
 											) {
 												// This looks like a complete final result dump - suppress it in non-verbose mode
-												console.error(
-													`DEBUG: Detected large log event (${filteredData.message.length} chars) - likely final result dump`,
-												)
+
 												if (!verbose && !showResponse) {
-													console.error(
-														`DEBUG: Suppressing large log event in non-verbose mode`,
-													)
 													break
 												}
 											}
 
 											// Stream any other message content with filtering
 											if (filteredData.message && !messageIsSystem && shouldDisplay) {
-												console.error(
-													`DEBUG: About to output default content: ${filteredData.message.substring(0, 100)}...`,
-												)
 												if (
 													filteredData.contentType &&
 													filteredData.contentType !== "content" &&
@@ -1182,9 +1122,6 @@ function testStreamingEndpoint() {
 												}
 												process.stdout.write(filteredData.message)
 											} else {
-												console.error(
-													`DEBUG: NOT outputting default - message empty: ${!filteredData.message}, messageIsSystem: ${messageIsSystem}, shouldDisplay: ${shouldDisplay}`,
-												)
 											}
 									}
 								}

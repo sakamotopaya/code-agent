@@ -2,7 +2,7 @@
 
 ## Overview
 
-Successfully implemented stateful XML tag filtering for the `ClientContentFilter` class in `test-api.js`. The implementation filters out `<thinking></thinking>` sections from SSE streams unless the `--show-thinking` argument is passed.
+Successfully implemented stateful XML tag filtering for the `ClientContentFilter` class in `api-client.js`. The implementation filters out `<thinking></thinking>` sections from SSE streams unless the `--show-thinking` argument is passed.
 
 ## Implementation Details
 
@@ -100,19 +100,19 @@ class ClientContentFilter {
 
 ```bash
 # Default behavior - thinking content hidden
-node test-api.js --stream "Complete this task"
+node api-client.js --stream "Complete this task"
 
 # Show thinking content
-node test-api.js --stream --show-thinking "Complete this task"
+node api-client.js --stream --show-thinking "Complete this task"
 
 # Show final response as well
-node test-api.js --stream --show-thinking --show-response "Complete this task"
+node api-client.js --stream --show-thinking --show-response "Complete this task"
 ```
 
 ### Programmatic Usage
 
 ```javascript
-const { ClientContentFilter } = require("./test-api.js")
+const { ClientContentFilter } = require("./api-client.js")
 
 // Hide thinking content
 const filter = new ClientContentFilter({ showThinking: false })

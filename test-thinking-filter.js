@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Quick test to verify thinking filtering works end-to-end
-const { ClientContentFilter } = require("./test-api.js")
+const { ClientContentFilter } = require("./api-client.js")
 
 console.log("🧪 Testing End-to-End Thinking Filter\n")
 

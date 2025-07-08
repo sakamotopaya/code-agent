@@ -21,7 +21,7 @@ Currently, custom modes are only available in the VSCode extension context. CLI 
 - [ ] CLI accepts custom mode slugs via `--mode` parameter
 - [ ] API accepts custom mode slugs in request payload
 - [ ] Docker containers can access custom modes from mounted storage
-- [ ] test-api.js script supports `--mode` parameter
+- [ ] api-client.js script supports `--mode` parameter
 - [ ] File watching works in VSCode and API contexts
 - [ ] No file watching overhead in CLI context
 - [ ] All contexts use the same storage path configuration
@@ -154,7 +154,7 @@ roo-cli --mode ticket-oracle "What's the status of ticket 12345?"
 
 ---
 
-### Story 5: test-api.js Script Enhancement
+### Story 5: api-client.js Script Enhancement
 
 **As a** developer testing the API  
 **I want** to specify modes in the test script  
@@ -169,7 +169,7 @@ roo-cli --mode ticket-oracle "What's the status of ticket 12345?"
 
 **Technical Tasks:**
 
-- Update argument parsing in `test-api.js`
+- Update argument parsing in `api-client.js`
 - Add mode to request payload
 - Update help text and examples
 - Test with various custom modes
@@ -180,8 +180,8 @@ roo-cli --mode ticket-oracle "What's the status of ticket 12345?"
 **Example Usage:**
 
 ```bash
-./test-api.js --stream --mode ticket-oracle "What's the status of ticket 12345?"
-./test-api.js --mode product-owner "Create a PRD for user auth"
+./api-client.js --stream --mode ticket-oracle "What's the status of ticket 12345?"
+./api-client.js --mode product-owner "Create a PRD for user auth"
 ```
 
 ---

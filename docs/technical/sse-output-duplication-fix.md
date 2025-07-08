@@ -2,7 +2,7 @@
 
 ## Problem Description
 
-The `test-api.js` streaming endpoint is outputting content twice:
+The `api-client.js` streaming endpoint is outputting content twice:
 
 1. **First output**: Content streams correctly through SSE `progress` events
 2. **Second output**: At completion, the entire final content is dumped again with a `%` at the end
@@ -89,19 +89,19 @@ case "completion":
 
 ### Test Cases:
 
-1. **Default behavior** (`./test-api.js --stream "test"`):
+1. **Default behavior** (`./api-client.js --stream "test"`):
 
     - Should stream content once during progress
     - Should NOT duplicate content at completion
     - Should end with clean newline (no `%`)
 
-2. **With --show-response** (`./test-api.js --stream --show-response "test"`):
+2. **With --show-response** (`./api-client.js --stream --show-response "test"`):
 
     - Should stream content during progress
     - Should show final result at completion
     - Should end with clean newline
 
-3. **Verbose mode** (`./test-api.js --stream --verbose "test"`):
+3. **Verbose mode** (`./api-client.js --stream --verbose "test"`):
     - Should show detailed event information
     - Should not duplicate content in simple output
 
@@ -111,7 +111,7 @@ case "completion":
 
 ## Files to Modify
 
-- `test-api.js` (lines 1059-1075): Fix completion event handler logic
+- `api-client.js` (lines 1059-1075): Fix completion event handler logic
 
 ## Expected Outcome
 

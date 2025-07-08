@@ -314,7 +314,7 @@ public async abortTask(isAbandoned = false) {
 ./run-api.sh
 
 # In another terminal, start a long-running task
-./test-api.js --stream "analyze this large codebase in detail"
+./api-client.js --stream "analyze this large codebase in detail"
 
 # Press Ctrl+C after 3 seconds
 # Verify: Task stops within 2 seconds, no continued processing in logs

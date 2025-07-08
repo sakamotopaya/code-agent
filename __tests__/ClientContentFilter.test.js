@@ -1,4 +1,4 @@
-const { ClientContentFilter } = require("../test-api.js")
+const { ClientContentFilter } = require("../api-client.js")
 
 describe("ClientContentFilter", () => {
 	describe("Basic Construction", () => {

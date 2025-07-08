@@ -9,9 +9,9 @@ Add parameters to the API to:
 
 ## Implementation Plan
 
-### 1. Add CLI Parameters to test-api.js
+### 1. Add CLI Parameters to api-client.js
 
-**File**: `test-api.js`
+**File**: `api-client.js`
 
 Add new command line options:
 
@@ -24,7 +24,7 @@ Add new command line options:
 
 ### 2. Modify API Request to Include Logging Flags
 
-**File**: `test-api.js`
+**File**: `api-client.js`
 
 Update the API request payload:
 
@@ -135,16 +135,16 @@ After implementation, you could use:
 
 ```bash
 # Log system prompt only
-./test-api.js --stream "list your tools" --log-system-prompt
+./api-client.js --stream "list your tools" --log-system-prompt
 
 # Log system prompt and disable LLM logging
-./test-api.js --stream "list your tools" --log-system-prompt --no-log-llm
+./api-client.js --stream "list your tools" --log-system-prompt --no-log-llm
 
 # Just disable LLM logging
-./test-api.js --stream "list your tools" --no-log-llm
+./api-client.js --stream "list your tools" --no-log-llm
 
 # Log both (default behavior for LLM logging)
-./test-api.js --stream "list your tools" --log-system-prompt --log-llm
+./api-client.js --stream "list your tools" --log-system-prompt --log-llm
 ```
 
 ## Expected Output

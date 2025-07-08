@@ -2,7 +2,7 @@
 
 ## CLI Parameters
 
-**File**: `test-api.js`
+**File**: `api-client.js`
 
 Add these command line options:
 
@@ -20,22 +20,22 @@ Add these command line options:
 
 ```bash
 # Default: LLM logging enabled, system prompt logging disabled
-./test-api.js --stream "list your tools"
+./api-client.js --stream "list your tools"
 
 # Enable system prompt logging, keep LLM logging
-./test-api.js --stream "list your tools" --log-system-prompt
+./api-client.js --stream "list your tools" --log-system-prompt
 
 # Enable system prompt logging, disable LLM logging
-./test-api.js --stream "list your tools" --log-system-prompt --no-log-llm
+./api-client.js --stream "list your tools" --log-system-prompt --no-log-llm
 
 # Just disable LLM logging
-./test-api.js --stream "list your tools" --no-log-llm
+./api-client.js --stream "list your tools" --no-log-llm
 ```
 
 ## Implementation
 
 ```javascript
-// In test-api.js
+// In api-client.js
 const requestBody = {
 	task: message,
 	mode: options.mode || "code",

@@ -199,12 +199,12 @@ class APIOutputAdapter implements IOutputAdapter {
 }
 ```
 
-### What test-api.js Client Should Do
+### What api-client.js Client Should Do
 
-The test-api.js client should listen for and handle these SSE events:
+The api-client.js client should listen for and handle these SSE events:
 
 ```javascript
-// In test-api.js streaming section
+// In api-client.js streaming section
 eventSource.addEventListener("state_sync", (event) => {
 	const stateData = JSON.parse(event.data)
 

@@ -127,7 +127,7 @@ console.log("   - Foundation components in place")
 console.log("   - Ready for end-to-end testing")
 
 console.log("\n🎯 NEXT STEPS:")
-console.log('1. Run end-to-end test: node test-api.js --stream "list your MCP servers"')
+console.log('1. Run end-to-end test: node api-client.js --stream "list your MCP servers"')
 console.log("2. Verify MCP server connections work through API")
 console.log("3. Test multiple concurrent requests")
 console.log("4. Performance testing and optimization")

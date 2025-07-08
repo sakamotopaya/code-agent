@@ -76,7 +76,7 @@ The simplest and most reliable solution is to remove the informational query log
 
 ### Step 2: Test the Fix
 
-- Test with the original failing command: `./test-api.js --stream --mode ticket-oracle "what is your current mode"`
+- Test with the original failing command: `./api-client.js --stream --mode ticket-oracle "what is your current mode"`
 - Verify that the task now executes normally and provides a proper response
 - Test with other question-style tasks to ensure they work correctly
 

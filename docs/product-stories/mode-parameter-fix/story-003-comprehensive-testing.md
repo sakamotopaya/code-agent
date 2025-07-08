@@ -21,7 +21,7 @@ After removing the informational query logic from the API, we need to thoroughly
 
 - [ ] Original failing command works correctly:
     ```bash
-    ./test-api.js --stream --mode ticket-oracle "what is your current mode"
+    ./api-client.js --stream --mode ticket-oracle "what is your current mode"
     ```
 - [ ] Task executes normally (no immediate "Standard task completion")
 - [ ] LLM provides a proper response about the current mode
@@ -85,7 +85,7 @@ After removing the informational query logic from the API, we need to thoroughly
 1. **Original Issue Test**
 
     ```bash
-    ./test-api.js --stream --mode ticket-oracle "what is your current mode"
+    ./api-client.js --stream --mode ticket-oracle "what is your current mode"
     ```
 
     - Expected: Task executes normally, provides LLM response
@@ -94,9 +94,9 @@ After removing the informational query logic from the API, we need to thoroughly
 
 2. **Mode Verification**
     ```bash
-    ./test-api.js --stream --mode code "what is your current mode"
-    ./test-api.js --stream --mode debug "what is your current mode"
-    ./test-api.js --stream --mode architect "what is your current mode"
+    ./api-client.js --stream --mode code "what is your current mode"
+    ./api-client.js --stream --mode debug "what is your current mode"
+    ./api-client.js --stream --mode architect "what is your current mode"
     ```
     - Expected: Each mode responds appropriately
     - Verify: Mode-specific behavior is maintained
@@ -107,21 +107,21 @@ Test various question patterns that would have triggered informational query det
 
 ```bash
 # Question words that previously failed
-./test-api.js --stream --mode code "what should I do next"
-./test-api.js --stream --mode code "how do I create a React component"
-./test-api.js --stream --mode code "where should I put this function"
-./test-api.js --stream --mode code "which approach is better"
-./test-api.js --stream --mode code "who wrote this code"
-./test-api.js --stream --mode code "when should I use async/await"
+./api-client.js --stream --mode code "what should I do next"
+./api-client.js --stream --mode code "how do I create a React component"
+./api-client.js --stream --mode code "where should I put this function"
+./api-client.js --stream --mode code "which approach is better"
+./api-client.js --stream --mode code "who wrote this code"
+./api-client.js --stream --mode code "when should I use async/await"
 
 # Question marks
-./test-api.js --stream --mode code "Can you help me with this?"
-./test-api.js --stream --mode code "What's the best way to do this?"
+./api-client.js --stream --mode code "Can you help me with this?"
+./api-client.js --stream --mode code "What's the best way to do this?"
 
 # Mixed patterns
-./test-api.js --stream --mode code "Show me how to implement this feature"
-./test-api.js --stream --mode code "List all the files in this directory"
-./test-api.js --stream --mode code "Display the current configuration"
+./api-client.js --stream --mode code "Show me how to implement this feature"
+./api-client.js --stream --mode code "List all the files in this directory"
+./api-client.js --stream --mode code "Display the current configuration"
 ```
 
 ### Phase 3: Regression Testing (60 minutes)
@@ -129,9 +129,9 @@ Test various question patterns that would have triggered informational query det
 1. **Normal Task Testing**
 
     ```bash
-    ./test-api.js --stream --mode code "Create a simple HTML file with a form"
-    ./test-api.js --stream --mode debug "Find and fix the bug in this JavaScript code"
-    ./test-api.js --stream --mode architect "Plan the architecture for a new microservice"
+    ./api-client.js --stream --mode code "Create a simple HTML file with a form"
+    ./api-client.js --stream --mode debug "Find and fix the bug in this JavaScript code"
+    ./api-client.js --stream --mode architect "Plan the architecture for a new microservice"
     ```
 
 2. **Streaming Functionality**
@@ -143,13 +143,13 @@ Test various question patterns that would have triggered informational query det
 3. **Error Handling**
 
     ```bash
-    ./test-api.js --stream --mode invalid-mode "test task"
-    ./test-api.js --stream --mode code ""  # empty task
+    ./api-client.js --stream --mode invalid-mode "test task"
+    ./api-client.js --stream --mode code ""  # empty task
     ```
 
 4. **Long-running Tasks**
     ```bash
-    ./test-api.js --stream --mode code "Create a complex web application with multiple components"
+    ./api-client.js --stream --mode code "Create a complex web application with multiple components"
     ```
 
 ### Phase 4: Performance Testing (30 minutes)
@@ -176,7 +176,7 @@ Test various question patterns that would have triggered informational query det
 ### Prerequisites
 
 - API server running with the fix applied
-- `test-api.js` script available
+- `api-client.js` script available
 - Network connectivity to API server
 - Sufficient system resources for testing
 
@@ -211,7 +211,7 @@ echo "========================="
 
 # Test 1: Original failing case
 echo "Test 1: Original failing case"
-./test-api.js --stream --mode ticket-oracle "what is your current mode"
+./api-client.js --stream --mode ticket-oracle "what is your current mode"
 
 # Test 2: Various question formats
 echo "Test 2: Question formats"
@@ -224,7 +224,7 @@ for question in \
   "when should I run this"
 do
   echo "Testing: $question"
-  ./test-api.js --stream --mode code "$question"
+  ./api-client.js --stream --mode code "$question"
 done
 
 # Test 3: Different modes
@@ -232,13 +232,13 @@ echo "Test 3: Different modes"
 for mode in code debug architect ask test
 do
   echo "Testing mode: $mode"
-  ./test-api.js --stream --mode $mode "what is your current mode"
+  ./api-client.js --stream --mode $mode "what is your current mode"
 done
 
 # Test 4: Normal tasks
 echo "Test 4: Normal tasks"
-./test-api.js --stream --mode code "Create a simple HTML file"
-./test-api.js --stream --mode debug "Fix this bug"
+./api-client.js --stream --mode code "Create a simple HTML file"
+./api-client.js --stream --mode debug "Fix this bug"
 
 echo "Testing complete!"
 ```

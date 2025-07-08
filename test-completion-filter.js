@@ -4,7 +4,7 @@
  * Test completion filtering functionality
  */
 
-const { ClientContentFilter } = require("./test-api.js")
+const { ClientContentFilter } = require("./api-client.js")
 
 console.log("🧪 Testing Completion Filter")
 

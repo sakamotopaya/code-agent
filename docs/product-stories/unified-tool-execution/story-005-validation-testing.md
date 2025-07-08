@@ -83,13 +83,13 @@ Comprehensive validation and testing of unified tool execution across all contex
 
 ```bash
 # Test via SSE streaming
-./test-api.js --stream "list the modes available to you"
+./api-client.js --stream "list the modes available to you"
 
 # Test tool execution events
 curl -X POST /execute/stream -d '{"task": "list modes"}'
 
 # Test error handling
-./test-api.js --stream "use invalid tool"
+./api-client.js --stream "use invalid tool"
 ```
 
 #### VSCode Validation

@@ -46,7 +46,7 @@ Implement proper provider mode setting in the API to align with the extension's 
 
 ```bash
 # Test API with mode parameter (should work but show wrong mode)
-./test-api.js --stream --mode ticket-oracle "what is your current mode"
+./api-client.js --stream --mode ticket-oracle "what is your current mode"
 
 # Expected: Task executes successfully but reports "code" mode
 # After full fix: Should report "ticket-oracle" mode

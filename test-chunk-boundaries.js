@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Test script to verify XML tag filtering works across chunk boundaries
-const { ClientContentFilter } = require("./test-api.js")
+const { ClientContentFilter } = require("./api-client.js")
 
 console.log("🧪 Testing ClientContentFilter Chunk Boundary Handling\n")
 

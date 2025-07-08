@@ -35,7 +35,7 @@ cat src/core/assistant-message/presentAssistantMessage.ts | grep -A 3 "case \"li
 Try using the tool directly:
 
 ```bash
-./test-api.js --stream "use the list_modes tool to show me all available modes"
+./api-client.js --stream "use the list_modes tool to show me all available modes"
 ```
 
 ## 5. Check if Tool Description is Generated

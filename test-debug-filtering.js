@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Debug script to see what's being filtered incorrectly
-const { ClientContentFilter } = require("./test-api.js")
+const { ClientContentFilter } = require("./api-client.js")
 
 console.log("🔍 Debugging Content Filtering\n")
 

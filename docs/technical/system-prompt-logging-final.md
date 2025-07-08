@@ -2,7 +2,7 @@
 
 ## CLI Parameters
 
-**File**: `test-api.js`
+**File**: `api-client.js`
 
 Add these command line options:
 
@@ -20,22 +20,22 @@ Add these command line options:
 
 ```bash
 # Default: Both logging disabled
-./test-api.js --stream "list your tools"
+./api-client.js --stream "list your tools"
 
 # Enable system prompt logging only
-./test-api.js --stream "list your tools" --log-system-prompt
+./api-client.js --stream "list your tools" --log-system-prompt
 
 # Enable LLM logging only
-./test-api.js --stream "list your tools" --log-llm
+./api-client.js --stream "list your tools" --log-llm
 
 # Enable both
-./test-api.js --stream "list your tools" --log-system-prompt --log-llm
+./api-client.js --stream "list your tools" --log-system-prompt --log-llm
 ```
 
 ## Implementation
 
 ```javascript
-// In test-api.js
+// In api-client.js
 const requestBody = {
 	task: message,
 	mode: options.mode || "code",

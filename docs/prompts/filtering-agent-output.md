@@ -3,7 +3,7 @@ t work%
 ## when i run this command:
 
 ```sh
-eo@m3x code-agent % ./test-api.js --stream "throughly review this ticket and all related tickets. Note what remains to ship to JAM: 089162/429275" --mode ticket-oracle
+eo@m3x code-agent % ./api-client.js --stream "throughly review this ticket and all related tickets. Note what remains to ship to JAM: 089162/429275" --mode ticket-oracle
 ```
 
 ## I get this output
@@ -166,7 +166,7 @@ The ticket indicates that the fixes have been implemented and tested in QA envir
 
 The ticket indicates that the fixes have been implemented and tested in QA environments, but the final step of deploying to JAM Production remains to be completed.Task completed successfully
 
-We want to modify ./test-api.js to filter the incoming output based upon these rules:
+We want to modify ./api-client.js to filter the incoming output based upon these rules:
 
 - at the end of the output is 'Task completed successfully'. we always want to supress this message
 - do not emit the actual response from the api call unless the --show-response arg is passed

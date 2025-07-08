@@ -24,7 +24,7 @@ After implementing provider mode setting in the API, we need comprehensive testi
 #### Test 1: Valid Custom Mode
 
 ```bash
-./test-api.js --stream --mode ticket-oracle "what is your current mode"
+./api-client.js --stream --mode ticket-oracle "what is your current mode"
 ```
 
 **Expected**: LLM responds with "ticket-oracle" mode information
@@ -32,7 +32,7 @@ After implementing provider mode setting in the API, we need comprehensive testi
 #### Test 2: Valid Built-in Mode
 
 ```bash
-./test-api.js --stream --mode architect "what is your current mode"
+./api-client.js --stream --mode architect "what is your current mode"
 ```
 
 **Expected**: LLM responds with "architect" mode information
@@ -40,7 +40,7 @@ After implementing provider mode setting in the API, we need comprehensive testi
 #### Test 3: No Mode Parameter
 
 ```bash
-./test-api.js --stream "what is your current mode"
+./api-client.js --stream "what is your current mode"
 ```
 
 **Expected**: LLM responds with "code" mode information (default)
@@ -48,7 +48,7 @@ After implementing provider mode setting in the API, we need comprehensive testi
 #### Test 4: Invalid Mode Parameter
 
 ```bash
-./test-api.js --stream --mode invalid-mode "what is your current mode"
+./api-client.js --stream --mode invalid-mode "what is your current mode"
 ```
 
 **Expected**: Graceful error handling or fallback to default mode

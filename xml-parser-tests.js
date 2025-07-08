@@ -5,7 +5,7 @@
  * Tests all XML parsing functionality including nested tags, filtering, and edge cases
  */
 
-const { ClientContentFilter } = require("./test-api.js")
+const { ClientContentFilter } = require("./api-client.js")
 
 console.log("🧪 XML Parser Test Suite")
 console.log("========================\n")

@@ -323,11 +323,11 @@ roo-cli --batch "show me all available modes"
 
 ```bash
 # Test via API
-./test-api.js --stream "list all available modes"
+./api-client.js --stream "list all available modes"
 
 # Test with custom modes in Docker
 docker-compose up -d
-./test-api.js --stream "what modes are available?"
+./api-client.js --stream "what modes are available?"
 ```
 
 ### VSCode Testing

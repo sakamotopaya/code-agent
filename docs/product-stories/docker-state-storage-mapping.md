@@ -2,7 +2,7 @@
 
 ## Issue Analysis
 
-The user identified that the Docker container may be missing critical volume mappings for state and history storage, which could explain why the `./test-api.js` test hangs - the application may be trying to access or create storage directories that aren't properly persisted or mapped.
+The user identified that the Docker container may be missing critical volume mappings for state and history storage, which could explain why the `./api-client.js` test hangs - the application may be trying to access or create storage directories that aren't properly persisted or mapped.
 
 ## Critical Storage Directories Identified
 
@@ -128,7 +128,7 @@ environment:
 
 ## Root Cause Analysis
 
-The hanging `./test-api.js` issue is likely caused by:
+The hanging `./api-client.js` issue is likely caused by:
 
 1. **Missing Global Storage**: Application trying to access `globalStoragePath` that doesn't exist or isn't writable
 2. **Browser Dependencies**: Puppeteer trying to download Chromium to unmapped storage

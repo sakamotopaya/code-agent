@@ -148,8 +148,8 @@ roo-cli --mode ticket-oracle "Check ticket 12345 status"
 
 ```bash
 # Test script with modes
-./test-api.js --stream --mode product-owner "Create a PRD"
-./test-api.js --mode ticket-oracle "Check ticket status"
+./api-client.js --stream --mode product-owner "Create a PRD"
+./api-client.js --mode ticket-oracle "Check ticket status"
 
 # Direct API calls
 curl -X POST http://localhost:3000/execute/stream \

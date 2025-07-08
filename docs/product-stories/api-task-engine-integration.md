@@ -264,7 +264,7 @@ this.app.post("/execute/stream", async (request: FastifyRequest, reply: FastifyR
 **As a user, I want the API to properly list MCP servers so that I can verify the agent is working correctly.**
 
 **Problem:**
-The user's test case `node test-api.js --stream "list your MCP servers"` should return actual MCP server information, not mock responses.
+The user's test case `node api-client.js --stream "list your MCP servers"` should return actual MCP server information, not mock responses.
 
 **IMPLEMENTATION STATUS:** 🏗️ **READY FOR TESTING**
 ✅ **Foundation components implemented and integrated**
@@ -283,7 +283,7 @@ The user's test case `node test-api.js --stream "list your MCP servers"` should 
 
 **Next Steps:**
 
-- Run end-to-end test: `node test-api.js --stream "list your MCP servers"`
+- Run end-to-end test: `node api-client.js --stream "list your MCP servers"`
 - Verify MCP server responses are real (not mock data)
 - Test multiple concurrent API requests
 - Performance testing and optimization
@@ -380,7 +380,7 @@ graph TB
 
 ### User Experience
 
-- [ ] Test case `node test-api.js --stream "list your MCP servers"` returns actual MCP data
+- [ ] Test case `node api-client.js --stream "list your MCP servers"` returns actual MCP data
 - [ ] SSE events provide meaningful progress updates
 - [ ] Error messages are clear and actionable
 - [ ] API responses follow consistent format
@@ -463,7 +463,7 @@ graph TB
 The API is now ready for live testing with real MCP servers:
 
 ```bash
-node test-api.js --stream "list your MCP servers"
+node api-client.js --stream "list your MCP servers"
 ```
 
 **GitHub Issue:** [#54 - COMPLETED](https://github.com/sakamotopaya/code-agent/issues/54)
