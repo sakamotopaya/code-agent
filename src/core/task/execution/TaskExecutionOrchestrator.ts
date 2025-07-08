@@ -11,6 +11,7 @@ import {
 	TaskExecutionMode,
 	TaskActivityType,
 } from "./types"
+import { TimeoutValidator } from "./TimeoutValidator"
 
 export class TaskExecutionOrchestrator {
 	private activeExecutions = new Map<string, TaskExecutionState>()
@@ -137,8 +138,8 @@ export class TaskExecutionOrchestrator {
 				}
 			})
 
-			// Info query timeout
-			const infoTimeout = options.infoQueryTimeoutMs || 30000
+			// Info query timeout - use validator to prevent resource exhaustion
+			const infoTimeout = TimeoutValidator.validateInfoQueryTimeout(options.infoQueryTimeoutMs, "info_query")
 			const timeoutId = setTimeout(() => {
 				if (!state.isCompleted) {
 					completeOnce(`Information query timeout (${infoTimeout / 1000}s)`)
@@ -161,22 +162,26 @@ export class TaskExecutionOrchestrator {
 		const { handler, options, taskId, task } = state
 
 		return new Promise((resolve, reject) => {
-			// Get sliding timeout with environment variable support
-			const defaultSlidingTimeoutMs = parseInt(process.env.TASK_DEFAULT_SLIDING_TIMEOUT_MS || "1800000") // 30 minutes default
-			const maxSlidingTimeoutMs = parseInt(process.env.TASK_MAX_SLIDING_TIMEOUT_MS || "86400000") // 24 hours max
+			// Get and validate sliding timeout - prevents resource exhaustion attacks
+			const defaultSlidingTimeoutMs = TimeoutValidator.validateEnvironmentTimeout(
+				process.env.TASK_DEFAULT_SLIDING_TIMEOUT_MS,
+				"TASK_DEFAULT_SLIDING_TIMEOUT_MS",
+				"sliding",
+			)
 
-			let timeoutMs = options.slidingTimeoutMs || defaultSlidingTimeoutMs
-
-			// Validate timeout bounds
-			if (timeoutMs > maxSlidingTimeoutMs) {
-				handler.logDebug(
-					`[TaskExecutionOrchestrator] Sliding timeout ${timeoutMs}ms exceeds maximum ${maxSlidingTimeoutMs}ms, using maximum`,
+			let timeoutMs: number
+			try {
+				timeoutMs = TimeoutValidator.validateSlidingTimeout(
+					options.slidingTimeoutMs || defaultSlidingTimeoutMs,
+					"sliding_timeout",
 				)
-				timeoutMs = maxSlidingTimeoutMs
+			} catch (error) {
+				handler.logDebug(`[TaskExecutionOrchestrator] Timeout validation failed: ${error.message}`)
+				throw error
 			}
 
 			handler.logDebug(
-				`[TaskExecutionOrchestrator] Using sliding timeout: ${timeoutMs}ms (${timeoutMs / 60000} minutes)`,
+				`[TaskExecutionOrchestrator] Using validated sliding timeout: ${timeoutMs}ms (${timeoutMs / 60000} minutes)`,
 			)
 
 			const resetTimeout = () => {
@@ -225,6 +230,7 @@ export class TaskExecutionOrchestrator {
 				state.isWaitingForUserInput = false
 				this.clearTimeoutTimers(state)
 
+				// Use validated timeoutMs - security fix: this value was already validated above
 				const timeoutId = setTimeout(() => {
 					handler.logDebug(
 						`[TaskExecutionOrchestrator] Task execution timeout after ${timeoutMs}ms of inactivity`,

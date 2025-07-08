@@ -12,6 +12,7 @@ import { ApiQuestionManager } from "../questions/ApiQuestionManager"
 import { Task } from "../../core/task/Task"
 import { createApiAdapters } from "../../core/adapters/api"
 import { TaskExecutionOrchestrator, ApiTaskExecutionHandler } from "../../core/task/execution"
+import { TimeoutValidator, ValidationError } from "../../core/task/execution/TimeoutValidator"
 import { getStoragePath } from "../../shared/paths"
 import { SharedContentProcessor } from "../../core/content/SharedContentProcessor"
 import { SSEStreamingAdapter, SSEContentOutputAdapter } from "../../core/adapters/api/SSEOutputAdapters"
@@ -377,12 +378,31 @@ export class FastifyServer {
 				console.log(`[FastifyServer] Informational query detection bypassed - using standard execution`)
 				console.log(`[FastifyServer] Task will execute normally regardless of phrasing`)
 
-				// Set up execution options
+				// Set up execution options with validated timeouts
+				let validatedSlidingTimeoutMs: number | undefined
+				try {
+					if ((request.body as any)?.slidingTimeoutMs !== undefined) {
+						validatedSlidingTimeoutMs = TimeoutValidator.validateSlidingTimeout(
+							(request.body as any).slidingTimeoutMs,
+							"api_request",
+						)
+					}
+				} catch (error) {
+					if (error instanceof ValidationError) {
+						return reply.status(400).send({
+							error: "Invalid timeout value",
+							message: error.message,
+							details: "Timeout values must be between 1 second (1000ms) and 24 hours (86400000ms)",
+						})
+					}
+					throw error
+				}
+
 				const executionOptions = {
 					isInfoQuery: false, // Force standard execution for all API tasks
 					infoQueryTimeoutMs: 120000, // 2 minutes for info queries (unused since isInfoQuery is false)
 					// emergencyTimeoutMs removed - now relies on sliding timeout for long-running tasks
-					slidingTimeoutMs: (request.body as any)?.slidingTimeoutMs, // Allow API override, falls back to env var or 30min default
+					slidingTimeoutMs: validatedSlidingTimeoutMs, // Use validated timeout or undefined to fall back to defaults
 					useSlidingTimeout: true, // Always use sliding timeout since isInfoQuery is false
 					taskIdentifier: job.id,
 				}
