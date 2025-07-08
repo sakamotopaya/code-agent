@@ -1,4 +1,13 @@
+t work%
+
+## when i run this command:
+
+```sh
 eo@m3x code-agent % ./test-api.js --stream "throughly review this ticket and all related tickets. Note what remains to ship to JAM: 089162/429275" --mode ticket-oracle
+```
+
+## I get this output
+
 I'll thoroughly review ticket 089162/429275 and all related tickets to determine what remains to ship to JAM. Let me start by retrieving the ticket information.
 
 <thinking>
@@ -48,10 +57,10 @@ I'll use the MCP tool to retrieve the ticket information first, then analyze wha
 <regex>089162/429275</regex>
 </search_files>Let me also check if there's any information about the JAM deployment or shipping requirements in the codebase:
 
-<search_files>
+<search*files>
 <path>.</path>
-<regex>JAM._ship</regex>
-<file_pattern>_.ts,_.js,_.md</file_pattern>
+<regex>JAM.\_ship</regex>
+<file_pattern>*.ts,_.js,_.md</file_pattern>
 </search_files>Based on the information I've gathered, I'll now provide a comprehensive analysis of ticket 089162/429275 and related tickets to determine what remains to ship to JAM.
 
 <attempt_completion>
@@ -156,3 +165,12 @@ The ticket indicates that the fixes have been implemented and tested in QA envir
     - The core activity display issues have been resolved according to the latest testing notes
 
 The ticket indicates that the fixes have been implemented and tested in QA environments, but the final step of deploying to JAM Production remains to be completed.Task completed successfully
+
+We want to modify ./test-api.js to filter the incoming output based upon these rules:
+
+- at the end of the output is 'Task completed successfully'. we always want to supress this message
+- do not emit the actual response from the api call unless the --show-response arg is passed
+- the entire <thinking></thinking> should be reduced to 'Thinking...' in the output unless the --show-thinking arg is passed
+- <use_mcp_tool></use_mcp_tool> should be hidden unless --show-mcp-use arg is passed
+- tool use should be suppressed unless the --tool_use arg is passed
+-
