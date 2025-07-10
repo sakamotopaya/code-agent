@@ -36,6 +36,17 @@ export interface SingleCompletionHandler {
 export interface ApiHandlerCreateMessageMetadata {
 	mode?: string
 	taskId: string
+	restartTask?: boolean
+}
+
+export interface ApiRequest {
+	task: string
+	mode?: string
+	taskId?: string
+	restartTask?: boolean
+	verbose?: boolean
+	logSystemPrompt?: boolean
+	logLlm?: boolean
 }
 
 export interface ApiHandlerCreateMessageOptions {

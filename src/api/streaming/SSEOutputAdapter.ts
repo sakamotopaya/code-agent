@@ -398,13 +398,14 @@ export class SSEOutputAdapter implements IUserInterface {
 	/**
 	 * Emit a start event
 	 */
-	async emitStart(message: string = "Task started", task?: string): Promise<void> {
+	async emitStart(message: string = "Task started", task?: string, taskId?: string): Promise<void> {
 		const event: SSEEvent = {
 			type: SSE_EVENTS.START,
 			jobId: this.jobId,
 			timestamp: new Date().toISOString(),
 			message,
 			task,
+			...(taskId && { taskId }),
 		}
 
 		this.emitEvent(event)
@@ -428,7 +429,7 @@ export class SSEOutputAdapter implements IUserInterface {
 	/**
 	 * Emit a completion event
 	 */
-	async emitCompletion(message: string = "Task completed", result?: any): Promise<void> {
+	async emitCompletion(message: string = "Task completed", result?: any, taskId?: string): Promise<void> {
 		const startTime = Date.now()
 		console.log(`[SSE-COMPLETION] 🎯 emitCompletion() called at ${new Date().toISOString()}`)
 		console.log(
@@ -445,6 +446,10 @@ export class SSEOutputAdapter implements IUserInterface {
 				timestamp: new Date().toISOString(),
 				message,
 				result,
+				...(taskId && {
+					taskId,
+					restartCommand: `--task ${taskId}`,
+				}),
 			}
 			console.log(`[SSE-COMPLETION] 📤 About to emit single event with timestamp: ${event.timestamp}`)
 			this.emitEvent(event)

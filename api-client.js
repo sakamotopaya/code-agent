@@ -35,6 +35,17 @@ let showMcpUse = false
 let showTokenUsage = true // Default to show (user requested)
 let hideTokenUsage = false
 let showTiming = false
+let taskId = null // New: Task ID for restart functionality
+let restartTask = false // New: Flag to indicate task restart
+
+/**
+ * Validate task ID format (UUID)
+ */
+function validateTaskId(taskId) {
+	// Basic UUID format validation
+	const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+	return uuidRegex.test(taskId)
+}
 
 for (let i = 0; i < args.length; i++) {
 	const arg = args[i]
@@ -73,6 +84,20 @@ for (let i = 0; i < args.length; i++) {
 		hideTokenUsage = true
 	} else if (arg === "--show-timing") {
 		showTiming = true
+	} else if (arg === "--task") {
+		taskId = args[++i]
+		if (!taskId) {
+			console.error("Error: --task requires a task ID")
+			process.exit(1)
+		}
+		if (!validateTaskId(taskId)) {
+			console.error("Error: Invalid task ID format. Expected UUID format.")
+			process.exit(1)
+		}
+		restartTask = true
+		if (verbose) {
+			console.log(`🔄 Task restart mode: ${taskId}`)
+		}
 	} else if (arg === "--help" || arg === "-h") {
 		showHelp = true
 	} else if (!arg.startsWith("--")) {
@@ -91,6 +116,7 @@ Options:
                    Built-in: code, debug, architect, ask, test, design-engineer,
                             release-engineer, translate, product-owner, orchestrator
                    Custom modes loaded from server storage
+  --task <id>      Restart an existing task by ID (UUID format)
   --stream         Test SSE streaming endpoint (default: false)
   --verbose        Show full JSON payload and debug information (default: false)
   --show-timing    Show detailed execution timing for operations (default: false)
@@ -133,6 +159,10 @@ Examples:
   node api-client.js --stream --mode code "Fix this bug"
   node api-client.js --stream --mode architect "Plan this feature"
   
+  # Task restart functionality
+  node api-client.js --stream "Create a todo app"                    # Start new task (returns task ID)
+  node api-client.js --stream --task abc123-def456-ghi789 "Add auth" # Restart existing task
+  
   # Custom modes (if configured on server)
   node api-client.js --stream --mode product-owner "Create a PRD for user auth"
   node api-client.js --stream --mode ticket-oracle "Check ticket status"
@@ -163,6 +193,9 @@ if (verbose) {
 	console.log(`🚀 Testing Roo Code Agent API at ${baseUrl}`)
 	console.log(`📝 Task: "${task}"`)
 	console.log(`🎭 Mode: ${mode}`)
+	if (restartTask) {
+		console.log(`🔄 Task Restart: ${taskId}`)
+	}
 	console.log(`🌊 Streaming: ${useStream ? "enabled" : "disabled"}`)
 	console.log(`📊 Verbose: ${verbose ? "enabled" : "disabled"}`)
 	console.log(`🧠 Show Thinking: ${showThinking ? "enabled" : "disabled"}`)
@@ -1322,6 +1355,10 @@ async function testExecuteEndpoint() {
 			mode, // Add mode to payload
 			logSystemPrompt,
 			logLlm,
+			...(restartTask && {
+				taskId: taskId,
+				restartTask: true,
+			}),
 		})
 
 		executionTimer.logOperation("Request payload prepared", `${payload.length} bytes`)
@@ -1599,6 +1636,10 @@ function testStreamingEndpoint() {
 			verbose,
 			logSystemPrompt,
 			logLlm,
+			...(restartTask && {
+				taskId: taskId,
+				restartTask: true,
+			}),
 		})
 
 		const req = http.request(
