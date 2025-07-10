@@ -175,7 +175,7 @@ interface CancellationTracker {
 ./run-api.sh
 
 # In another terminal, start a long-running task
-./test-api.js --stream "create a large application with many files"
+./api-client.js --stream "create a large application with many files"
 
 # Immediately press Ctrl+C
 # Expected: Task should stop within 1-2 seconds

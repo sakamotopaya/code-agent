@@ -21,7 +21,7 @@ During the CLI/API refactoring, informational query detection logic was added th
 
 ### Testing Criteria
 
-- [ ] Original failing command works: `./test-api.js --stream --mode ticket-oracle "what is your current mode"`
+- [ ] Original failing command works: `./api-client.js --stream --mode ticket-oracle "what is your current mode"`
 - [ ] Task executes and provides a proper response from the LLM
 - [ ] No immediate termination with "Standard task completion"
 - [ ] Streaming works correctly throughout task execution
@@ -86,7 +86,7 @@ console.log(`[FastifyServer] Task will execute normally regardless of phrasing`)
 
 1. Run the original failing command:
     ```bash
-    ./test-api.js --stream --mode ticket-oracle "what is your current mode"
+    ./api-client.js --stream --mode ticket-oracle "what is your current mode"
     ```
 2. Verify the task executes normally and provides an LLM response
 3. Test with other question formats:

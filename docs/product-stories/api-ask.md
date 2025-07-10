@@ -16,7 +16,7 @@ Currently, when tasks run via the API server with SSE streaming, the [`askFollow
 
 - **Enable Interactive Tasks**: Allow the LLM to ask questions and receive responses during API task execution
 - **Maintain Async Architecture**: Keep ask/answer channels decoupled for future multi-channel support
-- **Preserve User Experience**: Ensure the existing [`test-api.js`](test-api.js:1) client works seamlessly
+- **Preserve User Experience**: Ensure the existing [`api-client.js`](api-client.js:1) client works seamlessly
 - **Support Blocking Behavior**: Task execution should pause until response is received
 
 ### Secondary Goals
@@ -69,7 +69,7 @@ Currently, when tasks run via the API server with SSE streaming, the [`askFollow
 
 ### Story 4: Test Client Integration
 
-**As a** developer using [`test-api.js`](test-api.js:1)  
+**As a** developer using [`api-client.js`](api-client.js:1)  
 **I want** to automatically handle questions during task execution  
 **So that** I can interact with the agent seamlessly
 
@@ -138,7 +138,7 @@ Currently, when tasks run via the API server with SSE streaming, the [`askFollow
 
 #### 4. Enhanced Test Client
 
-- Extend [`test-api.js`](test-api.js:289) to handle question SSE events
+- Extend [`api-client.js`](api-client.js:289) to handle question SSE events
 - Interactive command-line prompting for questions
 - Automatic answer submission via HTTP POST
 - Maintain existing streaming behavior
@@ -193,7 +193,7 @@ sequenceDiagram
 
 ### Epic 2: Client Integration
 
-**Story 2.1**: Enhance [`test-api.js`](test-api.js:1) to detect and handle question events  
+**Story 2.1**: Enhance [`api-client.js`](api-client.js:1) to detect and handle question events  
 **Story 2.2**: Implement interactive command-line question prompting  
 **Story 2.3**: Add automatic answer submission functionality
 
@@ -215,7 +215,7 @@ sequenceDiagram
 ### Functional Metrics
 
 - ✅ LLM can ask questions and receive answers during API task execution
-- ✅ [`test-api.js`](test-api.js:1) client handles questions seamlessly
+- ✅ [`api-client.js`](api-client.js:1) client handles questions seamlessly
 - ✅ Questions persist across server restarts and connection losses
 - ✅ Multiple concurrent questions work across different jobs
 - ✅ Tasks can be suspended and resumed with pending questions intact
@@ -229,7 +229,7 @@ sequenceDiagram
 
 ### User Experience Metrics
 
-- 🎯 Zero breaking changes to existing [`test-api.js`](test-api.js:1) usage
+- 🎯 Zero breaking changes to existing [`api-client.js`](api-client.js:1) usage
 - 📱 Question/answer flow feels natural and responsive
 - 🛠️ Clear error messages for debugging question issues
 

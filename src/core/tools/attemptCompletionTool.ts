@@ -50,7 +50,23 @@ export async function attemptCompletionTool(
 					if (cline.telemetry) {
 						cline.telemetry.captureTaskCompleted(cline.taskId)
 					}
-					cline.emit("taskCompleted", cline.taskId, cline.getTokenUsage(), cline.toolUsage)
+
+					// NEW: Log token usage data before emission
+					const tokenUsage = cline.getTokenUsage()
+					const toolUsage = cline.toolUsage
+					console.log(`[attemptCompletionTool] 🔍 About to emit taskCompleted event (path 1):`)
+					console.log(`[attemptCompletionTool] 🔍 - taskId: ${cline.taskId}`)
+					console.log(`[attemptCompletionTool] 🔍 - tokenUsage type: ${typeof tokenUsage}`)
+					console.log(`[attemptCompletionTool] 🔍 - tokenUsage defined: ${tokenUsage !== undefined}`)
+					if (tokenUsage) {
+						console.log(
+							`[attemptCompletionTool] 🔍 - tokenUsage value:`,
+							JSON.stringify(tokenUsage, null, 2),
+						)
+					}
+					console.log(`[attemptCompletionTool] 🔍 - toolUsage:`, JSON.stringify(toolUsage, null, 2))
+
+					cline.emit("taskCompleted", cline.taskId, tokenUsage, toolUsage)
 
 					await cline.ask("command", removeClosingTag("command", command), block.partial).catch(() => {})
 				}
@@ -79,7 +95,23 @@ export async function attemptCompletionTool(
 					if (cline.telemetry) {
 						cline.telemetry.captureTaskCompleted(cline.taskId)
 					}
-					cline.emit("taskCompleted", cline.taskId, cline.getTokenUsage(), cline.toolUsage)
+
+					// NEW: Log token usage data before emission
+					const tokenUsage = cline.getTokenUsage()
+					const toolUsage = cline.toolUsage
+					console.log(`[attemptCompletionTool] 🔍 About to emit taskCompleted event (path 2):`)
+					console.log(`[attemptCompletionTool] 🔍 - taskId: ${cline.taskId}`)
+					console.log(`[attemptCompletionTool] 🔍 - tokenUsage type: ${typeof tokenUsage}`)
+					console.log(`[attemptCompletionTool] 🔍 - tokenUsage defined: ${tokenUsage !== undefined}`)
+					if (tokenUsage) {
+						console.log(
+							`[attemptCompletionTool] 🔍 - tokenUsage value:`,
+							JSON.stringify(tokenUsage, null, 2),
+						)
+					}
+					console.log(`[attemptCompletionTool] 🔍 - toolUsage:`, JSON.stringify(toolUsage, null, 2))
+
+					cline.emit("taskCompleted", cline.taskId, tokenUsage, toolUsage)
 				}
 
 				// Complete command message.
@@ -107,7 +139,20 @@ export async function attemptCompletionTool(
 				if (cline.telemetry) {
 					cline.telemetry.captureTaskCompleted(cline.taskId)
 				}
-				cline.emit("taskCompleted", cline.taskId, cline.getTokenUsage(), cline.toolUsage)
+
+				// NEW: Log token usage data before emission
+				const tokenUsage = cline.getTokenUsage()
+				const toolUsage = cline.toolUsage
+				console.log(`[attemptCompletionTool] 🔍 About to emit taskCompleted event (path 3):`)
+				console.log(`[attemptCompletionTool] 🔍 - taskId: ${cline.taskId}`)
+				console.log(`[attemptCompletionTool] 🔍 - tokenUsage type: ${typeof tokenUsage}`)
+				console.log(`[attemptCompletionTool] 🔍 - tokenUsage defined: ${tokenUsage !== undefined}`)
+				if (tokenUsage) {
+					console.log(`[attemptCompletionTool] 🔍 - tokenUsage value:`, JSON.stringify(tokenUsage, null, 2))
+				}
+				console.log(`[attemptCompletionTool] 🔍 - toolUsage:`, JSON.stringify(toolUsage, null, 2))
+
+				cline.emit("taskCompleted", cline.taskId, tokenUsage, toolUsage)
 			}
 
 			if (cline.parentTask) {

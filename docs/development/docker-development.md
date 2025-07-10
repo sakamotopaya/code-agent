@@ -160,7 +160,7 @@ curl -X POST http://localhost:3000/execute/stream \
   -d '{"task": "Hello from development environment"}'
 
 # Test with the test client
-../../test-api.js --stream "list the files in the current directory"
+../../api-client.js --stream "list the files in the current directory"
 ```
 
 ### Database/Storage Development
@@ -340,13 +340,13 @@ docker-compose exec roo-api-test \
 
 ```bash
 # Use the test client for comprehensive testing
-../../test-api.js --stream --verbose "test the API endpoints"
+../../api-client.js --stream --verbose "test the API endpoints"
 
 # Test specific functionality
-../../test-api.js --stream "use the github mcp server to list repositories"
+../../api-client.js --stream "use the github mcp server to list repositories"
 
 # Test error handling
-../../test-api.js --stream "intentionally trigger an error"
+../../api-client.js --stream "intentionally trigger an error"
 ```
 
 ## Configuration

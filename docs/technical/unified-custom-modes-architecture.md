@@ -59,7 +59,7 @@ graph TB
     subgraph "Integration Points"
         SM[shared/modes.ts]
         TASK[Task Creation]
-        TEST[test-api.js]
+        TEST[api-client.js]
     end
 
     GS --> SF
@@ -249,7 +249,7 @@ src/
     ├── config/CustomModesManager.ts (refactored)
     └── webview/ClineProvider.ts (updated)
 
-test-api.js (updated)
+api-client.js (updated)
 ```
 
 ## Configuration Examples
@@ -281,7 +281,7 @@ roo-cli --mode code "Fix this bug"
 
 ```bash
 # Test API with custom mode
-./test-api.js --stream --mode ticket-oracle "What's the status of ticket 12345?"
+./api-client.js --stream --mode ticket-oracle "What's the status of ticket 12345?"
 
 # API request payload
 {

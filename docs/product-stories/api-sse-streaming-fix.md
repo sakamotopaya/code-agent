@@ -67,6 +67,6 @@ if (chunk.text) {
 
 ## Testing
 
-- Execute: `node test-api.js --stream "list your MCP servers"`
+- Execute: `node api-client.js --stream "list your MCP servers"`
 - Verify SSE events include actual AI response content
 - Confirm console logs still show for debugging

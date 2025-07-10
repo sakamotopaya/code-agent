@@ -23,7 +23,7 @@ async function testAPI(bypassMessageBuffer = false) {
 
 	return new Promise((resolve, reject) => {
 		const testProcess = spawn(
-			"./test-api.js",
+			"./api-client.js",
 			["--stream", "--mode", "ticket-oracle", "list your mcp servers and available tools"],
 			{
 				env,

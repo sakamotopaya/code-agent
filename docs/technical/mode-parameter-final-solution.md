@@ -56,7 +56,7 @@ This ensures that:
 
 ### Testing
 
-After the fix, the command `./test-api.js --stream --mode ticket-oracle "what is your current mode"` should report "ticket-oracle" mode instead of "code" mode.
+After the fix, the command `./api-client.js --stream --mode ticket-oracle "what is your current mode"` should report "ticket-oracle" mode instead of "code" mode.
 
 ## Implementation Status
 

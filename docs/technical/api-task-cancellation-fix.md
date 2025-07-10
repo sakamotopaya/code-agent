@@ -314,7 +314,7 @@ describe("API Task Cancellation Integration", () => {
 
 1. **Basic Cancellation Test**
 
-    - Start API task: `./test-api.js --stream "create a large file"`
+    - Start API task: `./api-client.js --stream "create a large file"`
     - Press Ctrl+C during execution
     - Verify task stops immediately
     - Check server logs for proper cancellation

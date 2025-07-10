@@ -1,4 +1,4 @@
-# Story 5: test-api.js Script Enhancement
+# Story 5: api-client.js Script Enhancement
 
 ## Overview
 
@@ -17,26 +17,26 @@
 
 ## Technical Implementation
 
-### Current test-api.js Usage
+### Current api-client.js Usage
 
 ```bash
-./test-api.js --stream "Test task"
-./test-api.js --verbose --stream "List MCP servers"
+./api-client.js --stream "Test task"
+./api-client.js --verbose --stream "List MCP servers"
 ```
 
-### Enhanced test-api.js Usage
+### Enhanced api-client.js Usage
 
 ```bash
 # Built-in modes
-./test-api.js --stream --mode code "Fix this bug"
-./test-api.js --stream --mode architect "Plan this feature"
+./api-client.js --stream --mode code "Fix this bug"
+./api-client.js --stream --mode architect "Plan this feature"
 
 # Custom modes
-./test-api.js --stream --mode product-owner "Create a PRD for user auth"
-./test-api.js --stream --mode ticket-oracle "What's the status of ticket 12345?"
+./api-client.js --stream --mode product-owner "Create a PRD for user auth"
+./api-client.js --stream --mode ticket-oracle "What's the status of ticket 12345?"
 
 # Default mode (code)
-./test-api.js --stream "Test task" # Uses code mode by default
+./api-client.js --stream "Test task" # Uses code mode by default
 ```
 
 ### Code Changes
@@ -69,7 +69,7 @@ if (showHelp) {
 	console.log(`
 🧪 Roo Code Agent API Test Client
 
-Usage: node test-api.js [options] "Your task here"
+Usage: node api-client.js [options] "Your task here"
 
 Options:
   --mode           Agent mode (default: code)
@@ -87,19 +87,19 @@ Options:
 
 Examples:
   # Built-in modes
-  node test-api.js --stream --mode code "Fix this bug"
-  node test-api.js --stream --mode architect "Plan this feature"
+  node api-client.js --stream --mode code "Fix this bug"
+  node api-client.js --stream --mode architect "Plan this feature"
   
   # Custom modes (if configured on server)
-  node test-api.js --stream --mode product-owner "Create a PRD for user auth"
-  node test-api.js --stream --mode ticket-oracle "Check ticket status"
+  node api-client.js --stream --mode product-owner "Create a PRD for user auth"
+  node api-client.js --stream --mode ticket-oracle "Check ticket status"
   
   # Default mode
-  node test-api.js --stream "Test task" # Uses code mode
+  node api-client.js --stream "Test task" # Uses code mode
   
   # Other examples
-  node test-api.js --verbose --stream --mode debug "Debug this issue"
-  node test-api.js --host api.example.com --port 8080 --mode ask "Explain this"
+  node api-client.js --verbose --stream --mode debug "Debug this issue"
+  node api-client.js --host api.example.com --port 8080 --mode ask "Explain this"
 `)
 	process.exit(0)
 }
@@ -161,31 +161,31 @@ if (data.type === "error" && data.error === "Invalid mode") {
 
 ```bash
 # Test all built-in modes
-./test-api.js --stream --mode code "Write a hello world function"
-./test-api.js --stream --mode debug "Help me debug this error"
-./test-api.js --stream --mode architect "Design a user authentication system"
-./test-api.js --stream --mode ask "What is dependency injection?"
-./test-api.js --stream --mode test "Write tests for this function"
+./api-client.js --stream --mode code "Write a hello world function"
+./api-client.js --stream --mode debug "Help me debug this error"
+./api-client.js --stream --mode architect "Design a user authentication system"
+./api-client.js --stream --mode ask "What is dependency injection?"
+./api-client.js --stream --mode test "Write tests for this function"
 ```
 
 ### Testing Custom Modes
 
 ```bash
 # Test custom modes (assuming they exist on server)
-./test-api.js --stream --mode product-owner "Create a PRD for mobile app"
-./test-api.js --stream --mode ticket-oracle "What's the status of ticket 12345?"
-./test-api.js --stream --mode design-engineer "Create a component library"
+./api-client.js --stream --mode product-owner "Create a PRD for mobile app"
+./api-client.js --stream --mode ticket-oracle "What's the status of ticket 12345?"
+./api-client.js --stream --mode design-engineer "Create a component library"
 ```
 
 ### Error Scenarios
 
 ```bash
 # Invalid mode
-./test-api.js --stream --mode invalid-mode "test task"
+./api-client.js --stream --mode invalid-mode "test task"
 # Output: ❌ Invalid mode 'invalid-mode': Invalid mode: invalid-mode. Available modes: code, debug, architect, ask, test, design-engineer, release-engineer, translate, product-owner, orchestrator
 
 # Server not running
-./test-api.js --stream --mode code "test task"
+./api-client.js --stream --mode code "test task"
 # Output: ❌ Failed: connect ECONNREFUSED 127.0.0.1:3000
 ```
 
@@ -205,20 +205,20 @@ if (data.type === "error" && data.error === "Invalid mode") {
 
 ```bash
 # Basic functionality
-./test-api.js --mode code "test task"
-./test-api.js --stream --mode architect "test task"
+./api-client.js --mode code "test task"
+./api-client.js --stream --mode architect "test task"
 
 # Default behavior
-./test-api.js "test task" # Should use code mode
+./api-client.js "test task" # Should use code mode
 
 # Error handling
-./test-api.js --mode invalid "test task"
+./api-client.js --mode invalid "test task"
 
 # Help text
-./test-api.js --help
+./api-client.js --help
 
 # Verbose output
-./test-api.js --verbose --mode debug "test task"
+./api-client.js --verbose --mode debug "test task"
 ```
 
 ## Technical Tasks

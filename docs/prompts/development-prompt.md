@@ -52,7 +52,7 @@ When adding features or fixing issues, use interfaces and adapters to handle dif
 - Test both CLI and API during development:
     - CLI: `cd src && npm run start:cli --silent -- --config ~/.agentz/agent-config.json --batch "test command" --verbose`
     - API: `./run-api.sh` (from project root)
-    - API testing: `./test-api.js --stream "test message"` (from project root)
+    - API testing: `./api-client.js --stream "test message"` (from project root)
 - Always ensure all execution contexts work before declaring a task complete
 - Run relevant tests for changed code paths
 

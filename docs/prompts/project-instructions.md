@@ -16,4 +16,4 @@ you can run the api by changing to the root of the project and running:
 ./run-api.sh
 
 This is the test http client that is used for running the api endpoints. From the project root, run:
-./test-api.js --stream "use the github mcp server to summarize issue #8. you can run git status or git remote to get the repo name"
+./api-client.js --stream "use the github mcp server to summarize issue #8. you can run git status or git remote to get the repo name"

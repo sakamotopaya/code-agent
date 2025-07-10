@@ -128,9 +128,9 @@ try {
 
 ### Test Cases
 
-1. **Built-in mode**: `./test-api.js --stream --mode debug "what is your current mode" --verbose`
-2. **Custom mode**: `./test-api.js --stream --mode ticket-oracle "what is your current mode" --verbose`
-3. **Invalid mode**: `./test-api.js --stream --mode invalid-mode "what is your current mode" --verbose`
+1. **Built-in mode**: `./api-client.js --stream --mode debug "what is your current mode" --verbose`
+2. **Custom mode**: `./api-client.js --stream --mode ticket-oracle "what is your current mode" --verbose`
+3. **Invalid mode**: `./api-client.js --stream --mode invalid-mode "what is your current mode" --verbose`
 
 ### Expected Log Analysis
 
