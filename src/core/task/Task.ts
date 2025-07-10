@@ -320,6 +320,10 @@ export class Task extends EventEmitter<ClineEvents> {
 		return this.verbose
 	}
 
+	getGlobalStoragePath(): string {
+		return this.globalStoragePath
+	}
+
 	// Compatibility properties - delegated to modular components
 	get isWaitingForFirstChunk() {
 		return this.apiHandler.streamingState.isWaitingForFirstChunk
@@ -1110,6 +1114,30 @@ export class Task extends EventEmitter<ClineEvents> {
 				return result
 			}
 
+			case "list_tasks": {
+				// Import and use the list tasks tool
+				const { listTasksTool } = await import("../tools/listTasksTool")
+				const result = await this.executeToolWithCLIInterface(listTasksTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
+			case "delete_tasks": {
+				// Import and use the delete tasks tool
+				const { deleteTasksTool } = await import("../tools/deleteTasksTool")
+				const result = await this.executeToolWithCLIInterface(deleteTasksTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
 			case "switch_mode": {
 				// Import and use the switch mode tool
 				const { switchModeTool } = await import("../tools/switchModeTool")
@@ -1135,7 +1163,7 @@ export class Task extends EventEmitter<ClineEvents> {
 			}
 
 			default:
-				throw new Error(`Tool ${toolName} not implemented for CLI mode`)
+				throw new Error(`executeTool does not know how to handle ${toolName} executions.`)
 		}
 	}
 

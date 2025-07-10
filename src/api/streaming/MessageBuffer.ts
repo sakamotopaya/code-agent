@@ -57,6 +57,7 @@ export class MessageBuffer {
 		"new_task",
 		"fetch_instructions",
 		"list_modes",
+		"list_tasks",
 	])
 
 	// System tags that should be classified as system content

@@ -243,6 +243,8 @@ export interface ClineSayTool {
 		| "searchAndReplace"
 		| "insertContent"
 		| "listModes"
+		| "listTasks"
+		| "deleteTasks"
 	path?: string
 	diff?: string
 	content?: string

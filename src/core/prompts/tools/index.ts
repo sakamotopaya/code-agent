@@ -23,6 +23,8 @@ import { getSwitchModeDescription } from "./switch-mode"
 import { getNewTaskDescription } from "./new-task"
 import { getCodebaseSearchDescription } from "./codebase-search"
 import { getListModesDescription } from "./list-modes"
+import { getListTasksDescription } from "./list-tasks"
+import { getDeleteTasksDescription } from "./delete-tasks"
 import { CodeIndexManager } from "../../../services/code-index/manager"
 
 // Map of tool names to their description functions
@@ -45,6 +47,8 @@ const toolDescriptionMap: Record<string, (args: ToolArgs) => string | undefined>
 	insert_content: (args) => getInsertContentDescription(args),
 	search_and_replace: (args) => getSearchAndReplaceDescription(args),
 	list_modes: (args) => getListModesDescription(args),
+	list_tasks: (args) => getListTasksDescription(args),
+	delete_tasks: (args) => getDeleteTasksDescription(args),
 	apply_diff: (args) =>
 		args.diffStrategy ? args.diffStrategy.getToolDescription({ cwd: args.cwd, toolOptions: args.toolOptions }) : "",
 }
