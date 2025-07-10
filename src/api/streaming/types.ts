@@ -5,18 +5,29 @@ import { ContentType } from "./MessageBuffer"
  * SSE event type definitions for Task execution streaming
  */
 
+export interface TokenUsage {
+	totalTokensIn: number
+	totalTokensOut: number
+	totalCacheWrites?: number
+	totalCacheReads?: number
+	totalCost?: number
+	contextTokens?: number
+}
+
 export interface SSEEvent {
 	type:
 		| "start"
 		| "progress"
 		| "tool_use"
 		| "completion"
+		| "stream_end"
 		| "error"
 		| "log"
 		| "question"
 		| "warning"
 		| "information"
 		| "question_ask"
+		| "token_usage"
 	jobId: string
 	timestamp: string
 	// Flatten all properties to top level for client compatibility
@@ -35,6 +46,8 @@ export interface SSEEvent {
 	// New fields for content type classification
 	contentType?: ContentType
 	isComplete?: boolean
+	// Token usage information
+	tokenUsage?: TokenUsage
 }
 
 export interface SSEStream {
@@ -42,6 +55,9 @@ export interface SSEStream {
 	response: ServerResponse
 	isActive: boolean
 	lastActivity: Date
+	completionSent?: boolean
+	streamEndSent?: boolean
+	scheduledClosure?: NodeJS.Timeout
 }
 
 export interface StreamOptions {
@@ -64,12 +80,14 @@ export const SSE_EVENTS = {
 	PROGRESS: "progress",
 	TOOL_USE: "tool_use",
 	COMPLETION: "completion",
+	STREAM_END: "stream_end",
 	ERROR: "error",
 	LOG: "log",
 	QUESTION: "question",
 	QUESTION_ASK: "question_ask",
 	WARNING: "warning",
 	INFORMATION: "information",
+	TOKEN_USAGE: "token_usage",
 } as const
 
 export type SSEEventType = (typeof SSE_EVENTS)[keyof typeof SSE_EVENTS]

@@ -447,10 +447,25 @@ export class TaskExecutionOrchestrator {
 		// Task completion
 		task.on("taskCompleted", async (tid: string, tokenUsage: any, toolUsage: any) => {
 			handler.logDebug(`[TaskExecutionOrchestrator] Task completed: ${tid}`)
+			handler.logDebug(`[TaskExecutionOrchestrator] 🔍 Event received with tokenUsage type: ${typeof tokenUsage}`)
+			handler.logDebug(
+				`[TaskExecutionOrchestrator] 🔍 Event received with tokenUsage defined: ${tokenUsage !== undefined}`,
+			)
+			if (tokenUsage) {
+				handler.logDebug(
+					`[TaskExecutionOrchestrator] 🔍 Event tokenUsage:`,
+					JSON.stringify(tokenUsage, null, 2),
+				)
+			} else {
+				handler.logDebug(`[TaskExecutionOrchestrator] ⚠️ Event received with NO tokenUsage data`)
+			}
 			this.clearAllTimers(state)
 
 			try {
 				await this.disposeTask(task)
+				handler.logDebug(
+					`[TaskExecutionOrchestrator] 📡 About to call onTaskCompleted with tokenUsage: ${!!tokenUsage}`,
+				)
 				await handler.onTaskCompleted(taskId, "Task completed successfully", tokenUsage, toolUsage)
 				resolve({
 					success: true,

@@ -45,6 +45,9 @@ export class StreamManager {
 			response,
 			isActive: true,
 			lastActivity: new Date(),
+			completionSent: false,
+			streamEndSent: false,
+			scheduledClosure: undefined,
 		}
 
 		this.streams.set(jobId, stream)
@@ -173,10 +176,20 @@ export class StreamManager {
 			this.keepAliveIntervals.delete(jobId)
 		}
 
+		// Clear any scheduled closure timeout
+		if (stream.scheduledClosure) {
+			clearTimeout(stream.scheduledClosure)
+			stream.scheduledClosure = undefined
+		}
+
 		// End the response stream
 		try {
-			if (!(stream.response as any).destroyed && !stream.response.headersSent) {
+			// For SSE streams, headers are always sent, so we only need to check if not destroyed
+			if (!(stream.response as any).destroyed) {
+				this.logger.info(`Ending HTTP response for stream ${jobId}`)
 				stream.response.end()
+			} else {
+				this.logger.warn(`Stream response already destroyed for job ${jobId}`)
 			}
 		} catch (error) {
 			this.logger.error(`Error closing stream for job ${jobId}:`, error)

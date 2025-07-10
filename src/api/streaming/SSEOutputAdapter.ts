@@ -10,7 +10,7 @@ import {
 	WebviewOptions,
 } from "../../core/interfaces/IUserInterface"
 import { StreamManager } from "./StreamManager"
-import { SSEEvent, SSE_EVENTS } from "./types"
+import { SSEEvent, SSE_EVENTS, TokenUsage } from "./types"
 import { getCLILogger } from "../../cli/services/CLILogger"
 import { MessageBuffer, ProcessedMessage, ContentType } from "./MessageBuffer"
 import { ApiQuestionManager } from "../questions/ApiQuestionManager"
@@ -517,6 +517,79 @@ export class SSEOutputAdapter implements IUserInterface {
 
 		const endTime = Date.now()
 		console.log(`[SSE-COMPLETION] ✅ emitCompletion() completed in ${endTime - startTime}ms`)
+
+		// ✅ NEW: Schedule stream_end event after completion processing
+		console.log(`[SSE-COMPLETION] 🕐 Scheduling stream_end event in 50ms`)
+		setTimeout(() => {
+			this.emitStreamEnd()
+		}, 50)
+	}
+
+	/**
+	 * Emit token usage information to the client
+	 */
+	async emitTokenUsage(tokenUsage: any): Promise<void> {
+		// Handle missing or invalid data gracefully
+		if (!tokenUsage || typeof tokenUsage !== "object") {
+			if (this.verbose) {
+				console.log(`[SSE-TOKEN-USAGE] ⚠️ No token usage data provided, skipping emission`)
+			}
+			return
+		}
+
+		try {
+			// Extract and validate token usage data
+			const totalTokensIn = Number(tokenUsage.totalTokensIn) || 0
+			const totalTokensOut = Number(tokenUsage.totalTokensOut) || 0
+			const totalCost = tokenUsage.totalCost ? Number(tokenUsage.totalCost) : undefined
+			const contextTokens = tokenUsage.contextTokens ? Number(tokenUsage.contextTokens) : undefined
+			const totalCacheReads = tokenUsage.totalCacheReads ? Number(tokenUsage.totalCacheReads) : undefined
+			const totalCacheWrites = tokenUsage.totalCacheWrites ? Number(tokenUsage.totalCacheWrites) : undefined
+
+			// Generate human-readable message
+			let message = `Token usage: ${totalTokensIn.toLocaleString()} in, ${totalTokensOut.toLocaleString()} out`
+			if (totalCost !== undefined) {
+				message += `, $${totalCost.toFixed(4)}`
+			}
+
+			// Create structured token usage object
+			const structuredTokenUsage: TokenUsage = {
+				totalTokensIn,
+				totalTokensOut,
+				...(totalCacheReads !== undefined && { totalCacheReads }),
+				...(totalCacheWrites !== undefined && { totalCacheWrites }),
+				...(totalCost !== undefined && { totalCost }),
+				...(contextTokens !== undefined && { contextTokens }),
+			}
+
+			// Create and emit SSE event
+			const event: SSEEvent = {
+				type: SSE_EVENTS.TOKEN_USAGE,
+				jobId: this.jobId,
+				timestamp: new Date().toISOString(),
+				message,
+				tokenUsage: structuredTokenUsage,
+			}
+
+			if (this.verbose) {
+				console.log(`[SSE-TOKEN-USAGE] 📊 Emitting token usage for job ${this.jobId}:`, {
+					totalTokensIn,
+					totalTokensOut,
+					totalCost,
+					contextTokens,
+					cacheReads: totalCacheReads,
+					cacheWrites: totalCacheWrites,
+				})
+			}
+
+			this.emitEvent(event)
+		} catch (error) {
+			// Log error but don't throw - token usage is supplementary information
+			this.logger.warn(`Failed to emit token usage for job ${this.jobId}: ${error}`)
+			if (this.verbose) {
+				console.log(`[SSE-TOKEN-USAGE] ❌ Error emitting token usage:`, error)
+			}
+		}
 	}
 
 	/**
@@ -533,6 +606,12 @@ export class SSEOutputAdapter implements IUserInterface {
 		}
 
 		this.emitEvent(event)
+
+		// ✅ NEW: Schedule stream_end event after error to ensure stream closure
+		console.log(`[SSE-ERROR] 🕐 Scheduling stream_end event after error in 50ms`)
+		setTimeout(() => {
+			this.emitStreamEnd()
+		}, 50)
 	}
 
 	/**
@@ -597,6 +676,30 @@ export class SSEOutputAdapter implements IUserInterface {
 	 */
 	async emitSSEEvent(event: SSEEvent): Promise<void> {
 		this.emitEvent(event)
+	}
+
+	/**
+	 * Emit stream_end event and schedule stream closure
+	 * This ensures all completion events are sent before the stream is closed
+	 */
+	private async emitStreamEnd(): Promise<void> {
+		// Check if stream is still active
+		if (!this.isActive()) {
+			return
+		}
+
+		const endEvent: SSEEvent = {
+			type: SSE_EVENTS.STREAM_END,
+			jobId: this.jobId,
+			timestamp: new Date().toISOString(),
+			message: "Stream ending",
+		}
+
+		this.emitEvent(endEvent)
+
+		// Close stream immediately after sending the stream_end event
+		// This is more reliable than using setTimeout
+		this.close()
 	}
 
 	/**

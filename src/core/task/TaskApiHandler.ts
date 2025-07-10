@@ -765,6 +765,19 @@ export class TaskApiHandler {
 							cacheWriteTokens += chunk.cacheWriteTokens ?? 0
 							cacheReadTokens += chunk.cacheReadTokens ?? 0
 							totalCost = chunk.totalCost
+
+							// ✅ NEW: Emit token usage update during streaming
+							if (this.onTokenUsageUpdate) {
+								const currentTokenUsage = {
+									totalTokensIn: inputTokens,
+									totalTokensOut: outputTokens,
+									totalCacheReads: cacheReadTokens,
+									totalCacheWrites: cacheWriteTokens,
+									totalCost: totalCost,
+								}
+								this.log(`[TaskApiHandler] Emitting token usage update:`, currentTokenUsage)
+								this.onTokenUsageUpdate(this.taskId, currentTokenUsage)
+							}
 							break
 						case "text": {
 							this.log(`[TaskApiHandler] Processing text chunk: ${chunk.text?.substring(0, 100)}...`)

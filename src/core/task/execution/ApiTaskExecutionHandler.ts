@@ -6,6 +6,8 @@ import { ITaskExecutionHandler } from "./types"
 import { SSEOutputAdapter } from "../../../api/streaming/SSEOutputAdapter"
 
 export class ApiTaskExecutionHandler implements ITaskExecutionHandler {
+	private completionEmitted: boolean = false
+
 	constructor(
 		private sseAdapter: SSEOutputAdapter,
 		private jobId: string,
@@ -22,12 +24,53 @@ export class ApiTaskExecutionHandler implements ITaskExecutionHandler {
 	}
 
 	async onTaskCompleted(taskId: string, result: string, tokenUsage?: any, toolUsage?: any): Promise<void> {
+		// NEW: Always log what we receive
+		console.log(`[ApiTaskExecutionHandler] 🔍 onTaskCompleted called:`)
+		console.log(`[ApiTaskExecutionHandler] 🔍 - taskId: ${taskId}`)
+		console.log(`[ApiTaskExecutionHandler] 🔍 - tokenUsage type: ${typeof tokenUsage}`)
+		console.log(`[ApiTaskExecutionHandler] 🔍 - tokenUsage defined: ${tokenUsage !== undefined}`)
+		if (tokenUsage) {
+			console.log(`[ApiTaskExecutionHandler] 🔍 - tokenUsage value:`, JSON.stringify(tokenUsage, null, 2))
+		}
+
 		if (this.verbose) {
 			console.log(`[ApiTaskExecutionHandler] Task ${taskId} completed for job ${this.jobId}`)
 			console.log(`[ApiTaskExecutionHandler] Result:`, result.substring(0, 200) + "...")
 			console.log(`[ApiTaskExecutionHandler] Token usage:`, tokenUsage)
 			console.log(`[ApiTaskExecutionHandler] Tool usage:`, toolUsage)
 		}
+
+		// ✅ ALWAYS emit token usage information if available, even for duplicate completions
+		if (tokenUsage) {
+			console.log(
+				`[ApiTaskExecutionHandler] 🔍 About to emit token usage for task ${taskId}:`,
+				JSON.stringify(tokenUsage, null, 2),
+			)
+			try {
+				console.log(`[ApiTaskExecutionHandler] 📡 Calling sseAdapter.emitTokenUsage()`)
+				await this.sseAdapter.emitTokenUsage(tokenUsage)
+				console.log(`[ApiTaskExecutionHandler] ✅ Token usage emitted for task ${taskId}`)
+			} catch (error) {
+				// Log warning but don't fail task completion
+				console.error(`[ApiTaskExecutionHandler] ❌ Failed to emit token usage for task ${taskId}:`, error)
+			}
+		} else {
+			console.log(
+				`[ApiTaskExecutionHandler] ⚠️ No token usage data available for task ${taskId} - tokenUsage is ${typeof tokenUsage}`,
+			)
+		}
+
+		// ✅ Prevent duplicate completion processing (but not token usage emission)
+		if (this.completionEmitted) {
+			if (this.verbose) {
+				console.log(
+					`[ApiTaskExecutionHandler] ⚠️ Task ${taskId} completion already processed, skipping duplicate completion event`,
+				)
+			}
+			return
+		}
+
+		this.completionEmitted = true
 
 		// Stream completion result in real-time rather than sending as one large block
 		if (typeof result === "string" && result.length > 100) {
@@ -148,6 +191,29 @@ export class ApiTaskExecutionHandler implements ITaskExecutionHandler {
 				break
 			case "taskSpawned":
 				await this.sseAdapter.showProgress("Spawned subtask", undefined)
+				break
+			case "taskTokenUsageUpdated":
+				// ✅ NEW: Emit token usage immediately when updated during execution
+				if (data?.tokenUsage) {
+					try {
+						await this.sseAdapter.emitTokenUsage(data.tokenUsage)
+						if (this.verbose) {
+							console.log(
+								`[ApiTaskExecutionHandler] ✅ Token usage emitted during execution for task ${taskId}`,
+							)
+						}
+					} catch (error) {
+						// Log warning but don't fail task execution
+						console.warn(
+							`[ApiTaskExecutionHandler] ⚠️ Failed to emit token usage during execution for task ${taskId}:`,
+							error,
+						)
+					}
+				} else if (this.verbose) {
+					console.log(
+						`[ApiTaskExecutionHandler] ⚠️ No token usage data in taskTokenUsageUpdated event for task ${taskId}`,
+					)
+				}
 				break
 			default:
 				// Other activities can be logged but don't need SSE events

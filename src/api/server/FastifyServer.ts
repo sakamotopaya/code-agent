@@ -367,7 +367,7 @@ export class FastifyServer {
 				const executionHandler = new ApiTaskExecutionHandler(
 					sseAdapter,
 					job.id,
-					this.config.getConfiguration().debug || false,
+					verbose || this.config.getConfiguration().debug || false,
 				)
 
 				// FIXED: Remove informational query detection to match VS Code extension behavior
@@ -428,9 +428,12 @@ export class FastifyServer {
 							toolUsage: result.toolUsage,
 						})
 
+						// ✅ REMOVED: No longer immediately close stream - SSEOutputAdapter handles closure
 						// The orchestrator already handled completion/error events via the handler
-						// Just clean up the stream
-						this.streamManager.closeStream(job.id)
+						// Stream closure is now managed by SSEOutputAdapter.emitStreamEnd() after completion
+						console.log(
+							`[FastifyServer] Task execution finished - SSEOutputAdapter will handle stream closure`,
+						)
 					})
 					.catch(async (error: any) => {
 						// Handle cancellation gracefully
@@ -452,11 +455,13 @@ export class FastifyServer {
 						// Send error if not already sent by orchestrator
 						try {
 							await sseAdapter.emitError(error)
+							// ✅ REMOVED: No longer immediately close stream - emitError() handles closure
+							console.log(`[FastifyServer] Error sent - SSEOutputAdapter will handle stream closure`)
 						} catch (emitError) {
 							this.app.log.error(`Failed to emit error for job ${job.id}:`, emitError)
+							// Fallback: close stream immediately if we can't emit error
+							this.streamManager.closeStream(job.id)
 						}
-
-						this.streamManager.closeStream(job.id)
 					})
 
 				this.app.log.info(`Task execution orchestrator started for job ${job.id}`)
