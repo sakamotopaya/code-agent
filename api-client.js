@@ -37,6 +37,7 @@ let hideTokenUsage = false
 let showTiming = false
 let taskId = null // New: Task ID for restart functionality
 let restartTask = false // New: Flag to indicate task restart
+let replMode = false // New: REPL mode flag
 
 /**
  * Validate task ID format (UUID)
@@ -98,6 +99,8 @@ for (let i = 0; i < args.length; i++) {
 		if (verbose) {
 			console.log(`🔄 Task restart mode: ${taskId}`)
 		}
+	} else if (arg === "--repl") {
+		replMode = true
 	} else if (arg === "--help" || arg === "-h") {
 		showHelp = true
 	} else if (!arg.startsWith("--")) {
@@ -117,6 +120,7 @@ Options:
                             release-engineer, translate, product-owner, orchestrator
                    Custom modes loaded from server storage
   --task <id>      Restart an existing task by ID (UUID format)
+  --repl           Start interactive REPL mode for continuous conversation
   --stream         Test SSE streaming endpoint (default: false)
   --verbose        Show full JSON payload and debug information (default: false)
   --show-timing    Show detailed execution timing for operations (default: false)
@@ -162,6 +166,10 @@ Examples:
   # Task restart functionality
   node api-client.js --stream "Create a todo app"                    # Start new task (returns task ID)
   node api-client.js --stream --task abc123-def456-ghi789 "Add auth" # Restart existing task
+  
+  # REPL (Interactive) mode
+  node api-client.js --repl --stream                                  # Start interactive REPL
+  node api-client.js --repl --stream --task abc123-def456-ghi789      # Start REPL with existing task
   
   # Custom modes (if configured on server)
   node api-client.js --stream --mode product-owner "Create a PRD for user auth"
@@ -470,7 +478,9 @@ class StreamProcessor {
 								process.stdout.write(prefix)
 							}
 						}
-						process.stdout.write(event.message)
+						// Apply content filtering before output to remove filtered XML tags
+						const filteredMessage = contentFilter.processText(event.message)
+						process.stdout.write(filteredMessage)
 					}
 					break
 				case "complete":
@@ -733,6 +743,184 @@ class ExecutionTimer {
 		this.startTime = Date.now()
 		this.operations = []
 		this.lastOperationTime = this.startTime
+	}
+}
+
+/**
+ * REPL Session Manager - handles interactive mode
+ */
+class REPLSession {
+	constructor(options) {
+		this.taskId = options.initialTaskId || null
+		this.mode = options.mode || "code"
+		this.host = options.host || "localhost"
+		this.port = options.port || 3000
+		this.useStream = options.useStream || false
+		this.verbose = options.verbose || false
+		this.showThinking = options.showThinking || false
+		this.showTools = options.showTools || false
+		this.showSystem = options.showSystem || false
+		this.showResponse = options.showResponse || false
+		this.showCompletion = options.showCompletion || false
+		this.showMcpUse = options.showMcpUse || false
+		this.showTokenUsage = options.showTokenUsage !== undefined ? options.showTokenUsage : true
+		this.hideTokenUsage = options.hideTokenUsage || false
+		this.showTiming = options.showTiming || false
+		this.logSystemPrompt = options.logSystemPrompt || false
+		this.logLlm = options.logLlm || false
+
+		this.rl = readline.createInterface({
+			input: process.stdin,
+			output: process.stdout,
+			prompt: this.getPrompt(),
+		})
+
+		// Set up tab completion for special commands
+		this.rl.completer = (line) => {
+			const completions = ["exit", "quit", "newtask", "help"]
+			const hits = completions.filter((c) => c.startsWith(line))
+			return [hits.length ? hits : completions, line]
+		}
+	}
+
+	getPrompt() {
+		const taskIndicator = this.taskId ? `[${this.taskId.substring(0, 8)}...]` : "[new]"
+		return `roo-api ${taskIndicator} > `
+	}
+
+	setTaskId(taskId) {
+		this.taskId = taskId
+		this.rl.setPrompt(this.getPrompt())
+		if (this.verbose) {
+			console.log(`🆔 Task ID set: ${taskId}`)
+		}
+	}
+
+	clearTaskId() {
+		this.taskId = null
+		this.rl.setPrompt(this.getPrompt())
+		console.log("🔄 Task cleared - next command will start a new task")
+	}
+
+	hasTask() {
+		return this.taskId !== null
+	}
+
+	async start() {
+		console.log("🚀 Roo API Client REPL Mode")
+		console.log("Commands: exit (quit), newtask (clear task), help (show help)")
+		if (this.taskId) {
+			console.log(`📋 Continuing task: ${this.taskId}`)
+		} else {
+			console.log("💡 First command will create a new task")
+		}
+		console.log("")
+
+		this.rl.prompt()
+
+		this.rl.on("line", async (input) => {
+			await this.handleInput(input.trim())
+		})
+
+		this.rl.on("close", () => {
+			console.log("\n👋 Goodbye!")
+			process.exit(0)
+		})
+
+		// Handle Ctrl+C gracefully
+		this.rl.on("SIGINT", () => {
+			console.log("\n👋 Goodbye!")
+			process.exit(0)
+		})
+	}
+
+	async handleInput(input) {
+		if (!input) {
+			this.rl.prompt()
+			return
+		}
+
+		const command = input.toLowerCase()
+
+		// Handle special commands
+		switch (command) {
+			case "exit":
+			case "quit":
+				console.log("👋 Goodbye!")
+				process.exit(0)
+				break
+
+			case "newtask":
+				this.clearTaskId()
+				this.rl.prompt()
+				return
+
+			case "help":
+				this.showHelp()
+				this.rl.prompt()
+				return
+
+			default:
+				// Regular command - send to API
+				await this.executeCommand(input)
+		}
+
+		this.rl.prompt()
+	}
+
+	showHelp() {
+		console.log(`
+REPL Commands:
+  exit, quit    Exit the REPL
+  newtask       Clear current task and start fresh
+  help          Show this help message
+  
+Any other input will be sent as a task to the API server.
+Current task: ${this.taskId || "none (will create new)"}
+Current mode: ${this.mode}
+Current server: ${this.host}:${this.port}
+Streaming: ${this.useStream ? "enabled" : "disabled"}
+`)
+	}
+
+	async executeCommand(task) {
+		try {
+			// Prepare options for API request
+			const isRestart = this.hasTask()
+			const options = {
+				task,
+				mode: this.mode,
+				taskId: this.taskId,
+				restartTask: isRestart,
+				useStream: this.useStream,
+				host: this.host,
+				port: this.port,
+				verbose: this.verbose,
+				showThinking: this.showThinking,
+				showTools: this.showTools,
+				showSystem: this.showSystem,
+				showResponse: this.showResponse,
+				showCompletion: this.showCompletion,
+				showMcpUse: this.showMcpUse,
+				showTokenUsage: this.showTokenUsage,
+				hideTokenUsage: this.hideTokenUsage,
+				showTiming: this.showTiming,
+				logSystemPrompt: this.logSystemPrompt,
+				logLlm: this.logLlm,
+			}
+
+			const result = await executeApiRequest(options, this)
+
+			// Extract task ID from response if this was a new task
+			if (!isRestart && result.taskId) {
+				this.setTaskId(result.taskId)
+			}
+		} catch (error) {
+			console.error("❌ Error executing command:", error.message)
+			if (this.verbose) {
+				console.error("Error details:", error)
+			}
+		}
 	}
 }
 
@@ -1219,6 +1407,334 @@ class ClientContentFilter {
 			default:
 				return ""
 		}
+	}
+}
+
+/**
+ * Execute API request - unified function for both REPL and single command mode
+ */
+async function executeApiRequest(options, replSession = null) {
+	const {
+		task,
+		mode,
+		taskId,
+		restartTask,
+		useStream,
+		host,
+		port,
+		verbose,
+		showThinking,
+		showTools,
+		showSystem,
+		showResponse,
+		showCompletion,
+		showMcpUse,
+		showTokenUsage,
+		hideTokenUsage,
+		showTiming,
+		logSystemPrompt,
+		logLlm,
+	} = options
+
+	if (useStream) {
+		return await executeStreamingRequest(options, replSession)
+	} else {
+		return await executeBasicRequest(options, replSession)
+	}
+}
+
+/**
+ * Execute streaming API request
+ */
+async function executeStreamingRequest(options, replSession = null) {
+	const { task, mode, taskId, restartTask, host, port, verbose, logSystemPrompt, logLlm } = options
+
+	return new Promise((resolve, reject) => {
+		// Initialize execution timer
+		const executionTimer = new ExecutionTimer(options.showTiming, verbose)
+		executionTimer.logOperation("API connection initiated", `http://${host}:${port}/execute/stream`)
+
+		// Create content filter instance
+		const contentFilter = new ClientContentFilter({
+			verbose,
+			showThinking: options.showThinking,
+			showTools: options.showTools,
+			showSystem: options.showSystem,
+			showResponse: options.showResponse,
+			showCompletion: options.showCompletion,
+			showMcpUse: options.showMcpUse,
+		})
+
+		// Create stream processor for handling question pausing
+		const streamProcessor = new StreamProcessor({
+			verbose,
+			maxRetries: 3,
+			baseDelay: 1000,
+			showResponse: options.showResponse,
+			showThinking: options.showThinking,
+			showTools: options.showTools,
+			showSystem: options.showSystem,
+			showCompletion: options.showCompletion,
+			showMcpUse: options.showMcpUse,
+			showTokenUsage: options.showTokenUsage,
+			hideTokenUsage: options.hideTokenUsage,
+		})
+
+		const payload = JSON.stringify({
+			task,
+			mode,
+			verbose,
+			logSystemPrompt,
+			logLlm,
+			...(restartTask && {
+				taskId: taskId,
+				restartTask: true,
+			}),
+		})
+
+		let extractedTaskId = null
+
+		const req = http.request(
+			{
+				hostname: host,
+				port: port,
+				path: "/execute/stream",
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"Content-Length": Buffer.byteLength(payload),
+					Accept: "text/event-stream",
+					"Cache-Control": "no-cache",
+				},
+			},
+			(res) => {
+				executionTimer.logOperation("Connection established", `Status: ${res.statusCode}`)
+
+				if (verbose) {
+					console.log(`   Status: ${res.statusCode}`)
+					console.log(`   Content-Type: ${res.headers["content-type"]}`)
+				}
+
+				let buffer = ""
+
+				// Set up sliding timeout for stream completion
+				let streamTimeout
+				function resetSlidingTimeout() {
+					if (streamTimeout) clearTimeout(streamTimeout)
+					streamTimeout = setTimeout(() => {
+						if (verbose) {
+							console.log("\n⏰ Stream timeout - assuming completion")
+						}
+						resolve({ success: true, taskId: extractedTaskId })
+					}, 30000)
+				}
+
+				resetSlidingTimeout()
+
+				res.on("data", (chunk) => {
+					buffer += chunk.toString()
+					resetSlidingTimeout()
+
+					// Process complete SSE events
+					const events = buffer.split("\n\n")
+					buffer = events.pop() || ""
+
+					for (const eventData of events) {
+						if (!eventData.trim()) continue
+
+						try {
+							const lines = eventData.split("\n")
+							let eventType = null
+							let data = null
+
+							for (const line of lines) {
+								if (line.startsWith("event: ")) {
+									eventType = line.substring(7).trim()
+								} else if (line.startsWith("data: ")) {
+									data = line.substring(6).trim()
+								}
+							}
+
+							if (data) {
+								const event = JSON.parse(data)
+								const timestamp = new Date().toLocaleTimeString()
+
+								// Extract task ID from start event
+								if (event.type === "start" && event.taskId && !extractedTaskId) {
+									extractedTaskId = event.taskId
+									if (verbose) {
+										console.log(`🆔 Task ID extracted: ${extractedTaskId}`)
+									}
+
+									// Immediately update REPL session if provided
+									if (replSession && replSession.setTaskId) {
+										replSession.setTaskId(extractedTaskId)
+									}
+								}
+
+								// Process event through stream processor
+								streamProcessor.processEvent(event, timestamp, contentFilter)
+
+								if (event.type === "stream_end") {
+									clearTimeout(streamTimeout)
+									resolve({ success: true, taskId: extractedTaskId })
+									return
+								}
+							}
+						} catch (error) {
+							if (verbose) {
+								console.error("Error parsing SSE event:", error)
+							}
+						}
+					}
+				})
+
+				res.on("end", () => {
+					clearTimeout(streamTimeout)
+					if (verbose) {
+						console.log("\n📊 Stream ended")
+						const stats = executionTimer.getStatistics()
+						console.log(`[DEBUG-TIMING] Statistics:`, {
+							totalOperations: stats.operationCount,
+							averageOperationTime: `${stats.averageOperationTime.toFixed(2)}ms`,
+							longestOperation: stats.longestOperation
+								? `${stats.longestOperation.operation} (${stats.longestOperation.duration}ms)`
+								: "none",
+						})
+					}
+
+					// Note: Token usage is already displayed by StreamProcessor on "stream_end" event
+					// No need to display it again here to avoid duplication
+
+					// Always show final timing (unless in verbose mode where it's already shown)
+					if (!verbose) {
+						console.log(`✅ ${executionTimer.getFinalSummary()}`)
+					}
+
+					resolve({ success: true, taskId: extractedTaskId })
+				})
+
+				res.on("error", (error) => {
+					clearTimeout(streamTimeout)
+					reject(error)
+				})
+			},
+		)
+
+		req.on("error", (error) => {
+			reject(error)
+		})
+
+		req.write(payload)
+		req.end()
+	})
+}
+
+/**
+ * Execute basic API request
+ */
+async function executeBasicRequest(options, replSession = null) {
+	const { task, mode, taskId, restartTask, host, port, verbose, logSystemPrompt, logLlm } = options
+
+	// Initialize execution timer
+	const executionTimer = new ExecutionTimer(options.showTiming, verbose)
+	executionTimer.logOperation("API request initiated", "/execute")
+
+	try {
+		const payload = JSON.stringify({
+			task,
+			mode,
+			logSystemPrompt,
+			logLlm,
+			...(restartTask && {
+				taskId: taskId,
+				restartTask: true,
+			}),
+		})
+
+		executionTimer.logOperation("Request payload prepared", `${payload.length} bytes`)
+
+		const response = await makeRequest(
+			{
+				hostname: host,
+				port: port,
+				path: "/execute",
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"Content-Length": Buffer.byteLength(payload),
+				},
+			},
+			payload,
+		)
+
+		executionTimer.logOperation("Response received", `Status: ${response.statusCode}`)
+
+		let extractedTaskId = null
+
+		if (verbose) {
+			console.log(`   Status: ${response.statusCode}`)
+			if (response.statusCode === 200) {
+				const result = JSON.parse(response.body)
+				console.log(`   Success: ${result.success}`)
+				console.log(`   Message: ${result.message}`)
+				console.log(`   Task: ${result.task}`)
+				console.log(`   Timestamp: ${result.timestamp}`)
+
+				// Extract task ID if available
+				if (result.taskId) {
+					extractedTaskId = result.taskId
+					console.log(`   Task ID: ${extractedTaskId}`)
+
+					// Immediately update REPL session if provided
+					if (replSession && replSession.setTaskId) {
+						replSession.setTaskId(extractedTaskId)
+					}
+				}
+			} else {
+				console.log(`   Error: ${response.body}`)
+			}
+			console.log("")
+		} else {
+			if (response.statusCode === 200) {
+				const result = JSON.parse(response.body)
+				if (options.showResponse) {
+					console.log(result.message || result.result || "Task completed successfully")
+				}
+
+				// Extract task ID if available
+				if (result.taskId) {
+					extractedTaskId = result.taskId
+
+					// Immediately update REPL session if provided
+					if (replSession && replSession.setTaskId) {
+						replSession.setTaskId(extractedTaskId)
+					}
+				}
+			} else {
+				console.log(`❌ Error: ${response.body}`)
+			}
+		}
+
+		// Always show final timing
+		console.log(`✅ ${executionTimer.getFinalSummary()}`)
+
+		// Show timing statistics in verbose mode
+		if (verbose) {
+			const stats = executionTimer.getStatistics()
+			console.log(`[DEBUG-TIMING] Statistics:`, {
+				totalOperations: stats.operationCount,
+				averageOperationTime: `${stats.averageOperationTime.toFixed(2)}ms`,
+				longestOperation: stats.longestOperation
+					? `${stats.longestOperation.operation} (${stats.longestOperation.duration}ms)`
+					: "none",
+			})
+		}
+
+		return { success: response.statusCode === 200, taskId: extractedTaskId }
+	} catch (error) {
+		console.error("❌ Request failed:", error.message)
+		throw error
 	}
 }
 
@@ -1875,5 +2391,39 @@ if (typeof module !== "undefined" && module.exports) {
 	module.exports = { ClientContentFilter }
 }
 
-// Run the tests
-runTests()
+// Main execution - REPL mode or single command mode
+async function main() {
+	if (replMode) {
+		// Start REPL session
+		const replSession = new REPLSession({
+			initialTaskId: taskId, // From --task parameter if provided
+			mode,
+			host,
+			port,
+			useStream,
+			verbose,
+			showThinking,
+			showTools,
+			showSystem,
+			showResponse,
+			showCompletion,
+			showMcpUse,
+			showTokenUsage,
+			hideTokenUsage,
+			showTiming,
+			logSystemPrompt,
+			logLlm,
+		})
+
+		await replSession.start()
+	} else {
+		// Original single command mode
+		await runTests()
+	}
+}
+
+// Run the main function
+main().catch((error) => {
+	console.error("❌ Application failed:", error.message)
+	process.exit(1)
+})
