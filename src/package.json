@@ -357,6 +357,8 @@
 		"test:cli:watch": "jest --config cli/jest.config.mjs --testPathPattern=cli/__tests__ --watch",
 		"format": "prettier --write .",
 		"bundle": "node esbuild.mjs",
+		"build:api-client": "node esbuild.mjs",
+		"watch:api-client": "node esbuild.mjs --watch",
 		"vscode:prepublish": "pnpm bundle --production",
 		"vsix": "mkdirp ../bin && npx vsce package --no-dependencies --out ../bin",
 		"publish:marketplace": "vsce publish --no-dependencies && ovsx publish --no-dependencies",

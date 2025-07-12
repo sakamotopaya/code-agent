@@ -182,19 +182,52 @@ async function main() {
 		keepNames: true,
 	}
 
-	const [extensionCtx, workerCtx, cliCtx, apiCtx] = await Promise.all([
+	/**
+	 * @type {import('esbuild').BuildOptions}
+	 */
+	const apiClientConfig = {
+		...buildOptions,
+		entryPoints: ["tools/api-client.ts"],
+		outfile: "dist/tools/api-client.js",
+		banner: {
+			js: '#!/usr/bin/env node'
+		},
+		alias: {
+			"vscode": path.resolve(__dirname, "cli/__mocks__/vscode.js"),
+			"@roo-code/telemetry": path.resolve(__dirname, "cli/__mocks__/@roo-code/telemetry.js"),
+			"tiktoken/lite": path.resolve(__dirname, "cli/__mocks__/tiktoken.js"),
+			"tiktoken/encoders/o200k_base": path.resolve(__dirname, "cli/__mocks__/tiktoken.js")
+		},
+		external: [
+			// Keep Node.js built-ins external
+			"http",
+			"https",
+			"readline",
+			"path",
+			"os",
+			"fs"
+		],
+		define: {
+			'process.env.VSCODE_CONTEXT': 'false',
+		},
+		treeShaking: true,
+		keepNames: true,
+	}
+
+	const [extensionCtx, workerCtx, cliCtx, apiCtx, apiClientCtx] = await Promise.all([
 		esbuild.context(extensionConfig),
 		esbuild.context(workerConfig),
 		esbuild.context(cliConfig),
 		esbuild.context(apiConfig),
+		esbuild.context(apiClientConfig),
 	])
 
 	if (watch) {
-		await Promise.all([extensionCtx.watch(), workerCtx.watch(), cliCtx.watch(), apiCtx.watch()])
+		await Promise.all([extensionCtx.watch(), workerCtx.watch(), cliCtx.watch(), apiCtx.watch(), apiClientCtx.watch()])
 		copyLocales(srcDir, distDir)
 		setupLocaleWatcher(srcDir, distDir)
 	} else {
-		await Promise.all([extensionCtx.rebuild(), workerCtx.rebuild(), cliCtx.rebuild(), apiCtx.rebuild()])
+		await Promise.all([extensionCtx.rebuild(), workerCtx.rebuild(), cliCtx.rebuild(), apiCtx.rebuild(), apiClientCtx.rebuild()])
 		
 		// Make CLI executable
 		const cliPath = path.join(distDir, "cli", "index.js")
@@ -202,7 +235,13 @@ async function main() {
 			fs.chmodSync(cliPath, 0o755)
 		}
 		
-		await Promise.all([extensionCtx.dispose(), workerCtx.dispose(), cliCtx.dispose(), apiCtx.dispose()])
+		// Make API client executable
+		const apiClientPath = path.join(distDir, "tools", "api-client.js")
+		if (fs.existsSync(apiClientPath)) {
+			fs.chmodSync(apiClientPath, 0o755)
+		}
+		
+		await Promise.all([extensionCtx.dispose(), workerCtx.dispose(), cliCtx.dispose(), apiCtx.dispose(), apiClientCtx.dispose()])
 	}
 }
 
