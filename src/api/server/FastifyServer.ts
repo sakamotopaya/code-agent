@@ -360,18 +360,27 @@ export class FastifyServer {
 					keyPrefix: apiConfiguration.apiKey?.substring(0, 10),
 				})
 
+				// Debug workspace configuration
+				const configWorkspaceRoot = this.config.getConfiguration().workspaceRoot
+				const finalWorkspacePath = configWorkspaceRoot || process.cwd()
+				console.log(`[FastifyServer] DEBUG - configWorkspaceRoot: ${configWorkspaceRoot}`)
+				console.log(`[FastifyServer] DEBUG - finalWorkspacePath: ${finalWorkspacePath}`)
+				console.log(`[FastifyServer] DEBUG - process.cwd(): ${process.cwd()}`)
+
 				const taskOptions = {
 					apiConfiguration,
 					task,
 					mode: selectedMode.slug, // Pass the validated mode
+					runtimeMode: "api" as const, // Explicit runtime identification for unified question manager
 					startTask: true, // This will start the task automatically
 					fileSystem: taskAdapters.fileSystem,
 					terminal: taskAdapters.terminal,
 					browser: taskAdapters.browser,
 					telemetry: taskAdapters.telemetry,
-					workspacePath: this.config.getConfiguration().workspaceRoot || process.cwd(),
+					workspacePath: finalWorkspacePath,
 					verbose: this.config.getConfiguration().debug,
 					userInterface: sseAdapter, // Use SSE adapter as the user interface
+					outputAdapter: sseAdapter, // SSE adapter now properly implements IOutputAdapter interface
 					globalStoragePath: getStoragePath(),
 					// MCP configuration following CLI pattern
 					mcpConfigPath: this.config.getConfiguration().mcpConfigPath,
@@ -383,6 +392,14 @@ export class FastifyServer {
 					// Logging configuration
 					logSystemPrompt,
 					logLlm,
+					// Pass a wrapped logger that adapts Fastify logger to ILogger interface
+					logger: {
+						debug: this.app.log.debug.bind(this.app.log),
+						verbose: this.app.log.debug.bind(this.app.log), // Map verbose to debug
+						info: this.app.log.info.bind(this.app.log),
+						warn: this.app.log.warn.bind(this.app.log),
+						error: this.app.log.error.bind(this.app.log),
+					},
 					// Custom modes service for unified tool execution
 					customModesService: this.customModesService,
 					// Disable new adapters for now - go back to existing working logic
@@ -1009,7 +1026,12 @@ export class FastifyServer {
 				.executeTask(taskInstance, taskPromise, executionHandler, executionOptions)
 				.then(async (result) => {
 					this.app.log.info(`Task ${job.id} completed successfully`)
-					await sseAdapter.emitCompletion("Task completed successfully", taskData.historyItem.id)
+					await sseAdapter.emitCompletion(
+						"Task completed successfully",
+						taskData.historyItem.id,
+						undefined,
+						"final",
+					)
 					await sseAdapter.close()
 				})
 				.catch(async (error) => {

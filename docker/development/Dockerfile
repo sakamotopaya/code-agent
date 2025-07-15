@@ -59,6 +59,7 @@ RUN apt-get update && apt-get install -y \
 RUN npm install -g pnpm@9 \
     nodemon \
     typescript \
+    turbo@latest \
     @types/node
 
 # Create development user (optional for dev, but good practice)
@@ -67,28 +68,49 @@ RUN useradd -m -s /bin/bash devuser
 # Set working directory to match workspace structure
 WORKDIR /app
 
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml README.md CHANGELOG.md LICENSE turbo.json ./
+
+# CRITICAL FIX: Copy ALL dependencies BEFORE running any build commands
+COPY packages/ ./packages/
+COPY scripts/ ./scripts/
+COPY webview-ui/ ./webview-ui/
+COPY src/ ./src/
+
+RUN pnpm install --no-frozen-lockfile
+
+# NOW we can safely run turbo bundle with all dependencies present
+RUN npx turbo@latest bundle --log-order grouped --output-logs new-only
+
 # Copy workspace configuration files first (root level)
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml README.md CHANGELOG.md LICENSE ./
+#COPY package.json pnpm-workspace.yaml pnpm-lock.yaml README.md CHANGELOG.md LICENSE turbo.json ./
+
+#RUN npx turbo@latest bundle --log-order grouped --output-logs new-only
 
 # Copy workspace packages that are referenced
-COPY packages/ ./packages/
+#COPY packages/ ./packages/
 
 # Copy scripts directory (needed for preinstall)
-COPY scripts/ ./scripts/
+#COPY scripts/ ./scripts/
 
 # Copy webview-ui directory (needed for build process)
-COPY webview-ui/ ./webview-ui/
+#COPY webview-ui/ ./webview-ui/
 
 # Copy src directory structure
-COPY src/ ./src/
+#COPY src/ ./src/
 
 # Install all dependencies using pnpm (including dev dependencies)
 # This installs at the workspace root level, just like on the host
 # Use --no-frozen-lockfile for development to allow dependency updates
-RUN pnpm install --no-frozen-lockfile
+#RUN pnpm install --no-frozen-lockfile
 
 # Also install dependencies in src directory for proper module resolution
+WORKDIR /app
+
+RUN pnpm install
+RUN pnpm bundle
+
 WORKDIR /app/src
+
 RUN pnpm install --no-frozen-lockfile
 
 # Build workspace packages first (required for main project build)
@@ -98,6 +120,7 @@ RUN pnpm build
 # Build main project using the build-first approach
 WORKDIR /app/src
 RUN pnpm bundle
+RUN node esbuild.mjs
 
 # Create necessary directories
 RUN mkdir -p \

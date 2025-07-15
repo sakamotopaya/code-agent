@@ -597,11 +597,11 @@ export class TaskApiHandler {
 		console.log(`[API-HANDLER-DEBUG] Include file details:`, includeFileDetails)
 		console.log(`[API-HANDLER-DEBUG] Initial assistantMessageContent:`, this.assistantMessageContent)
 		console.log(`[API-HANDLER-DEBUG] About to make LLM request`)
-		this.log(`[TaskApiHandler] Starting recursivelyMakeClineRequests for task ${this.taskId}.${this.instanceId}`)
-		this.log(`[TaskApiHandler] User content length: ${userContent.length}`)
-		this.log(`[TaskApiHandler] Include file details: ${includeFileDetails}`)
-		this.log(`[TaskApiHandler] Abort: ${abort}`)
-		this.log(`[TaskApiHandler] Consecutive mistake count: ${consecutiveMistakeCount}`)
+		// this.log(`[TaskApiHandler] Starting recursivelyMakeClineRequests for task ${this.taskId}.${this.instanceId}`)
+		// this.log(`[TaskApiHandler] User content length: ${userContent.length}`)
+		// this.log(`[TaskApiHandler] Include file details: ${includeFileDetails}`)
+		// this.log(`[TaskApiHandler] Abort: ${abort}`)
+		// this.log(`[TaskApiHandler] Consecutive mistake count: ${consecutiveMistakeCount}`)
 
 		if (abort) {
 			this.log(`[TaskApiHandler] Task aborted, throwing error`)

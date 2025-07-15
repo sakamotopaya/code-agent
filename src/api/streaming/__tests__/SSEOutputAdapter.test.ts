@@ -221,7 +221,7 @@ describe("SSEOutputAdapter", () => {
 			const message = "Task completed successfully"
 			const result = { status: "success" }
 
-			await adapter.emitCompletion(message, result)
+			await adapter.emitCompletion(message, result, undefined, "final")
 
 			expect(mockResponse.write).toHaveBeenCalledWith(expect.stringContaining('"type":"completion"'))
 			expect(mockResponse.write).toHaveBeenCalledWith(expect.stringContaining(message))

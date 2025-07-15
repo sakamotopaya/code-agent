@@ -48,7 +48,7 @@ describe("Stream End Functionality", () => {
 			const writeSpy = jest.spyOn(mockResponse, "write")
 
 			// Call emitCompletion
-			await adapter.emitCompletion("Task completed successfully")
+			await adapter.emitCompletion("Task completed successfully", undefined, undefined, "final")
 
 			// Should have sent completion event immediately
 			expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining(`"type":"${SSE_EVENTS.COMPLETION}"`))
@@ -69,7 +69,7 @@ describe("Stream End Functionality", () => {
 		it("should handle completion and stream_end timing correctly", async () => {
 			const writeSpy = jest.spyOn(mockResponse, "write")
 
-			await adapter.emitCompletion("Test completion message")
+			await adapter.emitCompletion("Test completion message", undefined, undefined, "final")
 
 			// Verify completion event was sent first
 			const completionCall = writeSpy.mock.calls.find((call) =>
@@ -138,7 +138,7 @@ describe("Stream End Functionality", () => {
 			adapter.close()
 
 			// Try to emit completion
-			await adapter.emitCompletion("Test message")
+			await adapter.emitCompletion("Test message", undefined, undefined, "final")
 
 			// Should not have sent any events since stream is closed
 			expect(writeSpy).not.toHaveBeenCalled()
@@ -148,7 +148,7 @@ describe("Stream End Functionality", () => {
 			jest.useFakeTimers()
 
 			// Start completion process
-			adapter.emitCompletion("Test completion")
+			adapter.emitCompletion("Test completion", undefined, undefined, "final")
 
 			// Manually close stream before timeout
 			adapter.close()

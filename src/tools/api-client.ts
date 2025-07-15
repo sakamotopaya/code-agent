@@ -31,7 +31,11 @@ import type {
 	StreamProcessingState,
 	ContentFilterState,
 	SupportedMode,
+	QuestionEventData,
 } from "./types/api-client-types"
+
+// Import question handler
+import { QuestionEventHandler } from "./QuestionEventHandler"
 
 /**
  * Parse command line arguments into structured options
@@ -243,8 +247,9 @@ class StreamProcessor {
 	private showMcpUse: boolean
 	private showTokenUsage: boolean
 	private hideTokenUsage: boolean
+	private questionHandler: QuestionEventHandler
 
-	constructor(options: StreamProcessorOptions = {}) {
+	constructor(options: StreamProcessorOptions = {}, clientOptions: ApiClientOptions) {
 		this.state = {
 			isPaused: false,
 			currentQuestion: null,
@@ -265,6 +270,35 @@ class StreamProcessor {
 		this.showMcpUse = options.showMcpUse || false
 		this.showTokenUsage = options.showTokenUsage !== undefined ? options.showTokenUsage : true
 		this.hideTokenUsage = options.hideTokenUsage || false
+
+		// Initialize QuestionEventHandler (AC-002)
+		this.questionHandler = new QuestionEventHandler(clientOptions)
+	}
+
+	/**
+	 * Handle question event from SSE stream (AC-002)
+	 */
+	async handleQuestionEvent(questionData: QuestionEventData): Promise<void> {
+		try {
+			// Pause regular stream processing during question handling
+			this.pauseProcessing()
+
+			if (this.verbose) {
+				console.log("⏸️  Stream processing paused for question")
+			}
+
+			// Delegate to question handler
+			await this.questionHandler.handleQuestionEvent(questionData)
+		} catch (error) {
+			console.error(`❌ Question event handling failed: ${error}`)
+		} finally {
+			// Resume stream processing
+			this.resumeProcessing()
+
+			if (this.verbose) {
+				console.log("▶️  Stream processing resumed")
+			}
+		}
 	}
 
 	async processEvent(event: StreamEvent, timestamp: string, contentFilter: ClientContentFilter): Promise<void> {
@@ -409,13 +443,13 @@ class StreamProcessor {
 		}
 	}
 
-	private pauseProcessing(): void {
+	public pauseProcessing(): void {
 		this.state.isPaused = true
 		this.questionLogger.logStreamPaused()
 		console.log("\n⏸️  Stream paused - waiting for your response...")
 	}
 
-	private resumeProcessing(): void {
+	public resumeProcessing(): void {
 		this.state.isPaused = false
 		this.questionLogger.logStreamResumed(this.state.eventQueue.length)
 
@@ -602,17 +636,13 @@ class REPLSession {
 			const history = this.historyService.getHistory(50) // Get last 50 commands for readline history
 			if (history.length > 0) {
 				// Extract command strings and load them into readline history
-				// Note: readline expects history in reverse order (oldest first), but ReplHistoryService
-				// returns newest first, so we need to reverse
+				// ReplHistoryService returns newest first, which is exactly what we want for readline
+				// so that up arrow shows the most recent command first
 				const commands = history.map((entry) => entry.command)
-				const commandStrings: string[] = []
-				for (let i = commands.length - 1; i >= 0; i--) {
-					commandStrings.push(commands[i])
-				}
 
 				// Set the readline interface's history (accessing internal property)
 				// TypeScript doesn't expose this but it's available at runtime
-				;(this.rl as any).history = commandStrings
+				;(this.rl as any).history = commands
 
 				console.log(`📚 Loaded ${history.length} previous commands`)
 			}
@@ -703,6 +733,8 @@ class REPLSession {
 
 		// Execute the command
 		await this.executeCommand(input)
+
+		this.promptUser()
 	}
 
 	private showHelp(): void {
@@ -910,6 +942,94 @@ class ClientContentFilter {
 
 // Utility functions (these would be implemented with the full logic from the original file)
 
+/**
+ * Handle QUESTION_EVENT detected in SSE message content
+ * AC-002: Integration with QuestionEventHandler infrastructure
+ */
+async function handleQuestionEvent(
+	message: string,
+	verbose: boolean,
+	streamProcessor?: StreamProcessor,
+): Promise<void> {
+	try {
+		// Extract JSON payload after "QUESTION_EVENT:" prefix
+		const questionEventPrefix = "QUESTION_EVENT: "
+		const questionEventIndex = message.indexOf(questionEventPrefix)
+
+		if (questionEventIndex === -1) {
+			if (verbose) {
+				console.log("⚠️  QUESTION_EVENT prefix not found in message")
+			}
+			return
+		}
+
+		const jsonStart = questionEventIndex + questionEventPrefix.length
+		const jsonPayload = message.substring(jsonStart).trim()
+
+		// Parse the question data
+		const questionData = JSON.parse(jsonPayload) as QuestionEventData
+
+		// Basic validation
+		if (!questionData.type || !questionData.questionId || !questionData.questionType || !questionData.question) {
+			if (verbose) {
+				console.log("⚠️  Invalid question event structure:", questionData)
+			}
+			return
+		}
+
+		if (verbose) {
+			console.log("\n🤔 Question detected from server:")
+			console.log(`   Type: ${questionData.questionType}`)
+			console.log(`   Question: ${questionData.question}`)
+			console.log(`   ID: ${questionData.questionId}`)
+
+			if (questionData.choices && Array.isArray(questionData.choices)) {
+				console.log(`   Choices: ${questionData.choices.join(", ")}`)
+			}
+
+			console.log(`   Full question data:`, JSON.stringify(questionData, null, 2))
+		}
+
+		// AC-002: Process question through QuestionEventHandler
+		const questionHandler = QuestionEventHandler.getInstance()
+
+		// Pause stream processing if available
+		if (streamProcessor) {
+			streamProcessor.pauseProcessing()
+			if (verbose) {
+				console.log("⏸️  Stream processing paused for question handling")
+			}
+		}
+
+		try {
+			// Process the question (will be implemented in AC-003+)
+			await questionHandler.processQuestion(questionData, verbose)
+
+			if (verbose) {
+				console.log("✅ Question processed successfully")
+			}
+		} finally {
+			// Resume stream processing
+			if (streamProcessor) {
+				streamProcessor.resumeProcessing()
+				if (verbose) {
+					console.log("▶️  Stream processing resumed")
+				}
+			}
+		}
+	} catch (error) {
+		if (verbose) {
+			console.error("❌ Error handling QUESTION_EVENT:", error)
+			console.error("   Raw message:", message)
+		}
+
+		// Ensure stream processing is resumed even on error
+		if (streamProcessor) {
+			streamProcessor.resumeProcessing()
+		}
+	}
+}
+
 async function executeStreamingRequest(
 	options: ApiClientOptions,
 	task: string,
@@ -937,19 +1057,22 @@ async function executeStreamingRequest(
 		})
 
 		// Create stream processor for handling question pausing
-		const streamProcessor = new StreamProcessor({
-			verbose: options.verbose,
-			maxRetries: 3,
-			baseDelay: 1000,
-			showResponse: options.showResponse,
-			showThinking: options.showThinking,
-			showTools: options.showTools,
-			showSystem: options.showSystem,
-			showCompletion: options.showCompletion,
-			showMcpUse: options.showMcpUse,
-			showTokenUsage: options.showTokenUsage,
-			hideTokenUsage: options.hideTokenUsage,
-		})
+		const streamProcessor = new StreamProcessor(
+			{
+				verbose: options.verbose,
+				maxRetries: 3,
+				baseDelay: 1000,
+				showResponse: options.showResponse,
+				showThinking: options.showThinking,
+				showTools: options.showTools,
+				showSystem: options.showSystem,
+				showCompletion: options.showCompletion,
+				showMcpUse: options.showMcpUse,
+				showTokenUsage: options.showTokenUsage,
+				hideTokenUsage: options.hideTokenUsage,
+			},
+			options,
+		)
 
 		let extractedTaskId: string | null = null
 
@@ -1056,6 +1179,19 @@ async function executeStreamingRequest(
 							if (data) {
 								const event = JSON.parse(data)
 								const timestamp = new Date().toLocaleTimeString()
+
+								// Check for QUESTION_EVENT in message content
+								if (event.message && event.message.includes("QUESTION_EVENT:")) {
+									try {
+										// Handle question event without await for now (will be improved in AC-002)
+										handleQuestionEvent(event.message, options.verbose)
+									} catch (error) {
+										if (options.verbose) {
+											console.error("Error handling question event:", error)
+										}
+									}
+									// Continue processing the event normally as well
+								}
 
 								// Extract task ID from start event
 								if (event.type === "start" && event.taskId && !extractedTaskId) {

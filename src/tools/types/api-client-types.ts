@@ -104,6 +104,28 @@ export interface TokenUsage {
 	cost?: number
 }
 
+// Question event data structure (AC-002)
+export interface QuestionEventData {
+	type: "question"
+	questionId: string
+	questionType: "select" | "input" | "confirmation" | "password"
+	question: string
+	timestamp: string
+	choices?: string[]
+	placeholder?: string
+	password?: boolean
+	yesText?: string
+	noText?: string
+	defaultValue?: string | boolean
+}
+
+// Question handler state management (AC-002)
+export interface QuestionHandlerState {
+	currentQuestion: QuestionEventData | null
+	isProcessing: boolean
+	questionQueue: QuestionEventData[]
+}
+
 // Supported modes
 export type SupportedMode =
 	| "code"

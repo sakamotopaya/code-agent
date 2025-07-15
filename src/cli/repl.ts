@@ -749,8 +749,9 @@ export class CliRepl {
 			const history = this.historyService.getHistory()
 
 			// Apply history to readline interface
-			// Note: readline history is in reverse order (newest first)
-			const commands = history.map((entry) => entry.command).reverse()
+			// ReplHistoryService returns newest first, which is what we want for readline
+			// so that up arrow shows the most recent command first
+			const commands = history.map((entry) => entry.command)
 
 			// Clear existing history and add loaded entries
 			;(this.rl as any).history = commands.slice(0, 100)
