@@ -48,14 +48,6 @@ export interface StreamProcessorOptions {
 	verbose?: boolean
 	maxRetries?: number
 	baseDelay?: number
-	showResponse?: boolean
-	showThinking?: boolean
-	showTools?: boolean
-	showSystem?: boolean
-	showCompletion?: boolean
-	showMcpUse?: boolean
-	showTokenUsage?: boolean
-	hideTokenUsage?: boolean
 }
 
 // Content filter options
@@ -66,6 +58,9 @@ export interface ContentFilterOptions {
 	showSystem: boolean
 	showCompletion: boolean
 	showMcpUse: boolean
+	showTokenUsage: boolean
+	hideTokenUsage: boolean
+	verbose: boolean
 }
 
 // API request/response types

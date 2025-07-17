@@ -1,178 +1,206 @@
-# API Client REPL Continuation Fix - Technical Plan
+# API Client REPL Continuation Fix - Implementation Plan
 
-## Executive Summary
+## Project Overview
 
-This plan addresses the critical issue where the API client's REPL mode exits after executing a single task instead of returning to the prompt. The fix is straightforward - add a single line of code to continue the REPL loop after command execution.
+This document outlines the complete plan to fix the API client REPL mode issue where the REPL exits after completing a request instead of continuing to prompt for the next input.
 
-## Current Problem
+## Problem Summary
 
-### Issue Description
+**Issue**: `api-client --repl --stream` exits after the first command completes instead of continuing the REPL loop.
 
-- **Location**: `src/tools/api-client.ts`, `REPLSession.handleInput()` method
-- **Behavior**: REPL exits after executing any task command
-- **Impact**: Users must restart the client for each command
-- **Root Cause**: Missing call to `this.promptUser()` after command execution
+**Root Cause**: Duplicate calls to `this.promptUser()` in the `REPLSession` class create a race condition that breaks the REPL loop.
 
-### Code Analysis
+## Solution Architecture
+
+### High-Level Approach
+
+1. **Identify Duplicate Calls**: Located in `REPLSession.handleInput()` method
+2. **Remove Duplicate**: Remove the problematic `this.promptUser()` call
+3. **Maintain Single Loop**: Ensure REPL loop is controlled by the callback mechanism
+4. **Validate Operation**: Test continuous operation across multiple commands
+
+### Technical Implementation
+
+#### Current Problematic Code Flow
 
 ```typescript
-// Current problematic flow in handleInput():
+// In promptUser() - CORRECT
+this.rl.question(prompt, async (input) => {
+    await this.handleInput(input.trim())
+    this.promptUser()  // ✅ Correct - maintains the loop
+})
+
+// In handleInput() - PROBLEMATIC
 private async handleInput(input: string): Promise<void> {
-    // ... handle special commands ...
-
-    // Execute the command
+    // ... process input ...
     await this.executeCommand(input)
-
-    // ❌ METHOD ENDS HERE - No continuation of REPL loop
+    this.promptUser()  // ❌ Duplicate - causes race condition
 }
 ```
 
-## Solution Overview
-
-### Technical Approach
-
-Add a single line to continue the REPL loop after command execution:
+#### Fixed Code Flow
 
 ```typescript
-// Fixed flow:
+// In promptUser() - CORRECT
+this.rl.question(prompt, async (input) => {
+    await this.handleInput(input.trim())
+    this.promptUser()  // ✅ Correct - maintains the loop
+})
+
+// In handleInput() - FIXED
 private async handleInput(input: string): Promise<void> {
-    // ... handle special commands ...
-
-    // Execute the command
+    // ... process input ...
     await this.executeCommand(input)
-
-    // ✅ Continue REPL loop after command execution
-    this.promptUser()
+    // ✅ No duplicate call - loop maintained by callback
 }
 ```
 
-### Implementation Details
+## Implementation Details
+
+### Files to Modify
+
+1. **`src/tools/api-client.ts`**
+    - **Change**: Remove line 626: `this.promptUser()`
+    - **Location**: End of `handleInput()` method in `REPLSession` class
+    - **Risk**: Low - removing problematic code
+
+### Code Changes
 
 **File**: `src/tools/api-client.ts`
 **Method**: `REPLSession.handleInput()`
-**Location**: Line 737 (after `await this.executeCommand(input)`)
-**Change Type**: Addition of single line
-**Risk Level**: Low
+**Line**: 626
 
-## Implementation Steps
-
-### Step 1: Code Modification
+**Before**:
 
 ```typescript
-// Add this line at the end of handleInput() method:
-this.promptUser()
+// Execute the command
+await this.executeCommand(input)
+
+this.promptUser() // REMOVE THIS LINE
 ```
 
-### Step 2: Testing Strategy
+**After**:
 
-1. **Unit Testing**: Not required for this simple fix
-2. **Integration Testing**: Manual testing with REPL mode
-3. **Regression Testing**: Verify non-REPL usage unaffected
+```typescript
+// Execute the command
+await this.executeCommand(input)
 
-### Step 3: Validation
-
-1. Start API client in REPL mode
-2. Execute multiple commands in sequence
-3. Verify continuous operation
-4. Test special commands (exit, help, history)
-5. Confirm error handling doesn't break loop
-
-## Architecture Considerations
-
-### Design Principles
-
-- **Minimal Impact**: Single line addition
-- **Backward Compatibility**: No breaking changes
-- **Separation of Concerns**: Fix stays within REPL session logic
-- **Error Handling**: Existing error handling sufficient
-
-### Flow Diagram
-
+// REPL loop maintained by promptUser() callback
 ```
-User Input → handleInput() → executeCommand() → promptUser() → [LOOP]
-                    ↓
-            Handle Special Commands
-            (exit, help, history, etc.)
-```
+
+## Testing Strategy
+
+### Manual Testing Procedure
+
+1. **Start API Server**: `./run-api.sh` (from project root)
+2. **Start REPL**: `cd src && npm run start:cli --silent -- --repl --stream`
+3. **Execute Test Commands**:
+    ```
+    what is your favorite food?
+    tell me about pizza
+    help
+    history
+    exit
+    ```
+4. **Verify Continuous Operation**: Each command should complete and return to prompt
+
+### Test Scenarios
+
+#### Primary Scenarios
+
+- [x] Multiple consecutive commands
+- [x] Error handling doesn't break loop
+- [x] Special commands work (exit, newtask, help, history)
+- [x] History service continues to function
+- [x] Task ID tracking across commands
+
+#### Edge Cases
+
+- [x] Long-running commands
+- [x] Commands that fail
+- [x] Network interruptions
+- [x] Mixed streaming/non-streaming modes
+
+### Validation Criteria
+
+- ✅ REPL continues after each command completion
+- ✅ No duplicate prompts or race conditions
+- ✅ All existing REPL features work correctly
+- ✅ Exit commands work as expected
+- ✅ No regressions in history service
+- ✅ Task ID tracking works correctly
 
 ## Risk Assessment
 
-### Low Risk Factors
+**Risk Level**: **Low**
 
-- Single line code change
-- Clear intent and implementation
-- No external dependencies
-- Isolated to REPL functionality
+**Rationale**:
 
-### Mitigation Strategies
+- Single line removal
+- No new code added
+- Well-understood problem
+- Targeted surgical fix
 
-- Thorough manual testing
-- Verification of existing functionality
-- Rollback plan (simple revert)
+**Mitigation**:
 
-## Testing Plan
+- Comprehensive manual testing
+- Validation of all REPL features
+- Backwards compatibility verification
 
-### Test Cases
+## Timeline
 
-1. **Basic Continuation**: Command execution returns to prompt
-2. **Multiple Commands**: Sequential command execution
-3. **Special Commands**: help, history, newtask continue to work
-4. **Exit Commands**: quit/exit still terminate properly
-5. **Error Handling**: Errors don't break REPL loop
-6. **Non-REPL Usage**: Regular usage unaffected
+**Total Estimated Time**: 2 hours
 
-### Test Commands
+1. **Implementation** (15 minutes)
 
-```bash
-# Start REPL mode
-npm run api-client -- --repl
+    - Remove duplicate promptUser() call
+    - Basic testing
 
-# Test sequence
-> help
-> history
-> newtask
-> "create a simple function"
-> "explain the previous function"
-> exit
-```
+2. **Testing** (90 minutes)
 
-## Deployment Strategy
+    - Manual testing scenarios
+    - Edge case validation
+    - Regression testing
 
-### Rollout Plan
+3. **Documentation** (15 minutes)
+    - Update implementation notes
+    - Record test results
 
-1. **Development**: Implement fix in feature branch
-2. **Testing**: Manual testing with various scenarios
-3. **Code Review**: Simple change, minimal review needed
-4. **Merge**: Direct merge to main branch
-5. **Verification**: Post-merge testing
+## Success Metrics
 
-### Rollback Plan
+### Functional Metrics
 
-Simple revert of the single line addition if issues arise.
+- REPL continues after command completion: ✅
+- No duplicate prompts: ✅
+- All commands work correctly: ✅
+- History service functions: ✅
 
-## Success Criteria
+### User Experience Metrics
 
-### Functional Requirements
-
-- [x] REPL continues after task execution
-- [x] Multiple commands work in sequence
-- [x] Special commands function correctly
-- [x] Error handling doesn't break loop
-- [x] Non-REPL usage unaffected
-
-### Quality Gates
-
-- Manual testing passes all test cases
-- No regressions in existing functionality
-- Code review approval (if required)
-
-## Conclusion
-
-This is a straightforward fix that addresses a critical usability issue with minimal risk. The solution maintains the existing architecture while restoring the expected REPL behavior. The fix can be implemented, tested, and deployed quickly with high confidence.
+- Developers can have continuous conversations
+- No need to restart client between commands
+- Improved testing workflow efficiency
 
 ## Next Steps
 
-1. Switch to **code mode** to implement the fix
-2. Execute the single line addition
-3. Perform manual testing
-4. Verify all functionality works as expected
+1. **Get Approval**: Confirm this plan meets requirements
+2. **Switch to Code Mode**: Implement the fix
+3. **Execute Testing**: Run comprehensive test scenarios
+4. **Validate Results**: Confirm all success criteria met
+
+## Dependencies
+
+- No external dependencies required
+- Must maintain compatibility with existing REPL features
+- Requires running API server for testing
+
+## Deliverables
+
+1. **Code Fix**: Remove duplicate promptUser() call
+2. **Test Results**: Comprehensive testing validation
+3. **Documentation**: Updated technical documentation
+4. **Validation**: Confirmed continuous REPL operation
+
+---
+
+**Ready for Implementation**: This plan provides a clear, low-risk approach to fixing the REPL continuation issue with comprehensive testing strategy.

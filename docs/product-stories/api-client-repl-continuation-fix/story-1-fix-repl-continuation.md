@@ -1,76 +1,154 @@
-# Story 1: Fix REPL Continuation After Task Execution
+# Story 1: Fix REPL Continuation Issue
 
 ## Story Description
 
-Fix the API client REPL mode so it continues to prompt for input after executing a task command, instead of exiting the session.
+**As a developer using the API client in REPL mode**  
+**I want the REPL to continue prompting for input after each command completes**  
+**So that I can have a continuous interactive session without restarting the client**
 
-## Technical Details
+## Current Behavior
 
-### Problem
+```bash
+$ api-client --repl --stream
+🚀 Roo API Client REPL Mode
+Commands: exit (quit), newtask (clear task), help (show help), history (show history)
+💡 History service enabled - use "history" command for options
+💡 Use up/down arrows to navigate through command history
+💡 First command will create a new task
 
-The `handleInput` method in `REPLSession` class executes a command but doesn't call `this.promptUser()` again to continue the REPL loop, causing the session to exit.
+roo-api [new] > what is your favorite food?
+[API processes request and shows response]
+I've asked about your favorite food and you've indicated that it's tacos.
+📊 Token Usage [4:29:12 PM]:
+   Input tokens: undefined
+   Output tokens: undefined
+   Total tokens: undefined
+✅ Stream completed
+[REPL EXITS - PROBLEM!]
+```
 
-### Solution
+## Expected Behavior
 
-Add a call to `this.promptUser()` at the end of the `handleInput` method to continue the REPL loop after command execution.
+```bash
+$ api-client --repl --stream
+🚀 Roo API Client REPL Mode
+Commands: exit (quit), newtask (clear task), help (show help), history (show history)
+💡 History service enabled - use "history" command for options
+💡 Use up/down arrows to navigate through command history
+💡 First command will create a new task
 
-### Implementation
+roo-api [new] > what is your favorite food?
+[API processes request and shows response]
+I've asked about your favorite food and you've indicated that it's tacos.
+📊 Token Usage [4:29:12 PM]:
+   Input tokens: undefined
+   Output tokens: undefined
+   Total tokens: undefined
+✅ Stream completed
+roo-api [task:abc12345] > what about pizza?
+[Continues working...]
+```
 
-**File:** `src/tools/api-client.ts`
-**Method:** `REPLSession.handleInput()`
-**Location:** After line 736 (after `await this.executeCommand(input)`)
+## Root Cause
 
-**Code Change:**
+The issue is in `src/tools/api-client.ts` in the `REPLSession` class. There are two calls to `this.promptUser()`:
+
+1. **Line 547** in `promptUser()` callback: `this.promptUser()` ← Correct
+2. **Line 626** in `handleInput()`: `this.promptUser()` ← Duplicate causing race condition
+
+## Implementation Details
+
+### Files to Modify
+
+- `src/tools/api-client.ts` - Remove duplicate `this.promptUser()` call
+
+### Code Changes
+
+**Before (Lines 545-548):**
+
+```typescript
+this.rl.question(prompt, async (input) => {
+	await this.handleInput(input.trim())
+	this.promptUser() // Correct call
+})
+```
+
+**Before (Lines 624-627):**
 
 ```typescript
 // Execute the command
 await this.executeCommand(input)
 
-// Continue REPL loop after command execution
-this.promptUser()
+this.promptUser() // REMOVE THIS LINE - it's a duplicate
 ```
 
-### Acceptance Criteria
+**After (Lines 624-626):**
 
-- [ ] REPL returns to prompt after executing any task command
-- [ ] Multiple commands can be executed in sequence
-- [ ] Special commands (exit, quit, newtask, help, history) continue to work
-- [ ] Non-REPL usage remains unaffected
+```typescript
+// Execute the command
+await this.executeCommand(input)
+
+// No duplicate call here - loop maintained by promptUser() callback
+```
+
+### Testing Strategy
+
+1. **Manual Testing**:
+
+    ```bash
+    cd /Users/eo/code/code-agent/src && npm run start:cli --silent -- --repl --stream
+    ```
+
+2. **Test Scenarios**:
+
+    - Execute multiple commands in sequence
+    - Test error handling doesn't break the loop
+    - Test special commands (exit, newtask, help, history)
+    - Test with both streaming and non-streaming modes
+
+3. **Verification Points**:
+    - REPL continues after each command completion
+    - No duplicate prompts appear
+    - History service works correctly
+    - Exit commands work as expected
+    - Task ID tracking works across commands
+
+## Acceptance Criteria
+
+- [ ] REPL continues prompting after command completion
+- [ ] No duplicate prompts or race conditions
+- [ ] Special commands (exit, newtask, help, history) work correctly
+- [ ] History service continues to function
+- [ ] Task ID tracking works across multiple commands
 - [ ] Error handling doesn't break the REPL loop
+- [ ] Both streaming and non-streaming modes work correctly
 
-### Test Plan
+## Definition of Done
 
-1. **Basic Continuation Test**
+- [ ] Code changes implemented and tested
+- [ ] Manual testing confirms continuous operation
+- [ ] No regressions in existing REPL functionality
+- [ ] Documentation updated with the fix
+- [ ] Code review completed
 
-    - Start API client: `npm run api-client -- --repl`
-    - Execute a simple task command
-    - Verify prompt returns for next command
+## Risk Assessment
 
-2. **Multiple Commands Test**
+**Low Risk** - This is a surgical fix that removes problematic code without adding complexity.
 
-    - Execute several task commands in sequence
-    - Verify each command executes and returns to prompt
+**Mitigation**: Thorough testing across all REPL scenarios to ensure no regression.
 
-3. **Special Commands Test**
+## Dependencies
 
-    - Test `help`, `history`, `newtask` commands
-    - Verify they work and return to prompt
+- No external dependencies
+- Must maintain compatibility with existing REPL features
+- Requires testing with both streaming and non-streaming API endpoints
 
-4. **Error Handling Test**
+## Estimated Effort
 
-    - Execute a command that causes an error
-    - Verify REPL continues and prompts for next command
+**1-2 hours** - Simple one-line fix with comprehensive testing
 
-5. **Exit Commands Test**
-    - Verify `exit` and `quit` commands still terminate the session properly
+## Success Metrics
 
-### Definition of Done
-
-- Code change implemented in `src/tools/api-client.ts`
-- Manual testing confirms REPL continues after task execution
-- All existing REPL functionality works as expected
-- No regressions in non-REPL usage
-
-### Notes
-
-This is a minimal, surgical fix that addresses the immediate issue without changing the overall architecture or adding complexity. The fix ensures backward compatibility and maintains all existing functionality.
+- REPL sessions can execute multiple commands without exiting
+- No user reports of premature REPL termination
+- Improved developer experience when testing the API client

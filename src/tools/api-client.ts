@@ -239,14 +239,6 @@ class StreamProcessor {
 	private verbose: boolean
 	private maxRetries: number
 	private baseDelay: number
-	private showResponse: boolean
-	private showThinking: boolean
-	private showTools: boolean
-	private showSystem: boolean
-	private showCompletion: boolean
-	private showMcpUse: boolean
-	private showTokenUsage: boolean
-	private hideTokenUsage: boolean
 	private questionHandler: QuestionEventHandler
 
 	constructor(options: StreamProcessorOptions = {}, clientOptions: ApiClientOptions) {
@@ -262,14 +254,6 @@ class StreamProcessor {
 		this.verbose = options.verbose || false
 		this.maxRetries = options.maxRetries || 3
 		this.baseDelay = options.baseDelay || 1000
-		this.showResponse = options.showResponse || false
-		this.showThinking = options.showThinking || false
-		this.showTools = options.showTools || false
-		this.showSystem = options.showSystem || false
-		this.showCompletion = options.showCompletion || false
-		this.showMcpUse = options.showMcpUse || false
-		this.showTokenUsage = options.showTokenUsage !== undefined ? options.showTokenUsage : true
-		this.hideTokenUsage = options.hideTokenUsage || false
 
 		// Initialize QuestionEventHandler (AC-002)
 		this.questionHandler = new QuestionEventHandler(clientOptions)
@@ -344,103 +328,8 @@ class StreamProcessor {
 		timestamp: string,
 		contentFilter: ClientContentFilter,
 	): Promise<void> {
-		const shouldShowContent = (contentType: string) => contentFilter.shouldShowContent(contentType)
-		const messageIsSystem = contentFilter.isSystemMessage(event.message || "")
-		const resultIsSystem = contentFilter.isSystemMessage(event.result || "")
-
-		if (this.verbose) {
-			switch (event.type) {
-				case "start":
-					console.log(`     🚀 [${timestamp}] ${event.message}: ${event.result}`)
-					break
-				case "progress":
-					console.log(`     ⏳ [${timestamp}] Step ${event.step}/${event.total}: ${event.message}`)
-					break
-				case "complete":
-				case "completion":
-					console.log(`     ✅ [${timestamp}] ${event.message}`)
-					console.log(`     📋 Result: ${event.result}`)
-					console.log("     ⏳ Task completed, waiting for stream_end signal...")
-					break
-				case "token_usage":
-					if (this.verbose) {
-						console.log(`[DEBUG-TOKEN-USAGE] 📊 Received token usage event at ${timestamp}`)
-						console.log(`[DEBUG-TOKEN-USAGE] Raw event data:`, JSON.stringify(event, null, 2))
-					}
-
-					if (this.showTokenUsage && !this.hideTokenUsage) {
-						this.state.finalTokenUsage = event.tokenUsage || null
-						this.state.finalTokenTimestamp = timestamp
-						if (this.verbose) {
-							console.log(`[DEBUG-TOKEN-USAGE] ✅ Token usage accumulated for final display`)
-						}
-					}
-					break
-				case "stream_end":
-					console.log("     🔚 Stream ended by server, closing connection...")
-					if (this.state.finalTokenUsage && this.showTokenUsage && !this.hideTokenUsage) {
-						displayTokenUsage(this.state.finalTokenUsage, this.state.finalTokenTimestamp!)
-					}
-					break
-				case "error":
-					console.log(`     ❌ [${timestamp}] Error: ${event.error}`)
-					break
-				default:
-					console.log(`     📨 [${timestamp}] ${JSON.stringify(event)}`)
-			}
-		} else {
-			// Simple output mode - stream content based on content type filtering
-			const shouldDisplay = shouldShowContent(event.contentType || "")
-
-			switch (event.type) {
-				case "start":
-					// Don't output anything for start
-					break
-				case "error":
-					if (event.error === "Invalid mode") {
-						console.log(`❌ Invalid mode: ${event.message}`)
-						console.log(`💡 Tip: Check available modes on the server or use a built-in mode`)
-						return
-					}
-					console.log(`❌ Error: ${event.error || event.message}`)
-					break
-				case "progress":
-				case "log":
-					if (event.message && event.message !== "Processing..." && !messageIsSystem && shouldDisplay) {
-						if (
-							event.contentType &&
-							event.contentType !== "content" &&
-							!event.message.match(/^<[^>]*>.*<\/[^>]*>$/)
-						) {
-							const prefix = contentFilter.getContentTypePrefix(event.contentType, event.toolName)
-							if (prefix) {
-								process.stdout.write(prefix)
-							}
-						}
-						const filteredMessage = contentFilter.processText(event.message)
-						process.stdout.write(filteredMessage)
-					}
-					break
-				case "complete":
-				case "completion":
-					if (event.result && !resultIsSystem && shouldDisplay) {
-						const filteredResult = contentFilter.processText(event.result)
-						process.stdout.write(filteredResult)
-					}
-					break
-				case "token_usage":
-					if (this.showTokenUsage && !this.hideTokenUsage) {
-						this.state.finalTokenUsage = event.tokenUsage || null
-						this.state.finalTokenTimestamp = timestamp
-					}
-					break
-				case "stream_end":
-					if (this.state.finalTokenUsage && this.showTokenUsage && !this.hideTokenUsage) {
-						displayTokenUsage(this.state.finalTokenUsage, this.state.finalTokenTimestamp!)
-					}
-					break
-			}
-		}
+		// Delegate all output formatting to ClientContentFilter
+		contentFilter.formatAndOutputEvent(event, timestamp)
 	}
 
 	public pauseProcessing(): void {
@@ -582,6 +471,7 @@ class REPLSession {
 	private rl: readline.Interface
 	private taskId: string | null = null
 	private options: REPLSessionOptions
+	private exitResolver: (() => void) | null = null
 
 	constructor(options: REPLSessionOptions) {
 		this.options = options
@@ -625,7 +515,11 @@ class REPLSession {
 
 		console.log("💡 First command will create a new task\n")
 
-		this.promptUser()
+		// Create a promise that keeps the process alive until user exits
+		return new Promise<void>((resolve) => {
+			this.exitResolver = resolve
+			this.promptUser()
+		})
 	}
 
 	private async loadHistory(): Promise<void> {
@@ -683,7 +577,11 @@ class REPLSession {
 			if (this.historyService) {
 				await this.historyService.flush()
 			}
-			process.exit(0)
+			// Resolve the promise to allow process to exit gracefully
+			if (this.exitResolver) {
+				this.exitResolver()
+			}
+			return
 		}
 
 		if (input === "newtask") {
@@ -733,8 +631,6 @@ class REPLSession {
 
 		// Execute the command
 		await this.executeCommand(input)
-
-		this.promptUser()
 	}
 
 	private showHelp(): void {
@@ -877,6 +773,8 @@ class REPLSession {
 class ClientContentFilter {
 	private options: ContentFilterOptions
 	private state: ContentFilterState
+	private finalTokenUsage: TokenUsage | null = null
+	private finalTokenTimestamp: string | null = null
 
 	constructor(options: ContentFilterOptions) {
 		this.options = options
@@ -937,6 +835,141 @@ class ClientContentFilter {
 			default:
 				return ""
 		}
+	}
+
+	/**
+	 * Main method to handle event output formatting
+	 */
+	formatAndOutputEvent(event: StreamEvent, timestamp: string): void {
+		if (this.options.verbose) {
+			this.outputVerboseEvent(event, timestamp)
+		} else {
+			this.outputSimpleEvent(event, timestamp)
+		}
+	}
+
+	/**
+	 * Verbose mode output - shows everything with timestamps
+	 */
+	private outputVerboseEvent(event: StreamEvent, timestamp: string): void {
+		switch (event.type) {
+			case "start":
+				console.log(`     🚀 [${timestamp}] ${event.message}: ${event.result}`)
+				break
+			case "progress":
+				console.log(`     ⏳ [${timestamp}] Step ${event.step}/${event.total}: ${event.message}`)
+				break
+			case "complete":
+			case "completion":
+				console.log(`     ✅ [${timestamp}] ${event.message}`)
+				console.log(`     📋 Result: ${event.result}`)
+				console.log("     ⏳ Task completed, waiting for stream_end signal...")
+				break
+			case "token_usage":
+				if (this.options.verbose) {
+					console.log(`[DEBUG-TOKEN-USAGE] 📊 Received token usage event at ${timestamp}`)
+					console.log(`[DEBUG-TOKEN-USAGE] Raw event data:`, JSON.stringify(event, null, 2))
+				}
+
+				if (this.options.showTokenUsage && !this.options.hideTokenUsage) {
+					this.finalTokenUsage = event.tokenUsage || null
+					this.finalTokenTimestamp = timestamp
+					if (this.options.verbose) {
+						console.log(`[DEBUG-TOKEN-USAGE] ✅ Token usage accumulated for final display`)
+					}
+				}
+				break
+			case "stream_end":
+				console.log("     🔚 Stream ended by server, closing connection...")
+				if (this.finalTokenUsage && this.options.showTokenUsage && !this.options.hideTokenUsage) {
+					displayTokenUsage(this.finalTokenUsage, this.finalTokenTimestamp!)
+				}
+				break
+			case "error":
+				console.log(`     ❌ [${timestamp}] Error: ${event.error}`)
+				break
+			default:
+				console.log(`     📨 [${timestamp}] ${JSON.stringify(event)}`)
+		}
+	}
+
+	/**
+	 * Simple mode output - selective display based on content filtering
+	 */
+	private outputSimpleEvent(event: StreamEvent, timestamp: string): void {
+		const shouldDisplay = this.shouldShowContent(event.contentType || "")
+		const messageIsSystem = this.isSystemMessage(event.message || "")
+		const resultIsSystem = this.isSystemMessage(event.result || "")
+
+		switch (event.type) {
+			case "start":
+				// Don't output anything for start
+				break
+			case "error":
+				if (event.error === "Invalid mode") {
+					console.log(`❌ Invalid mode: ${event.message}`)
+					console.log(`💡 Tip: Check available modes on the server or use a built-in mode`)
+					return
+				}
+				console.log(`❌ Error: ${event.error || event.message}`)
+				break
+			case "progress":
+			case "log":
+				if (event.message && event.message !== "Processing..." && !messageIsSystem && shouldDisplay) {
+					this.outputContentWithPrefix(event.message, event.contentType, event.toolName)
+				}
+				break
+			case "complete":
+			case "completion":
+				if (event.result && !resultIsSystem && shouldDisplay) {
+					const filteredResult = this.processText(event.result)
+					process.stdout.write(filteredResult)
+				}
+				break
+			case "token_usage":
+				if (this.options.showTokenUsage && !this.options.hideTokenUsage) {
+					this.finalTokenUsage = event.tokenUsage || null
+					this.finalTokenTimestamp = timestamp
+				}
+				break
+			case "stream_end":
+				if (this.finalTokenUsage && this.options.showTokenUsage && !this.options.hideTokenUsage) {
+					displayTokenUsage(this.finalTokenUsage, this.finalTokenTimestamp!)
+				}
+				break
+		}
+	}
+
+	/**
+	 * Helper method to output content with appropriate prefix
+	 */
+	private outputContentWithPrefix(message: string, contentType?: string, toolName?: string): void {
+		if (contentType && contentType !== "content" && !message.match(/^<[^>]*>.*<\/[^>]*>$/)) {
+			const prefix = this.getContentTypePrefix(contentType, toolName)
+			if (prefix) {
+				process.stdout.write(prefix)
+			}
+		}
+		const filteredMessage = this.processText(message)
+		process.stdout.write(filteredMessage)
+	}
+
+	/**
+	 * Get final token usage for display
+	 */
+	getFinalTokenUsage(): { tokenUsage: TokenUsage | null; timestamp: string | null } {
+		return {
+			tokenUsage: this.finalTokenUsage,
+			timestamp: this.finalTokenTimestamp,
+		}
+	}
+
+	/**
+	 * Reset token usage state
+	 */
+	resetTokenUsage(): void {
+		this.finalTokenUsage = null
+		this.finalTokenTimestamp = null
 	}
 }
 
@@ -1054,6 +1087,9 @@ async function executeStreamingRequest(
 			showSystem: options.showSystem,
 			showCompletion: options.showCompletion,
 			showMcpUse: options.showMcpUse,
+			showTokenUsage: options.showTokenUsage,
+			hideTokenUsage: options.hideTokenUsage,
+			verbose: options.verbose,
 		})
 
 		// Create stream processor for handling question pausing
@@ -1062,14 +1098,6 @@ async function executeStreamingRequest(
 				verbose: options.verbose,
 				maxRetries: 3,
 				baseDelay: 1000,
-				showResponse: options.showResponse,
-				showThinking: options.showThinking,
-				showTools: options.showTools,
-				showSystem: options.showSystem,
-				showCompletion: options.showCompletion,
-				showMcpUse: options.showMcpUse,
-				showTokenUsage: options.showTokenUsage,
-				hideTokenUsage: options.hideTokenUsage,
 			},
 			options,
 		)

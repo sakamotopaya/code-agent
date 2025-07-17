@@ -1,60 +1,111 @@
-# API Client REPL Continuation Fix
+# API Client REPL Continuation Fix - CORRECTED
 
-## Problem Description
+## Issue Description
 
-When using the API client in `--repl` mode, after executing a task, the client exits instead of returning to the REPL prompt. This breaks the interactive experience and forces users to restart the client for each command.
+The API client's REPL mode (`--repl`) exits after completing a request instead of prompting for the next input. This breaks the continuous conversation flow that users expect from a REPL interface.
 
-## Root Cause
+## Root Cause - CORRECTED ANALYSIS
 
-The issue is in the `handleInput` method of the `REPLSession` class in `src/tools/api-client.ts`. After executing a command via `await this.executeCommand(input)`, the method doesn't call `this.promptUser()` again to continue the REPL loop.
+The issue is NOT duplicate `promptUser()` calls. The real problem is that the `start()` method returns immediately after calling `promptUser()`, which causes the `main()` function to complete, which causes the Node.js process to exit.
 
-**Current flow:**
+## Code Analysis
 
-1. User enters command in REPL
-2. `promptUser()` calls `handleInput()`
-3. `handleInput()` executes the command via `executeCommand()`
-4. Method returns without calling `promptUser()` again
-5. REPL exits
+### Current Problematic Flow
 
-## Solution
+```typescript
+// In main() function
+if (options.replMode) {
+    const replSession = new REPLSession({...})
+    await replSession.start()  // Returns immediately!
+}
+// main() completes, process exits!
 
-Add a call to `this.promptUser()` at the end of the `handleInput` method to continue the REPL loop after command execution.
+// In REPLSession.start()
+async start(): Promise<void> {
+    console.log("🚀 Roo API Client REPL Mode")
+    // ... setup code ...
+    this.promptUser()  // Async callback-based, but start() returns immediately
+}
+```
 
-**Fixed flow:**
+### The Real Problem
 
-1. User enters command in REPL
-2. `promptUser()` calls `handleInput()`
-3. `handleInput()` executes the command via `executeCommand()`
-4. `handleInput()` calls `this.promptUser()` to continue the loop
-5. REPL returns to prompt, ready for next command
+1. `start()` calls `promptUser()` but doesn't wait for it
+2. `promptUser()` uses `readline.question()` which is callback-based
+3. `start()` returns immediately, completing the `main()` function
+4. The Node.js process exits before the REPL can continue
+
+### Solution
+
+The `start()` method needs to return a Promise that only resolves when the user explicitly exits the REPL:
+
+```typescript
+class REPLSession {
+	private exitResolver: (() => void) | null = null
+
+	async start(): Promise<void> {
+		console.log("🚀 Roo API Client REPL Mode")
+		// ... setup code ...
+
+		// Create a promise that keeps the process alive
+		return new Promise<void>((resolve) => {
+			this.exitResolver = resolve
+			this.promptUser()
+		})
+	}
+
+	private async handleInput(input: string): Promise<void> {
+		// ... existing code ...
+
+		// Handle exit commands
+		if (input === "exit" || input === "quit") {
+			console.log("👋 Goodbye!")
+			if (this.historyService) {
+				await this.historyService.flush()
+			}
+			// Resolve the promise to allow process to exit
+			if (this.exitResolver) {
+				this.exitResolver()
+			}
+			return
+		}
+
+		// ... rest of existing code ...
+	}
+}
+```
+
+## Files Affected
+
+- `src/tools/api-client.ts` - REPLSession class
 
 ## Implementation Details
 
-### File: `src/tools/api-client.ts`
+### Changes Required
 
-### Method: `REPLSession.handleInput()`
+1. **Add exitResolver property** to REPLSession class
+2. **Modify start() method** to return a Promise that waits for exit
+3. **Modify handleInput() method** to resolve the Promise on exit
+4. **Remove process.exit(0)** calls and use Promise resolution instead
 
-### Line: After line 736 (after `await this.executeCommand(input)`)
+### Key Changes
 
-Add the following code:
-
-```typescript
-// Continue REPL loop after command execution
-this.promptUser()
-```
-
-This ensures the REPL continues after each command execution, maintaining the interactive session.
+1. **Line ~475**: Add `private exitResolver: (() => void) | null = null`
+2. **Line ~503**: Modify `start()` to return a waiting Promise
+3. **Line ~570**: Modify exit handling to resolve the Promise instead of calling `process.exit(0)`
 
 ## Testing
 
-1. Start API client in REPL mode: `npm run api-client -- --repl`
-2. Execute a task command
-3. Verify that the REPL returns to the prompt instead of exiting
-4. Execute multiple commands in sequence to ensure continuous operation
+1. Run API client in REPL mode: `api-client --repl --stream`
+2. Execute a command and verify it completes
+3. Verify the REPL prompts for the next input instead of exiting
+4. Test multiple consecutive commands to ensure continuous operation
+5. Test that 'exit' command properly terminates the process
 
-## Impact
+## Root Cause Summary
 
-- **Low Risk**: Single line addition with clear intent
-- **High Value**: Fixes critical REPL functionality
-- **No Breaking Changes**: Maintains existing API and behavior
-- **Backward Compatible**: No impact on non-REPL usage
+- **NOT** a duplicate `promptUser()` call issue
+- **IS** a process lifecycle issue where `start()` returns immediately
+- **FIX** is to make `start()` wait until user explicitly exits
+
+This maintains the process alive while the REPL is running and only exits when the user chooses to exit.

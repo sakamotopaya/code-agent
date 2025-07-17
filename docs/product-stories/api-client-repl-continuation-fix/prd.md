@@ -1,46 +1,84 @@
 # API Client REPL Continuation Fix - Product Requirements Document
 
+## Overview
+
+The API client's REPL mode is currently broken - it exits after completing a request instead of prompting for the next input. This breaks the continuous conversation flow that users expect from a REPL interface.
+
 ## Problem Statement
 
-The API client's REPL mode exits after executing a single task instead of returning to the prompt, breaking the interactive experience and forcing users to restart the client for each command.
+Users who run `api-client --repl --stream` expect to have a continuous interactive session where they can:
 
-## User Story
+1. Execute a command
+2. See the response
+3. Immediately be prompted for the next command
+4. Continue this loop indefinitely until they type `exit`
 
-As a developer using the API client in REPL mode, I want the client to return to the prompt after executing a command so that I can continue working interactively without having to restart the client.
+Currently, the REPL exits after the first command completes, forcing users to restart the client for each command.
 
-## Acceptance Criteria
+## User Impact
 
-1. **REPL Continuation**: After executing a task command in REPL mode, the client should return to the interactive prompt
-2. **Multiple Commands**: Users should be able to execute multiple commands in sequence without restarting the client
-3. **Existing Functionality**: All existing REPL commands (exit, quit, newtask, help, history) should continue to work as expected
-4. **Error Handling**: If a command fails, the REPL should still continue and prompt for the next command
+- **Broken User Experience**: Users cannot have continuous conversations with the agent
+- **Reduced Productivity**: Users must restart the client after each command
+- **Inconsistent Behavior**: The REPL doesn't behave like standard REPL interfaces
+- **Development Friction**: Developers testing the API client lose efficiency
+
+## Success Criteria
+
+1. **Continuous Operation**: REPL should continue prompting for input after each command completion
+2. **No Duplicate Prompts**: Should not show multiple prompts or exhibit race conditions
+3. **Proper Exit Handling**: Should only exit when user explicitly types `exit` or `quit`
+4. **Stable Operation**: Should handle multiple consecutive commands without issues
 
 ## Technical Requirements
 
-- Fix the `handleInput` method in `REPLSession` class to continue the REPL loop after command execution
-- Ensure the fix doesn't break existing functionality
-- Maintain backward compatibility with non-REPL usage
+1. **Fix Duplicate Calls**: Remove the duplicate `this.promptUser()` call causing the race condition
+2. **Maintain Single Loop**: Ensure REPL loop is controlled by a single mechanism
+3. **Preserve Existing Features**: All current REPL features (history, commands, etc.) must continue working
+4. **Error Handling**: Errors during command execution should not break the REPL loop
 
-## Success Metrics
+## Implementation Approach
 
-- REPL mode successfully continues after task execution
-- Users can execute multiple commands in a single session
-- No regression in existing REPL functionality
+1. **Identify Duplicate Calls**: Located in `REPLSession.handleInput()` method
+2. **Remove Duplicate**: Remove the extra `this.promptUser()` call at the end of `handleInput()`
+3. **Validate Loop**: Ensure the callback in `promptUser()` maintains the loop correctly
+4. **Test Thoroughly**: Verify continuous operation across multiple commands
 
-## Priority
+## Testing Strategy
 
-**High** - This is a critical functionality issue that severely impacts usability of the REPL mode
+1. **Manual Testing**: Run `api-client --repl --stream` and execute multiple commands
+2. **Automated Testing**: Create unit tests for the REPL session flow
+3. **Edge Case Testing**: Test error scenarios, long commands, and special commands
+4. **Integration Testing**: Verify REPL works with all existing features
 
-## Effort Estimate
+## Acceptance Criteria
 
-**Small** - Single line code change with clear implementation path
+- [ ] REPL continues after completing each command
+- [ ] No duplicate prompts or race conditions
+- [ ] All existing REPL commands work correctly
+- [ ] History service continues to function
+- [ ] Error handling doesn't break the loop
+- [ ] Exit commands work as expected
+
+## Risk Assessment
+
+**Low Risk**: This is a targeted fix that removes problematic code without adding new complexity.
+
+**Mitigation**: Thorough testing across all REPL scenarios to ensure no regression.
 
 ## Dependencies
 
-None - this is a self-contained fix within the api-client.ts file
+- No external dependencies
+- Requires coordination with existing REPL features
+- Must maintain backward compatibility
 
-## Test Requirements
+## Timeline
 
-- Manual testing of REPL mode with multiple commands
-- Verification that existing REPL commands still work
-- Confirmation that non-REPL usage is unaffected
+**Story 1**: Fix REPL continuation issue (1 day)
+
+- Immediate fix can be implemented and tested
+
+## Success Metrics
+
+- REPL sessions can execute multiple commands without exiting
+- No user reports of premature REPL termination
+- Improved developer experience metrics
