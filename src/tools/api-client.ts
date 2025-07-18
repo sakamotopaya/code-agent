@@ -15,6 +15,10 @@ import * as os from "os"
 import { ReplHistoryService } from "../shared/services/ReplHistoryService"
 import { getGlobalStoragePath } from "../shared/paths"
 
+// Import ApiChunkLogger for raw chunk logging
+import { ApiChunkLogger } from "../shared/logging/ApiChunkLogger"
+import { ApiChunkLogContext } from "../shared/logging/types"
+
 // Import our types
 import type {
 	ApiClientOptions,
@@ -62,6 +66,8 @@ function parseCommandLineArgs(): ParsedArgs {
 		showTiming: false,
 		logSystemPrompt: false,
 		logLlm: false,
+		logRawChunks: false,
+		rawChunkLogDir: undefined,
 	}
 
 	let task = "Test task from API client"
@@ -101,6 +107,16 @@ function parseCommandLineArgs(): ParsedArgs {
 				break
 			case "--log-llm":
 				options.logLlm = true
+				break
+			case "--log-raw-chunks":
+				options.logRawChunks = true
+				break
+			case "--raw-chunk-log-dir":
+				options.rawChunkLogDir = args[++i]
+				if (!options.rawChunkLogDir) {
+					console.error("Error: --raw-chunk-log-dir requires a directory path")
+					process.exit(1)
+				}
 				break
 			case "--show-response":
 				options.showResponse = true
@@ -513,6 +529,13 @@ class REPLSession {
 			console.log("⚠️  History service not available - history features disabled")
 		}
 
+		// Show raw chunk logging status if enabled
+		if (this.options.logRawChunks) {
+			const logDir = this.options.rawChunkLogDir || `${getGlobalStoragePath()}/logs`
+			console.log(`📝 Raw chunk logging enabled - logs will be saved to: ${logDir}`)
+			console.log(`💡 Log files are created when you send your first command`)
+		}
+
 		console.log("💡 First command will create a new task\n")
 
 		// Create a promise that keeps the process alive until user exits
@@ -548,8 +571,10 @@ class REPLSession {
 	private promptUser(): void {
 		const prompt = this.getPrompt()
 		this.rl.question(prompt, async (input) => {
-			await this.handleInput(input.trim())
-			this.promptUser()
+			const shouldContinue = await this.handleInput(input.trim())
+			if (shouldContinue) {
+				this.promptUser()
+			}
 		})
 	}
 
@@ -566,9 +591,9 @@ class REPLSession {
 		this.taskId = null
 	}
 
-	private async handleInput(input: string): Promise<void> {
+	private async handleInput(input: string): Promise<boolean> {
 		if (!input) {
-			return
+			return true
 		}
 
 		// Handle special commands
@@ -577,27 +602,29 @@ class REPLSession {
 			if (this.historyService) {
 				await this.historyService.flush()
 			}
+			// Close the readline interface
+			this.rl.close()
 			// Resolve the promise to allow process to exit gracefully
 			if (this.exitResolver) {
 				this.exitResolver()
 			}
-			return
+			return false // Don't continue prompting
 		}
 
 		if (input === "newtask") {
 			this.taskId = null
 			console.log("🆕 Cleared task ID - next command will create a new task")
-			return
+			return true
 		}
 
 		if (input === "help") {
 			this.showHelp()
-			return
+			return true
 		}
 
 		if (input.startsWith("history")) {
 			await this.handleHistoryCommand(input.split(" ").slice(1))
-			return
+			return true
 		}
 
 		// Add to both persistent history and readline history
@@ -631,6 +658,7 @@ class REPLSession {
 
 		// Execute the command
 		await this.executeCommand(input)
+		return true
 	}
 
 	private showHelp(): void {
@@ -1063,6 +1091,13 @@ async function handleQuestionEvent(
 	}
 }
 
+/**
+ * Generate a unique request ID for chunk logging
+ */
+function generateRequestId(): string {
+	return `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+}
+
 async function executeStreamingRequest(
 	options: ApiClientOptions,
 	task: string,
@@ -1101,6 +1136,36 @@ async function executeStreamingRequest(
 			},
 			options,
 		)
+
+		// Initialize chunk logger if enabled
+		let chunkLogger: ApiChunkLogger | null = null
+		if (options.logRawChunks) {
+			chunkLogger = new ApiChunkLogger(true, options.rawChunkLogDir)
+
+			// Prepare request context
+			const requestContext: ApiChunkLogContext = {
+				requestId: generateRequestId(),
+				host: options.host,
+				port: options.port,
+				endpoint: "/execute/stream",
+				timestamp: new Date().toISOString(),
+				requestMetadata: {
+					mode: options.mode,
+					useStream: true,
+					task: task.substring(0, 100), // Truncate for log
+					logSystemPrompt: options.logSystemPrompt,
+					logLlm: options.logLlm,
+					verbose: options.verbose,
+				},
+			}
+
+			// Initialize logger with context
+			chunkLogger.initialize(requestContext).catch((error) => {
+				if (options.verbose) {
+					console.error("Failed to initialize chunk logger:", error)
+				}
+			})
+		}
 
 		let extractedTaskId: string | null = null
 
@@ -1181,6 +1246,15 @@ async function executeStreamingRequest(
 				resetSlidingTimeout()
 
 				res.on("data", (chunk) => {
+					// Log raw chunk FIRST, before any processing
+					if (chunkLogger) {
+						chunkLogger.logChunk(chunk.toString()).catch((error) => {
+							if (options.verbose) {
+								console.error("Failed to log chunk:", error)
+							}
+						})
+					}
+
 					buffer += chunk.toString()
 					resetSlidingTimeout()
 
@@ -1232,6 +1306,11 @@ async function executeStreamingRequest(
 									if (replSession && replSession.setTaskId && extractedTaskId) {
 										replSession.setTaskId(extractedTaskId)
 									}
+
+									// Update chunk logger context with task ID
+									if (chunkLogger && extractedTaskId) {
+										chunkLogger.updateContext({ taskId: extractedTaskId })
+									}
 								}
 
 								// Process event through stream processor
@@ -1258,6 +1337,15 @@ async function executeStreamingRequest(
 						clearTimeout(streamTimeout)
 					}
 
+					// Close chunk logger
+					if (chunkLogger) {
+						chunkLogger.close().catch((error) => {
+							if (options.verbose) {
+								console.error("Failed to close chunk logger:", error)
+							}
+						})
+					}
+
 					if (options.verbose) {
 						console.log("\n📊 Stream ended")
 						const timers = executionTimer.getAllTimers()
@@ -1276,6 +1364,15 @@ async function executeStreamingRequest(
 				})
 
 				res.on("error", (error) => {
+					// Close chunk logger on error
+					if (chunkLogger) {
+						chunkLogger.close().catch((closeError) => {
+							if (options.verbose) {
+								console.error("Failed to close chunk logger on error:", closeError)
+							}
+						})
+					}
+
 					reject(error)
 				})
 			},
@@ -1355,6 +1452,8 @@ Options:
   --show-mcp-use   Show use_mcp_tool sections
   --show-token-usage Show token usage information (default: true)
   --hide-token-usage Hide token usage information
+  --log-raw-chunks   Enable raw HTTP chunk logging
+  --raw-chunk-log-dir <path>  Directory for raw chunk log files (default: ~/.agentz/logs)
   --host           API host (default: localhost)
   --port           API port (default: 3000)
   --help           Show this help
@@ -1363,6 +1462,8 @@ Examples:
   api-client --stream --mode code "Fix this bug"
   api-client --repl --stream
   api-client --stream --task abc123-def456-ghi789 "Add auth"
+  api-client --stream --log-raw-chunks --verbose "debug streaming issue"
+  api-client --stream --log-raw-chunks --raw-chunk-log-dir ./debug-logs "test task"
 `)
 }
 
@@ -1408,6 +1509,8 @@ async function main(): Promise<void> {
 				showTokenUsage: options.showTokenUsage,
 				hideTokenUsage: options.hideTokenUsage,
 				showTiming: options.showTiming,
+				logRawChunks: options.logRawChunks,
+				rawChunkLogDir: options.rawChunkLogDir,
 			})
 
 			await replSession.start()

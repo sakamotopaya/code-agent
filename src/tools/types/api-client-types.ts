@@ -21,6 +21,8 @@ export interface ApiClientOptions {
 	showTiming: boolean
 	logSystemPrompt: boolean
 	logLlm: boolean
+	logRawChunks?: boolean
+	rawChunkLogDir?: string
 }
 
 // REPL session configuration
@@ -41,6 +43,8 @@ export interface REPLSessionOptions {
 	showTokenUsage: boolean
 	hideTokenUsage: boolean
 	showTiming: boolean
+	logRawChunks?: boolean
+	rawChunkLogDir?: string
 }
 
 // Stream processor options
