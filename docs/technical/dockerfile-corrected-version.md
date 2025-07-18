@@ -84,7 +84,7 @@ COPY webview-ui/ ./webview-ui/
 COPY src/ ./src/
 
 # NOW we can safely run turbo bundle with all dependencies present
-RUN npx turbo@latest bundle --log-order grouped --output-logs new-only
+RUN npx turbo@2.5.4 bundle --log-order grouped --output-logs new-only
 
 # Install all dependencies using pnpm (including dev dependencies)
 # This installs at the workspace root level, just like on the host

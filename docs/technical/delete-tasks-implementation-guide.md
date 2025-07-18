@@ -74,7 +74,7 @@ export async function deleteTasksTool(
 			}
 
 			// Get task metadata for confirmation
-			const allTasks = await getTasksFromStorage(cline.getGlobalStoragePath())
+			const allTasks = await getTasksFromStorage(cline.globalStoragePath)
 			const tasksToDelete = allTasks.filter((task) => taskIds.includes(task.id))
 
 			// Check for non-existent tasks
@@ -101,7 +101,7 @@ export async function deleteTasksTool(
 			}
 
 			// Perform deletions
-			const results = await deleteTasksFromStorage(taskIds, cline.getGlobalStoragePath())
+			const results = await deleteTasksFromStorage(taskIds, cline.globalStoragePath)
 
 			// Format and return results
 			const resultMessage = formatDeletionResults(results)

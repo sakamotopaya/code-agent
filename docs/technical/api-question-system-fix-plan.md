@@ -39,7 +39,7 @@ QUESTION_EVENT: {"type":"question","questionId":"q_job_md1xocvs_9b582121_1752426
 ```typescript
 interface TaskOptions {
 	// ... existing options
-	runtimeMode?: "vscode" | "api" | "cli" // NEW: Explicit runtime identification
+	runtimeMode: "vscode" | "api" | "cli" // NEW: Explicit runtime identification (required)
 	outputAdapter?: IOutputAdapter // Already exists but ignored in question init
 }
 ```

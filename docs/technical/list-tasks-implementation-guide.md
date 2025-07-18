@@ -32,6 +32,13 @@ import * as fs from "fs/promises"
 
 /**
  * Implements the list_tasks tool.
+ *
+ * @param cline - The Task instance providing context and global storage access
+ * @param block - Tool use block containing parameters and execution state
+ * @param askApproval - Function to request user approval for tool operations
+ * @param handleError - Function to handle and report errors consistently
+ * @param pushToolResult - Function to push tool execution results
+ * @param removeClosingTag - Function to remove closing tags from streaming content
  */
 export async function listTasksTool(
 	cline: Task,
