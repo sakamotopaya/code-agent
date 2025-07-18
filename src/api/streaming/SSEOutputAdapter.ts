@@ -9,17 +9,19 @@ import {
 	WebviewContent,
 	WebviewOptions,
 } from "../../core/interfaces/IUserInterface"
+import { IOutputAdapter } from "../../core/interfaces/IOutputAdapter"
 import { StreamManager } from "./StreamManager"
 import { SSEEvent, SSE_EVENTS, TokenUsage } from "./types"
 import { getCLILogger } from "../../cli/services/CLILogger"
 import { MessageBuffer, ProcessedMessage, ContentType } from "./MessageBuffer"
 import { ApiQuestionManager } from "../questions/ApiQuestionManager"
+import { HistoryItem, ClineMessage } from "@roo-code/types"
 
 /**
- * SSE Output Adapter that implements IUserInterface to capture Task events
- * and stream them to HTTP clients in real-time via Server-Sent Events
+ * SSE Output Adapter that implements both IUserInterface and IOutputAdapter
+ * to capture Task events and stream them to HTTP clients in real-time via Server-Sent Events
  */
-export class SSEOutputAdapter implements IUserInterface {
+export class SSEOutputAdapter implements IUserInterface, IOutputAdapter {
 	private streamManager: StreamManager
 	public readonly jobId: string
 	private logger = getCLILogger()
@@ -27,6 +29,8 @@ export class SSEOutputAdapter implements IUserInterface {
 	private messageBuffer: MessageBuffer
 	private verbose: boolean
 	private questionManager: ApiQuestionManager
+	private persistentData: Map<string, any> = new Map()
+	private taskHistory: HistoryItem[] = []
 
 	constructor(
 		streamManager: StreamManager,
@@ -398,13 +402,14 @@ export class SSEOutputAdapter implements IUserInterface {
 	/**
 	 * Emit a start event
 	 */
-	async emitStart(message: string = "Task started", task?: string): Promise<void> {
+	async emitStart(message: string = "Task started", task?: string, taskId?: string): Promise<void> {
 		const event: SSEEvent = {
 			type: SSE_EVENTS.START,
 			jobId: this.jobId,
 			timestamp: new Date().toISOString(),
 			message,
 			task,
+			...(taskId && { taskId }),
 		}
 
 		this.emitEvent(event)
@@ -428,9 +433,14 @@ export class SSEOutputAdapter implements IUserInterface {
 	/**
 	 * Emit a completion event
 	 */
-	async emitCompletion(message: string = "Task completed", result?: any): Promise<void> {
+	async emitCompletion(
+		message: string = "Task completed",
+		result?: any,
+		taskId?: string,
+		completionType: "intermediate" | "final" = "final",
+	): Promise<void> {
 		const startTime = Date.now()
-		console.log(`[SSE-COMPLETION] 🎯 emitCompletion() called at ${new Date().toISOString()}`)
+		console.log(`[SSE-COMPLETION] 🎯 emitCompletion(${completionType}) called at ${new Date().toISOString()}`)
 		console.log(
 			`[SSE-COMPLETION] 📝 Message content: "${message.substring(0, 200)}${message.length > 200 ? "..." : ""}" (${message.length} chars)`,
 		)
@@ -445,6 +455,10 @@ export class SSEOutputAdapter implements IUserInterface {
 				timestamp: new Date().toISOString(),
 				message,
 				result,
+				...(taskId && {
+					taskId,
+					restartCommand: `--task ${taskId}`,
+				}),
 			}
 			console.log(`[SSE-COMPLETION] 📤 About to emit single event with timestamp: ${event.timestamp}`)
 			this.emitEvent(event)
@@ -516,13 +530,17 @@ export class SSEOutputAdapter implements IUserInterface {
 		}
 
 		const endTime = Date.now()
-		console.log(`[SSE-COMPLETION] ✅ emitCompletion() completed in ${endTime - startTime}ms`)
+		console.log(`[SSE-COMPLETION] ✅ emitCompletion(${completionType}) completed in ${endTime - startTime}ms`)
 
-		// ✅ NEW: Schedule stream_end event after completion processing
-		console.log(`[SSE-COMPLETION] 🕐 Scheduling stream_end event in 50ms`)
-		setTimeout(() => {
-			this.emitStreamEnd()
-		}, 50)
+		// Only schedule stream_end for final completions
+		if (completionType === "final") {
+			console.log(`[SSE-COMPLETION] 🕐 Scheduling stream_end event in 50ms`)
+			setTimeout(() => {
+				this.emitStreamEnd()
+			}, 50)
+		} else {
+			console.log(`[SSE-COMPLETION] ⏳ Intermediate completion - keeping stream alive`)
+		}
 	}
 
 	/**
@@ -818,5 +836,169 @@ export class SSEOutputAdapter implements IUserInterface {
 			result: { success },
 		}
 		this.emitEvent(event)
+	}
+
+	/**
+	 * Get a prompt manager that works with SSE streams
+	 * This bridges CLI PromptManager interface with API question system
+	 */
+
+	// IOutputAdapter implementation methods
+
+	/**
+	 * Output complete content - maps to existing SSE functionality
+	 */
+	async outputContent(message: ClineMessage): Promise<void> {
+		// Convert ClineMessage to appropriate SSE event
+		const eventType = message.type === "ask" ? SSE_EVENTS.QUESTION_ASK : SSE_EVENTS.PROGRESS
+		const event: SSEEvent = {
+			type: eventType,
+			jobId: this.jobId,
+			timestamp: new Date().toISOString(),
+			message: message.text || "",
+			...(message.ask && { ask: message.ask }),
+			...(message.say && { say: message.say }),
+			...(message.images && { images: message.images }),
+		}
+		this.emitEvent(event)
+	}
+
+	/**
+	 * Output partial content during streaming
+	 */
+	async outputPartialContent(partialMessage: ClineMessage): Promise<void> {
+		// Handle partial messages similarly to complete content but indicate in message
+		const event: SSEEvent = {
+			type: SSE_EVENTS.PROGRESS,
+			jobId: this.jobId,
+			timestamp: new Date().toISOString(),
+			message: `[Partial] ${partialMessage.text || ""}`,
+			result: JSON.stringify({
+				partial: true,
+				ask: partialMessage.ask,
+				say: partialMessage.say,
+				images: partialMessage.images,
+			}),
+		}
+		this.emitEvent(event)
+	}
+
+	/**
+	 * Send structured message to user interface
+	 */
+	async sendMessage(message: any): Promise<void> {
+		const event: SSEEvent = {
+			type: SSE_EVENTS.INFORMATION,
+			jobId: this.jobId,
+			timestamp: new Date().toISOString(),
+			message: typeof message === "string" ? message : JSON.stringify(message),
+			result: typeof message === "object" ? JSON.stringify(message) : message,
+		}
+		this.emitEvent(event)
+	}
+
+	/**
+	 * Send partial update to user interface
+	 */
+	async sendPartialUpdate(partialMessage: any): Promise<void> {
+		// SSE doesn't need separate partial message handling
+		// This is handled by outputPartialContent - avoid duplication
+		// The outputPartialContent method already sends the partial content with [Partial] prefix
+	}
+
+	/**
+	 * Synchronize complete application state
+	 */
+	async syncState(state: any): Promise<void> {
+		const event: SSEEvent = {
+			type: SSE_EVENTS.INFORMATION,
+			jobId: this.jobId,
+			timestamp: new Date().toISOString(),
+			message: "State synchronized",
+			result: typeof state === "string" ? state : JSON.stringify(state),
+		}
+		this.emitEvent(event)
+	}
+
+	/**
+	 * Notify of state changes
+	 */
+	async notifyStateChange(changeType: string, data?: any): Promise<void> {
+		const event: SSEEvent = {
+			type: SSE_EVENTS.INFORMATION,
+			jobId: this.jobId,
+			timestamp: new Date().toISOString(),
+			message: `State change: ${changeType}`,
+			result: JSON.stringify({
+				changeType,
+				data,
+			}),
+		}
+		this.emitEvent(event)
+	}
+
+	/**
+	 * Update task history in persistent storage
+	 */
+	async updateTaskHistory(item: HistoryItem): Promise<HistoryItem[]> {
+		// Store in memory for API context
+		this.taskHistory.push(item)
+
+		// Emit history update event
+		const event: SSEEvent = {
+			type: SSE_EVENTS.INFORMATION,
+			jobId: this.jobId,
+			timestamp: new Date().toISOString(),
+			message: "Task history updated",
+			result: JSON.stringify(item),
+		}
+		this.emitEvent(event)
+
+		return this.taskHistory
+	}
+
+	/**
+	 * Update persistent data
+	 */
+	async updatePersistentData(key: string, data: any): Promise<void> {
+		this.persistentData.set(key, data)
+	}
+
+	/**
+	 * Get persistent data
+	 */
+	getPersistentData<T>(key: string): T | undefined {
+		return this.persistentData.get(key) as T | undefined
+	}
+
+	/**
+	 * Reset adapter state for new task
+	 */
+	reset(): void {
+		this.resetMessageBuffer()
+		this.persistentData.clear()
+		this.taskHistory = []
+		this.questionCounter = 0
+	}
+
+	/**
+	 * Cleanup and dispose resources
+	 */
+	async dispose(): Promise<void> {
+		// Cancel any pending questions
+		await this.questionManager.cancelJobQuestions(this.jobId, "Adapter disposed").catch((error) => {
+			this.logger.warn(`Failed to cancel questions during dispose for job ${this.jobId}: ${error}`)
+		})
+
+		// Close the stream
+		this.close()
+
+		// Clear all persistent data
+		this.persistentData.clear()
+		this.taskHistory = []
+	}
+	getPromptManager(): import("../services/SSEPromptManager").SSEPromptManager {
+		const { SSEPromptManager } = require("../services/SSEPromptManager")
+		return new SSEPromptManager(this, this.questionManager, this.jobId)
 	}
 }

@@ -17,6 +17,7 @@ import { getStoragePath } from "../../shared/paths"
 import { SharedContentProcessor } from "../../core/content/SharedContentProcessor"
 import { SSEStreamingAdapter, SSEContentOutputAdapter } from "../../core/adapters/api/SSEOutputAdapters"
 import { UnifiedCustomModesService } from "../../shared/services/UnifiedCustomModesService"
+import { UnifiedTaskService, TaskData } from "../../shared/services/UnifiedTaskService"
 import { NodeFileWatcher } from "../../shared/services/watchers/NodeFileWatcher"
 import type { ModeConfig } from "@roo-code/types"
 
@@ -35,6 +36,7 @@ export class FastifyServer {
 	private questionManager: ApiQuestionManager
 	private taskExecutionOrchestrator: TaskExecutionOrchestrator
 	private customModesService: UnifiedCustomModesService
+	private unifiedTaskService: UnifiedTaskService
 
 	constructor(config: ApiConfigManager, adapters: CoreInterfaces) {
 		this.config = config
@@ -51,6 +53,9 @@ export class FastifyServer {
 			fileWatcher: new NodeFileWatcher(), // File watching enabled for API
 			enableProjectModes: false, // API typically doesn't have workspace context
 		})
+
+		// Initialize unified task service for cross-context task access
+		this.unifiedTaskService = new UnifiedTaskService(storagePath)
 
 		this.app = fastify({
 			logger: LoggerConfigManager.createLoggerConfig(config),
@@ -183,11 +188,16 @@ export class FastifyServer {
 				const verbose = body.verbose || false // Extract verbose flag from request
 				const logSystemPrompt = body.logSystemPrompt || false
 				const logLlm = body.logLlm || false
+				const taskId = body.taskId
+				const restartTask = body.restartTask || false
 
 				console.log(`[FastifyServer] /execute/stream request received`)
 				console.log(`[FastifyServer] Mode parameter: ${mode}`)
 				console.log(`[FastifyServer] Task: ${task}`)
 				console.log(`[FastifyServer] Verbose: ${verbose}`)
+				if (restartTask) {
+					console.log(`[FastifyServer] Task restart requested for: ${taskId}`)
+				}
 
 				// Validate mode exists
 				const selectedMode = await this.validateMode(mode)
@@ -203,7 +213,47 @@ export class FastifyServer {
 					source: selectedMode.source || "unknown",
 				})
 
-				// Create job
+				// Handle task restart
+				if (restartTask && taskId) {
+					const taskData = await this.loadExistingTask(taskId)
+					if (!taskData) {
+						reply.code(404).send({
+							error: "Task not found",
+							message: `Task ${taskId} could not be found or loaded. It may have been deleted or corrupted.`,
+							taskId: taskId,
+						})
+						return
+					}
+
+					// Create job for the continued task
+					const job = this.jobManager.createJob(`Continue: ${task}`, {
+						mode: taskData.mode,
+						clientInfo: {
+							userAgent: request.headers["user-agent"],
+							ip: request.ip,
+						},
+					})
+
+					this.app.log.info(`Created continuation job ${job.id} for task ${taskId}`)
+
+					// Set SSE headers
+					reply.raw.writeHead(200, {
+						"Content-Type": "text/event-stream",
+						"Cache-Control": "no-cache",
+						Connection: "keep-alive",
+						"Access-Control-Allow-Origin": "*",
+						"Access-Control-Allow-Headers": "Cache-Control",
+					})
+
+					// Create SSE adapter
+					const sseAdapter = new SSEOutputAdapter(this.streamManager, job.id, verbose, this.questionManager)
+
+					// Continue the existing task
+					await this.continueExistingTask(taskData, task, reply, sseAdapter, job)
+					return
+				}
+
+				// Create job for new task
 				const job = this.jobManager.createJob(task, {
 					mode: selectedMode.slug,
 					clientInfo: {
@@ -237,7 +287,7 @@ export class FastifyServer {
 				const sseStreamingAdapter = new SSEStreamingAdapter(sseAdapter)
 				const sseContentOutputAdapter = new SSEContentOutputAdapter(sseAdapter)
 
-				// Send initial start event
+				// Send initial start event (will be updated with taskId after Task.create())
 				await sseAdapter.emitStart("Task started", task)
 
 				// Handle client disconnect
@@ -310,18 +360,27 @@ export class FastifyServer {
 					keyPrefix: apiConfiguration.apiKey?.substring(0, 10),
 				})
 
+				// Debug workspace configuration
+				const configWorkspaceRoot = this.config.getConfiguration().workspaceRoot
+				const finalWorkspacePath = configWorkspaceRoot || process.cwd()
+				console.log(`[FastifyServer] DEBUG - configWorkspaceRoot: ${configWorkspaceRoot}`)
+				console.log(`[FastifyServer] DEBUG - finalWorkspacePath: ${finalWorkspacePath}`)
+				console.log(`[FastifyServer] DEBUG - process.cwd(): ${process.cwd()}`)
+
 				const taskOptions = {
 					apiConfiguration,
 					task,
 					mode: selectedMode.slug, // Pass the validated mode
+					runtimeMode: "api" as const, // Explicit runtime identification for unified question manager
 					startTask: true, // This will start the task automatically
 					fileSystem: taskAdapters.fileSystem,
 					terminal: taskAdapters.terminal,
 					browser: taskAdapters.browser,
 					telemetry: taskAdapters.telemetry,
-					workspacePath: this.config.getConfiguration().workspaceRoot || process.cwd(),
+					workspacePath: finalWorkspacePath,
 					verbose: this.config.getConfiguration().debug,
 					userInterface: sseAdapter, // Use SSE adapter as the user interface
+					outputAdapter: sseAdapter, // SSE adapter now properly implements IOutputAdapter interface
 					globalStoragePath: getStoragePath(),
 					// MCP configuration following CLI pattern
 					mcpConfigPath: this.config.getConfiguration().mcpConfigPath,
@@ -333,6 +392,14 @@ export class FastifyServer {
 					// Logging configuration
 					logSystemPrompt,
 					logLlm,
+					// Pass a wrapped logger that adapts Fastify logger to ILogger interface
+					logger: {
+						debug: this.app.log.debug.bind(this.app.log),
+						verbose: this.app.log.debug.bind(this.app.log), // Map verbose to debug
+						info: this.app.log.info.bind(this.app.log),
+						warn: this.app.log.warn.bind(this.app.log),
+						error: this.app.log.error.bind(this.app.log),
+					},
 					// Custom modes service for unified tool execution
 					customModesService: this.customModesService,
 					// Disable new adapters for now - go back to existing working logic
@@ -867,5 +934,125 @@ export class FastifyServer {
 		}
 
 		return selectedMode
+	}
+
+	private async loadExistingTask(taskId: string): Promise<TaskData | null> {
+		try {
+			this.app.log.info(`Loading existing task: ${taskId}`)
+			const taskData = await this.unifiedTaskService.findTask(taskId)
+
+			if (!taskData) {
+				this.app.log.warn(`Task not found: ${taskId}`)
+				return null
+			}
+
+			this.app.log.info(`Successfully loaded task ${taskId} from ${taskData.originContext} context`)
+			return taskData
+		} catch (error) {
+			this.app.log.error(`Failed to load task ${taskId}:`, error)
+			return null
+		}
+	}
+
+	private async continueExistingTask(
+		taskData: TaskData,
+		newUserMessage: string,
+		reply: FastifyReply,
+		sseAdapter: SSEOutputAdapter,
+		job: any,
+	): Promise<void> {
+		try {
+			this.app.log.info(`Continuing task ${taskData.historyItem.id} with new message`)
+
+			// Send initial start event with task continuation info
+			await sseAdapter.emitStart(`Continuing task from ${taskData.originContext} context`, newUserMessage)
+
+			// Get API configuration (same as new tasks)
+			const apiConfiguration = await this.getApiConfiguration()
+
+			// Create task options with existing history
+			const taskOptions = {
+				apiConfiguration,
+				task: newUserMessage, // The new message to continue with
+				mode: taskData.mode,
+				historyItem: taskData.historyItem, // This triggers resume from history
+				startTask: false, // Don't auto-start, we'll resume manually
+				fileSystem: this.adapters.fileSystem,
+				terminal: this.adapters.terminal,
+				browser: this.adapters.browser,
+				userInterface: sseAdapter, // Use SSE adapter for communication
+				telemetry: this.adapters.telemetry,
+				workspacePath: taskData.workspace || this.config.getConfiguration().workspaceRoot || process.cwd(),
+				globalStoragePath: getStoragePath(),
+				verbose: this.config.getConfiguration().verbose || false,
+				customModesService: this.customModesService,
+			}
+
+			this.app.log.info(`Creating Task instance for continued task ${taskData.historyItem.id}`)
+
+			// Create Task instance
+			const [taskInstance, taskPromise] = Task.create(taskOptions)
+
+			// Restore API conversation history
+			taskInstance.apiConversationHistory = taskData.apiConversationHistory
+
+			this.app.log.info(`Task instance created, starting job tracking for ${job.id}`)
+
+			// Start job tracking
+			await this.jobManager.startJob(job.id, taskInstance, this.taskExecutionOrchestrator)
+
+			// Create execution handler
+			const executionHandler = new ApiTaskExecutionHandler(
+				sseAdapter,
+				job.id,
+				this.config.getConfiguration().verbose || false,
+			)
+
+			// Execute with orchestrator (similar to new tasks)
+			const executionOptions = {
+				isInfoQuery: false,
+				slidingTimeoutMs: this.config.getConfiguration().timeouts?.task,
+				useSlidingTimeout: true,
+				taskIdentifier: job.id,
+			}
+
+			this.app.log.info(`Starting task execution for continued task ${job.id}`)
+
+			// Resume the task with the new message
+			await taskInstance.resumePausedTask(newUserMessage)
+
+			// Execute with orchestrator
+			this.taskExecutionOrchestrator
+				.executeTask(taskInstance, taskPromise, executionHandler, executionOptions)
+				.then(async (result) => {
+					this.app.log.info(`Task ${job.id} completed successfully`)
+					await sseAdapter.emitCompletion(
+						"Task completed successfully",
+						taskData.historyItem.id,
+						undefined,
+						"final",
+					)
+					await sseAdapter.close()
+				})
+				.catch(async (error) => {
+					this.app.log.error(`Task ${job.id} failed:`, error)
+					await sseAdapter.emitError(`Task execution failed: ${error.message}`)
+					await sseAdapter.close()
+				})
+		} catch (error) {
+			this.app.log.error(`Failed to continue task ${taskData.historyItem.id}:`, error)
+			await sseAdapter.emitError(`Failed to continue task: ${error.message}`)
+			await sseAdapter.close()
+		}
+	}
+
+	private async getApiConfiguration() {
+		// Return a basic configuration for now
+		// This should be enhanced to match the actual configuration logic
+		return {
+			apiProvider: "anthropic" as const,
+			apiKey: "test-key",
+			apiModelId: "claude-3-5-sonnet-20241022",
+		}
 	}
 }

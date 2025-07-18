@@ -36,6 +36,13 @@ export class TaskMessaging {
 		private outputAdapter?: import("../interfaces/IOutputAdapter").IOutputAdapter,
 	) {}
 
+	/**
+	 * Get the output adapter for unified question system initialization
+	 */
+	getOutputAdapter(): import("../interfaces/IOutputAdapter").IOutputAdapter | undefined {
+		return this.outputAdapter
+	}
+
 	// API Messages
 	async getSavedApiConversationHistory(): Promise<ApiMessage[]> {
 		return readApiMessages({ taskId: this.taskId, globalStoragePath: this.globalStoragePath })

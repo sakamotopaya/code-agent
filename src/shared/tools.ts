@@ -63,6 +63,7 @@ export const toolParamNames = [
 	"end_line",
 	"query",
 	"filter",
+	"task_ids",
 ] as const
 
 export type ToolParamName = (typeof toolParamNames)[number]
@@ -167,6 +168,16 @@ export interface ListModesToolUse extends ToolUse {
 	params: Partial<Pick<Record<ToolParamName, string>, "filter">>
 }
 
+export interface ListTasksToolUse extends ToolUse {
+	name: "list_tasks"
+	params: Partial<Pick<Record<ToolParamName, string>, "filter">>
+}
+
+export interface DeleteTasksToolUse extends ToolUse {
+	name: "delete_tasks"
+	params: Partial<Pick<Record<ToolParamName, string>, "task_ids">>
+}
+
 // Define tool group configuration
 export type ToolGroupConfig = {
 	tools: readonly string[]
@@ -193,6 +204,8 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
 	search_and_replace: "search and replace",
 	codebase_search: "codebase search",
 	list_modes: "list modes",
+	list_tasks: "list tasks",
+	delete_tasks: "delete tasks",
 } as const
 
 // Define available tool groups.
@@ -220,7 +233,7 @@ export const TOOL_GROUPS: Record<ToolGroup, ToolGroupConfig> = {
 		tools: ["use_mcp_tool", "access_mcp_resource"],
 	},
 	modes: {
-		tools: ["switch_mode", "new_task", "list_modes"],
+		tools: ["switch_mode", "new_task", "list_modes", "list_tasks", "delete_tasks"],
 		alwaysAvailable: true,
 	},
 }
@@ -232,6 +245,8 @@ export const ALWAYS_AVAILABLE_TOOLS: ToolName[] = [
 	"switch_mode",
 	"new_task",
 	"list_modes",
+	"list_tasks",
+	"delete_tasks",
 ] as const
 
 export type DiffResult =

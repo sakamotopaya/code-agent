@@ -9,6 +9,7 @@ import { SessionManager } from "./services/SessionManager"
 import type { Session } from "./types/session-types"
 import { LoggerFactory } from "../core/services/LoggerFactory"
 import { getGlobalStoragePath } from "../shared/paths"
+import { ReplHistoryService } from "../shared/services/ReplHistoryService"
 
 interface ReplOptions extends CliAdapterOptions {
 	cwd: string
@@ -42,6 +43,7 @@ export class CliRepl {
 	private uiService: CLIUIService
 	private sessionManager: SessionManager
 	private currentSession: Session | null = null
+	private historyService: ReplHistoryService
 
 	constructor(options: ReplOptions, configManager?: CliConfigManager) {
 		this.options = options
@@ -51,6 +53,16 @@ export class CliRepl {
 		const storageConfig = configManager ? this.getStorageConfigFromManager(configManager) : {}
 		this.sessionManager = new SessionManager(storageConfig)
 		this.currentSession = null
+
+		// Initialize history service
+		this.historyService = new ReplHistoryService({
+			storageDir: getGlobalStoragePath(),
+			historyFile: "cli-repl-history.json",
+			maxHistorySize: 100,
+			context: "cli",
+			deduplication: true,
+			autoSave: true,
+		})
 
 		// Get color scheme from options
 		let colorScheme
@@ -88,6 +100,9 @@ export class CliRepl {
 
 			// Initialize session management
 			await this.sessionManager.initialize()
+
+			// Initialize and load history
+			await this.loadHistory()
 
 			// Try to create or resume a session
 			await this.initializeSession()
@@ -155,6 +170,11 @@ export class CliRepl {
 
 				if (fullInput.trim()) {
 					await this.executeTask(fullInput)
+					// Save to history after successful execution
+					await this.historyService.addEntry(fullInput, {
+						context: "cli",
+						timestamp: new Date(),
+					})
 				}
 				return
 			} else {
@@ -179,8 +199,12 @@ export class CliRepl {
 			return
 		}
 
-		// Execute as task
+		// Execute as task and save to history
 		await this.executeTask(trimmedInput)
+		await this.historyService.addEntry(trimmedInput, {
+			context: "cli",
+			timestamp: new Date(),
+		})
 	}
 
 	private async handleBuiltinCommand(input: string): Promise<boolean> {
@@ -222,6 +246,10 @@ export class CliRepl {
 
 			case "session":
 				await this.handleSessionCommand(args)
+				return true
+
+			case "history":
+				await this.handleHistoryCommand(args)
 				return true
 
 			default:
@@ -522,6 +550,10 @@ export class CliRepl {
 		console.log("  config generate     Generate default config file")
 		console.log("  config reload       Reload configuration from files")
 		console.log("  config validate     Validate current configuration")
+		console.log("  history [show] [n]  Show recent command history (default: 20)")
+		console.log("  history clear       Clear all command history")
+		console.log("  history search <p>  Search command history for pattern")
+		console.log("  history stats       Show command history statistics")
 		console.log("  abort               Abort current running task")
 		console.log("  exit, quit          Exit the CLI")
 		console.log()
@@ -709,6 +741,134 @@ export class CliRepl {
 				error instanceof Error ? error.message : String(error),
 			)
 		}
+	}
+
+	private async loadHistory(): Promise<void> {
+		try {
+			await this.historyService.initialize()
+			const history = this.historyService.getHistory()
+
+			// Apply history to readline interface
+			// ReplHistoryService returns newest first, which is what we want for readline
+			// so that up arrow shows the most recent command first
+			const commands = history.map((entry) => entry.command)
+
+			// Clear existing history and add loaded entries
+			;(this.rl as any).history = commands.slice(0, 100)
+
+			if (this.options.verbose) {
+				console.log(chalk.gray(`Loaded ${history.length} history entries`))
+			}
+		} catch (error) {
+			if (this.options.verbose) {
+				console.log(
+					chalk.yellow(`Could not load history: ${error instanceof Error ? error.message : String(error)}`),
+				)
+			}
+		}
+	}
+
+	private async handleHistoryCommand(args: string[]): Promise<void> {
+		const [subcommand, ...subArgs] = args
+
+		switch (subcommand) {
+			case "show":
+			case undefined:
+				this.showHistory(parseInt(subArgs[0]) || 20)
+				break
+
+			case "clear":
+				await this.clearHistory()
+				break
+
+			case "search":
+				this.searchHistory(subArgs.join(" "))
+				break
+
+			case "stats":
+				this.showHistoryStats()
+				break
+
+			default:
+				console.log(chalk.yellow(`Unknown history command: ${subcommand}`))
+				console.log(chalk.gray("Available commands: show [n], clear, search <pattern>, stats"))
+		}
+	}
+
+	private showHistory(limit: number = 20): void {
+		const history = this.historyService.getHistory(limit)
+
+		if (history.length === 0) {
+			console.log(chalk.gray("No history entries found"))
+			return
+		}
+
+		console.log(chalk.cyan.bold(`Recent History (${history.length} entries):`))
+		console.log(chalk.gray("=".repeat(50)))
+
+		history.forEach((entry, index) => {
+			const timeStr = entry.timestamp.toLocaleTimeString()
+			const successIcon = entry.success !== false ? "✓" : "✗"
+			console.log(
+				`${chalk.gray(`${index + 1}.`)} ${chalk.green(successIcon)} ${chalk.white(entry.command)} ${chalk.gray(`(${timeStr})`)}`,
+			)
+		})
+	}
+
+	private async clearHistory(): Promise<void> {
+		await this.historyService.clearHistory()
+		;(this.rl as any).history = []
+		console.log(chalk.green("✓ History cleared"))
+	}
+
+	private searchHistory(pattern: string): void {
+		if (!pattern) {
+			console.log(chalk.yellow("Please provide a search pattern"))
+			return
+		}
+
+		const results = this.historyService.searchHistory(new RegExp(pattern, "i"))
+
+		if (results.length === 0) {
+			console.log(chalk.gray(`No history entries found matching: ${pattern}`))
+			return
+		}
+
+		console.log(chalk.cyan.bold(`Search Results (${results.length} entries):`))
+		results.forEach((entry, index) => {
+			const timeStr = entry.timestamp.toLocaleString()
+			console.log(`${chalk.gray(`${index + 1}.`)} ${chalk.white(entry.command)} ${chalk.gray(`(${timeStr})`)}`)
+		})
+	}
+
+	private showHistoryStats(): void {
+		const stats = this.historyService.getStatistics()
+
+		console.log(chalk.cyan.bold("History Statistics:"))
+		console.log(chalk.gray("=".repeat(30)))
+		console.log(`Total entries: ${stats.totalEntries}`)
+		console.log(`Unique commands: ${stats.uniqueCommands}`)
+		console.log(`Average command length: ${stats.averageCommandLength.toFixed(1)} characters`)
+
+		if (stats.oldestEntry) {
+			console.log(`Oldest entry: ${stats.oldestEntry.toLocaleString()}`)
+		}
+
+		if (stats.newestEntry) {
+			console.log(`Newest entry: ${stats.newestEntry.toLocaleString()}`)
+		}
+
+		if (stats.mostUsedCommands.length > 0) {
+			console.log("\nMost used commands:")
+			stats.mostUsedCommands.slice(0, 5).forEach((cmd, index) => {
+				console.log(`  ${index + 1}. ${cmd.command} (${cmd.count} times)`)
+			})
+		}
+	}
+
+	private isBuiltinCommand(input: string): boolean {
+		const command = input.split(" ")[0].toLowerCase()
+		return ["exit", "quit", "clear", "help", "status", "abort", "config", "session", "history"].includes(command)
 	}
 
 	private completer(line: string): [string[], string] {

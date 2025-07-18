@@ -120,7 +120,12 @@ describe("ApiTaskExecutionHandler", () => {
 
 			await handler.onTaskCompleted(taskId, result, tokenUsage, toolUsage)
 
-			expect(mockSSEAdapter.emitCompletion).toHaveBeenCalledWith(result, "Task has been completed successfully")
+			expect(mockSSEAdapter.emitCompletion).toHaveBeenCalledWith(
+				result,
+				"Task has been completed successfully",
+				undefined,
+				"final",
+			)
 		})
 	})
 

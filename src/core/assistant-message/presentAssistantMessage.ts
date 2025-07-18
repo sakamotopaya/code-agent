@@ -25,6 +25,8 @@ import { switchModeTool } from "../tools/switchModeTool"
 import { attemptCompletionTool } from "../tools/attemptCompletionTool"
 import { newTaskTool } from "../tools/newTaskTool"
 import { listModesTool } from "../tools/listModesTool"
+import { listTasksTool } from "../tools/listTasksTool"
+import { deleteTasksTool } from "../tools/deleteTasksTool"
 
 import { checkpointSave } from "../checkpoints"
 
@@ -195,6 +197,12 @@ export async function presentAssistantMessage(cline: Task) {
 					}
 					case "list_modes":
 						return `[${block.name}${block.params.filter ? ` filter: ${block.params.filter}` : ""}]`
+					case "list_tasks":
+						return `[${block.name}${block.params.filter ? ` filter: ${block.params.filter}` : ""}]`
+					case "delete_tasks":
+						return `[${block.name}${block.params.task_ids ? ` tasks: ${JSON.parse(block.params.task_ids || "[]").length}` : ""}]`
+					default:
+						return `[${block.name}]`
 				}
 			}
 
@@ -459,6 +467,12 @@ export async function presentAssistantMessage(cline: Task) {
 					break
 				case "list_modes":
 					await listModesTool(cline, block, askApproval, handleError, pushToolResult, removeClosingTag)
+					break
+				case "list_tasks":
+					await listTasksTool(cline, block, askApproval, handleError, pushToolResult, removeClosingTag)
+					break
+				case "delete_tasks":
+					await deleteTasksTool(cline, block, askApproval, handleError, pushToolResult, removeClosingTag)
 					break
 				case "attempt_completion":
 					await attemptCompletionTool(

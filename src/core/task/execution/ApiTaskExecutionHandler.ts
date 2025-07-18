@@ -20,7 +20,7 @@ export class ApiTaskExecutionHandler implements ITaskExecutionHandler {
 		}
 
 		// Emit SSE event for task start
-		await this.sseAdapter.showProgress("Task execution started", 0)
+		//await this.sseAdapter.showProgress("Task execution started", 0)
 	}
 
 	async onTaskCompleted(taskId: string, result: string, tokenUsage?: any, toolUsage?: any): Promise<void> {
@@ -72,13 +72,16 @@ export class ApiTaskExecutionHandler implements ITaskExecutionHandler {
 
 		this.completionEmitted = true
 
+		// Log status message instead of sending to client
+		console.log(`[ApiTaskExecutionHandler] Task ${taskId} completed successfully`)
+
 		// Stream completion result in real-time rather than sending as one large block
 		if (typeof result === "string" && result.length > 100) {
 			// For large completion results, stream them chunk by chunk for better UX
 			await this.streamCompletionResult(result)
 		} else {
-			// For small results, emit normally
-			await this.sseAdapter.emitCompletion(result, "Task has been completed successfully")
+			// For small results, emit normally - only send the result to client
+			await this.sseAdapter.emitCompletion(result, undefined, undefined, "final")
 		}
 	}
 
@@ -124,9 +127,11 @@ export class ApiTaskExecutionHandler implements ITaskExecutionHandler {
 			}
 		}
 
-		// Send final completion event
-		await this.sseAdapter.emitCompletion("Task completed successfully", "Task has been completed successfully")
+		// Log status message instead of sending to client
 		console.log(`[COMPLETION-STREAMING] ✅ Completion result streaming finished`)
+
+		// Send final completion event - empty message since result was already streamed
+		await this.sseAdapter.emitCompletion("", undefined, undefined, "final")
 	}
 
 	async onTaskFailed(taskId: string, error: Error): Promise<void> {

@@ -4,6 +4,8 @@ import crypto from "crypto"
 import EventEmitter from "events"
 import { getGlobalStoragePath } from "../../shared/paths"
 
+// TASK_SOURCE_VERIFICATION_ARCHITECT_MODE_2025
+
 import { Anthropic } from "@anthropic-ai/sdk"
 import pWaitFor from "p-wait-for"
 
@@ -138,6 +140,8 @@ export type TaskOptions = {
 	onCreated?: (cline: Task) => void
 	// Mode configuration
 	mode?: string
+	// Runtime mode for explicit context identification
+	runtimeMode?: "vscode" | "api" | "cli"
 	// New interface dependencies
 	fileSystem?: IFileSystem
 	terminal?: ITerminal
@@ -185,6 +189,8 @@ export class Task extends EventEmitter<ClineEvents> {
 	isPaused: boolean = false
 	pausedModeSlug: string = defaultModeSlug
 	mode: string = defaultModeSlug
+	runtimeMode?: "vscode" | "api" | "cli"
+	outputAdapter?: import("../interfaces/IOutputAdapter").IOutputAdapter
 	private pauseInterval: NodeJS.Timeout | undefined
 
 	// API
@@ -251,6 +257,9 @@ export class Task extends EventEmitter<ClineEvents> {
 	customModesService?: import("../../shared/services/UnifiedCustomModesService").UnifiedCustomModesService
 	toolInterfaceAdapter?: import("../adapters/ToolInterfaceAdapter").ToolInterfaceAdapter
 
+	// Unified question system
+	public unifiedQuestionManager?: import("../questions").UnifiedQuestionManager
+
 	// Logging methods using injected logger
 	private logDebug(message: string, ...args: any[]): void {
 		this.logger.debug(message, ...args)
@@ -292,9 +301,108 @@ export class Task extends EventEmitter<ClineEvents> {
 			// Write system prompt to file
 			await fs.writeFile(filepath, systemPrompt, "utf-8")
 
-			this.logInfo(`System prompt logged to: ${filepath}`)
+			this.logInfo(`System prompt logged to TEST2_2025: ${filepath}`)
 		} catch (error) {
 			this.logError("Failed to write system prompt to file:", error)
+		}
+	}
+
+	/**
+	 * Initialize the unified question manager based on runtime context
+	 */
+	private initializeUnifiedQuestionManager(): void {
+		try {
+			console.log(`[TASK-DEBUG] Starting unified question manager initialization`)
+
+			// First check if we can import the questions module
+			const questionsModule = require("../../core/questions")
+			console.log(`[TASK-DEBUG] Successfully imported questions module`)
+
+			const { createQuestionManager } = questionsModule
+
+			// Use explicit runtime mode instead of fragile detection
+			let context: any = undefined
+			let detectedMode: string = "cli" // fallback
+
+			if (this.runtimeMode === "api" && this.outputAdapter) {
+				// API mode: use the outputAdapter directly
+				const sseAdapter = this.outputAdapter as any
+
+				// Ensure questionManager exists
+				if (!sseAdapter.questionManager) {
+					console.log(`[TASK-DEBUG] Creating ApiQuestionManager for SSEOutputAdapter`)
+					const { ApiQuestionManager } = require("../../api/questions/ApiQuestionManager")
+					sseAdapter.questionManager = new ApiQuestionManager()
+				}
+
+				context = {
+					sseAdapter: sseAdapter,
+					questionManager: sseAdapter.questionManager,
+				}
+				detectedMode = "api"
+				console.log(`[TASK-DEBUG] Using explicit API mode with outputAdapter`)
+			} else if (this.runtimeMode === "vscode" && this.messaging) {
+				// VSCode mode: use TaskMessaging
+				context = this.messaging
+				detectedMode = "vscode"
+				console.log(`[TASK-DEBUG] Using explicit VSCode mode with TaskMessaging`)
+			} else if (this.runtimeMode === "cli") {
+				// CLI mode: implement proper CLI handling or use fallback
+				context = null
+				detectedMode = "cli"
+				console.log(`[TASK-DEBUG] Using explicit CLI mode`)
+			} else {
+				console.log(`[TASK-DEBUG] No explicit runtime mode provided, using fallback detection`)
+				// Fallback to old detection only if no explicit mode provided
+				const outputAdapter = this.messaging?.getOutputAdapter()
+				console.log(
+					`[TASK-DEBUG] Fallback - analyzing context - providerRef: ${!!this.providerRef?.deref()}, messaging.outputAdapter: ${!!outputAdapter}`,
+				)
+
+				if (this.providerRef?.deref()) {
+					// VSCode mode - use TaskMessaging as context
+					context = this.messaging
+					detectedMode = "vscode"
+					console.log(`[TASK-DEBUG] Fallback detected VSCode mode`)
+				} else if (outputAdapter) {
+					// API mode - check if we have an SSEOutputAdapter
+					const sseAdapter = outputAdapter as any
+
+					if (sseAdapter.jobId && sseAdapter.emitEvent) {
+						// This is an SSEOutputAdapter
+						if (!sseAdapter.questionManager) {
+							const { ApiQuestionManager } = require("../../api/questions/ApiQuestionManager")
+							sseAdapter.questionManager = new ApiQuestionManager()
+						}
+
+						context = {
+							sseAdapter: sseAdapter,
+							questionManager: sseAdapter.questionManager,
+						}
+						detectedMode = "api"
+						console.log(`[TASK-DEBUG] Fallback detected API mode`)
+					}
+				}
+			}
+
+			if (!context && detectedMode === "cli") {
+				console.log(`[TASK-DEBUG] CLI mode detected but not implemented, skipping unified question manager`)
+				return
+			}
+
+			console.log(`[TASK-DEBUG] Detected question system mode: ${detectedMode}`)
+
+			this.unifiedQuestionManager = createQuestionManager(context, {
+				mode: detectedMode,
+				enableLogging: this.verbose,
+				enableTimeouts: true,
+				defaultTimeout: 300000, // 5 minutes
+			})
+
+			console.log(`[TASK-DEBUG] Unified question manager initialized successfully for mode: ${detectedMode}`)
+		} catch (error) {
+			console.error(`[TASK-DEBUG] Failed to initialize unified question manager:`, error)
+			// Continue without unified question manager - fall back to legacy methods
 		}
 	}
 
@@ -318,6 +426,10 @@ export class Task extends EventEmitter<ClineEvents> {
 
 	get isVerbose(): boolean {
 		return this.verbose
+	}
+
+	getGlobalStoragePath(): string {
+		return this.globalStoragePath
 	}
 
 	// Compatibility properties - delegated to modular components
@@ -435,6 +547,10 @@ export class Task extends EventEmitter<ClineEvents> {
 		return this._userInterface
 	}
 
+	get questionManager(): import("../questions").UnifiedQuestionManager | undefined {
+		return this.unifiedQuestionManager
+	}
+
 	get telemetry(): ITelemetryService {
 		if (!this.telemetryService) {
 			// Fallback to global telemetry service for compatibility
@@ -508,6 +624,7 @@ export class Task extends EventEmitter<ClineEvents> {
 		taskNumber = -1,
 		onCreated,
 		mode = defaultModeSlug,
+		runtimeMode,
 		fileSystem,
 		terminal,
 		browser,
@@ -531,19 +648,32 @@ export class Task extends EventEmitter<ClineEvents> {
 	}: TaskOptions) {
 		super()
 
+		console.log(`[TASK-DEBUG] Constructor started`)
+
 		if (startTask && !task && !images && !historyItem) {
 			throw new Error("Either historyItem or task/images must be provided")
 		}
 
 		this.taskId = historyItem ? historyItem.id : crypto.randomUUID()
+		console.log(`[TASK-DEBUG] Constructor - taskId set: ${this.taskId}`)
+
+		// Debug workspace path resolution
+		console.log(`[Task] DEBUG - Constructor workspacePath param: ${workspacePath}`)
+		console.log(`[Task] DEBUG - parentTask?.workspacePath: ${parentTask?.workspacePath}`)
+		console.log(`[Task] DEBUG - About to set this.workspacePath`)
+
 		this.workspacePath = parentTask
 			? parentTask.workspacePath
 			: workspacePath || getWorkspacePath(path.join(os.homedir(), "Desktop"))
+
+		console.log(`[Task] DEBUG - Final this.workspacePath: ${this.workspacePath}`)
 		this.instanceId = crypto.randomUUID().slice(0, 8)
 		this.taskNumber = taskNumber
 
 		// Store mode configuration
 		this.mode = mode
+		console.log(`[TASK-DEBUG] Constructor - mode set to: ${this.mode}`)
+		console.log(`[TASK-DEBUG] Constructor - customModesService available: ${!!this.customModesService}`)
 		this.logDebug(`[Task] Constructor - mode set to: ${this.mode}`)
 		this.logDebug(`[Task] Constructor - customModesService available: ${!!this.customModesService}`)
 
@@ -571,6 +701,10 @@ export class Task extends EventEmitter<ClineEvents> {
 		// Store unified tool execution support
 		this.customModesService = customModesService
 		this.toolInterfaceAdapter = toolInterfaceAdapter
+
+		// Store runtime mode and output adapter for unified question manager
+		this.runtimeMode = runtimeMode
+		this.outputAdapter = outputAdapter
 
 		// Set up provider and storage
 		if (provider) {
@@ -629,6 +763,11 @@ export class Task extends EventEmitter<ClineEvents> {
 			this.providerRef,
 			taskOutputAdapter,
 		)
+
+		// Initialize unified question manager
+		console.log(`[TASK-DEBUG] About to call initializeUnifiedQuestionManager()`)
+		this.initializeUnifiedQuestionManager()
+		console.log(`[TASK-DEBUG] Completed call to initializeUnifiedQuestionManager()`)
 
 		this.lifecycle = new TaskLifecycle(
 			this.taskId,
@@ -749,6 +888,8 @@ export class Task extends EventEmitter<ClineEvents> {
 				}
 			})
 		}
+
+		console.log(`[TASK-DEBUG] Constructor completed successfully`)
 	}
 
 	// Dispose method to clean up MCP connections and other resources
@@ -772,7 +913,9 @@ export class Task extends EventEmitter<ClineEvents> {
 	}
 
 	static create(options: TaskOptions): [Task, Promise<void>] {
+		console.log(`[TASK-DEBUG] Task.create() called`)
 		const instance = new Task({ ...options, startTask: false })
+		console.log(`[TASK-DEBUG] Task.create() - constructor completed`)
 		const { images, task, historyItem } = options
 		let promise
 
@@ -1110,6 +1253,30 @@ export class Task extends EventEmitter<ClineEvents> {
 				return result
 			}
 
+			case "list_tasks": {
+				// Import and use the list tasks tool
+				const { listTasksTool } = await import("../tools/listTasksTool")
+				const result = await this.executeToolWithCLIInterface(listTasksTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
+			case "delete_tasks": {
+				// Import and use the delete tasks tool
+				const { deleteTasksTool } = await import("../tools/deleteTasksTool")
+				const result = await this.executeToolWithCLIInterface(deleteTasksTool, {
+					name: toolName,
+					params,
+					type: "tool_use",
+					partial: false,
+				})
+				return result
+			}
+
 			case "switch_mode": {
 				// Import and use the switch mode tool
 				const { switchModeTool } = await import("../tools/switchModeTool")
@@ -1135,7 +1302,7 @@ export class Task extends EventEmitter<ClineEvents> {
 			}
 
 			default:
-				throw new Error(`Tool ${toolName} not implemented for CLI mode`)
+				throw new Error(`executeTool does not know how to handle ${toolName} executions.`)
 		}
 	}
 

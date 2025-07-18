@@ -44,5 +44,9 @@
 		"*.{js,jsx,ts,tsx,json,css,md}": [
 			"prettier --write"
 		]
+	},
+	"dependencies": {
+		"@types/inquirer": "^9.0.8",
+		"inquirer": "^12.7.0"
 	}
 }
